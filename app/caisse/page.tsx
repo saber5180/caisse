@@ -3,8 +3,9 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useCaisseStore, computeDeskTotals } from '@/lib/store';
-import { formatMoney } from '@/lib/utils';
+import { formatMoney, generateId } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
+import PrintReceiptModal, { ReceiptData } from '@/components/PrintReceiptModal';
 import {
   IconCalculator,
   IconCheck,
@@ -12,12 +13,14 @@ import {
   IconPrinter,
   IconSearch,
   IconTrash,
+  IconTruck,
 } from '@/components/Icons';
 
 function CaisseContent() {
   const searchParams = useSearchParams();
   const initialTr = searchParams.get('tr') || '';
 
+  const currentUser = useCaisseStore((state) => state.currentUser);
   const drivers = useCaisseStore((state) => state.drivers);
   const deskRows = useCaisseStore((state) => state.deskRows);
   const deskRecette = useCaisseStore((state) => state.deskRecette);
@@ -35,19 +38,11 @@ function CaisseContent() {
   const resetDesk = useCaisseStore((state) => state.resetDesk);
 
   const scannerInputRef = useRef<HTMLInputElement>(null);
-  const [printReceiptData, setPrintReceiptData] = useState<{
-    nom: string;
-    tr: string;
-    tPayer: number;
-    recette: number;
-    resAPayer: number;
-    versement: number;
-    date: string;
-  } | null>(null);
+  const [printModalData, setPrintModalData] = useState<ReceiptData | null>(null);
 
   const selectedDriver = drivers.find((d) => d.id === selectedDriverId);
 
-  // If query parameter TR provided, auto-select
+  // Auto-select TR if query param present
   useEffect(() => {
     if (initialTr) {
       setDeskTrInput(initialTr);
@@ -58,7 +53,7 @@ function CaisseContent() {
   // Compute live totals
   const { tPayer, resAPayer } = computeDeskTotals(deskRows, deskVersement, deskRecette);
 
-  // Hotkey listener for 'v', 'p', 'r' when not typing in text fields
+  // Hotkey listener for 'v', 'p', 'r' when not typing in inputs
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement?.tagName.toLowerCase();
@@ -74,7 +69,7 @@ function CaisseContent() {
         resetDesk();
       } else if (e.key === 'p' || e.key === 'P') {
         e.preventDefault();
-        handlePrint();
+        handleOpenPrintPreview();
       }
     };
 
@@ -89,66 +84,85 @@ function CaisseContent() {
     }
   };
 
+  const handleOpenPrintPreview = () => {
+    setPrintModalData({
+      receiptNo: generateId('REC'),
+      nom: selectedDriver?.nom || 'Comptoir Direct',
+      tr: selectedDriver?.tr || deskTrInput || '—',
+      circuit: selectedDriver?.programmeJour || 'STAND-BY',
+      recette: deskRecette,
+      tPayer,
+      resAPayer,
+      versement: deskVersement,
+      rows: deskRows,
+      date: new Date().toLocaleString('fr-FR'),
+      caisseName: currentUser?.displayName,
+      cashierName: currentUser?.username,
+    });
+  };
+
   const handleValidate = () => {
     const txn = validateCurrentSale();
     if (txn) {
-      setPrintReceiptData({
-        nom: txn.nomChauffeur || 'Comptoir',
+      setPrintModalData({
+        receiptNo: txn.id,
+        nom: txn.nomChauffeur || 'Comptoir Direct',
         tr: txn.codeChauffeur || '',
-        tPayer: txn.tPayer,
+        circuit: selectedDriver?.programmeJour || 'STAND-BY',
         recette: txn.recette,
+        tPayer: txn.tPayer,
         resAPayer: txn.resAPayer,
         versement: txn.versement,
+        rows: deskRows,
         date: new Date().toLocaleString('fr-FR'),
+        caisseName: currentUser?.displayName,
+        cashierName: currentUser?.username,
       });
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  // Color logic for C14/C16
-  let balanceCardBg = 'bg-slate-50 border-slate-200 text-slate-800';
+  // Status accent
   let balanceStatusText = 'Équilibre';
+  let balancePillBg = 'bg-slate-800 text-slate-200 border-slate-700';
+  let balanceGlowClass = '';
   if (resAPayer > 0.001) {
-    balanceCardBg = 'bg-emerald-600 border-emerald-700 text-white shadow-emerald-600/25';
     balanceStatusText = 'Excédent / Trop-Perçu';
+    balancePillBg = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+    balanceGlowClass = 'shadow-glow-emerald';
   } else if (resAPayer < -0.001) {
-    balanceCardBg = 'bg-rose-600 border-rose-700 text-white shadow-rose-600/25';
     balanceStatusText = 'Déficit / Manque à Payer';
+    balancePillBg = 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+    balanceGlowClass = 'shadow-glow-rose';
   }
 
   return (
-    <div className="mx-auto max-w-5xl pb-20 sm:pb-6">
-      {/* Responsive Page Header */}
+    <div className="mx-auto max-w-5xl pb-24 sm:pb-8">
+      {/* Page Header Pro */}
       <PageHeader
         title="Guichet de Caisse"
-        subtitle="Saisie des entrées/sorties par coupure, pointage chauffeur et encaissement direct"
+        subtitle="Encaissement direct, décompte par coupures et décharge officielle"
         icon={<IconCalculator className="h-5 w-5" />}
         actions={
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <button
               onClick={resetDesk}
-              className="btn-ghost flex-1 sm:flex-none !py-2 !text-xs sm:!text-sm"
+              className="btn-ghost flex-1 sm:flex-none !py-2 text-xs sm:text-sm"
               title="Raccourci: R"
             >
-              <IconTrash className="h-4 w-4" />
-              <span className="hidden sm:inline">Réinitialiser [R]</span>
-              <span className="sm:hidden">Reset</span>
+              <IconTrash className="h-4 w-4 text-slate-400" />
+              <span>Nettoyer [R]</span>
             </button>
             <button
-              onClick={handlePrint}
-              className="btn-ghost flex-1 sm:flex-none !py-2 !text-xs sm:!text-sm"
+              onClick={handleOpenPrintPreview}
+              className="btn-ghost flex-1 sm:flex-none !py-2 text-xs sm:text-sm font-semibold"
               title="Raccourci: P"
             >
-              <IconPrinter className="h-4 w-4" />
-              <span className="hidden sm:inline">Imprimer [P]</span>
-              <span className="sm:hidden">Reçu</span>
+              <IconPrinter className="h-4 w-4 text-indigo-600" />
+              <span>Imprimer Reçu [P]</span>
             </button>
             <button
               onClick={handleValidate}
-              className="btn-success w-full sm:w-auto !py-2.5 sm:!py-2 text-sm font-bold shadow-md"
+              className="btn-success w-full sm:w-auto !py-2.5 text-xs sm:text-sm font-bold shadow-md"
               title="Raccourci: V"
             >
               <IconCheck className="h-4 w-4" />
@@ -158,13 +172,13 @@ function CaisseContent() {
         }
       />
 
-      {/* Top Barcode Scanner & Driver Details */}
+      {/* FinTech Terminal Topbar: Scanner + Selected Driver */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {/* Scanner C1 */}
-        <div className="card p-4 sm:p-5 md:col-span-1">
+        {/* Scanner Barcode Box */}
+        <div className="card-pro p-4 sm:p-5 md:col-span-1">
           <label className="label flex items-center justify-between">
-            <span>Scanner Code TR</span>
-            <span className="badge-slate">Cellule C1</span>
+            <span>Scanner Code Chauffeur (TR)</span>
+            <span className="badge-slate font-mono text-[10px]">C1</span>
           </label>
           <form onSubmit={handleScannerSubmit} className="flex gap-2">
             <div className="relative flex-1">
@@ -175,84 +189,85 @@ function CaisseContent() {
                 value={deskTrInput}
                 onChange={(e) => setDeskTrInput(e.target.value)}
                 placeholder="Ex: 37, 34, 107..."
-                className="input num !pl-9 uppercase"
+                className="input num !pl-9 uppercase font-bold"
               />
             </div>
-            <button type="submit" className="btn-primary !px-3">
+            <button type="submit" className="btn-primary !px-3 font-bold">
               OK
             </button>
           </form>
           <p className="mt-2 text-[11px] text-slate-400">
-            Pointez au scanner ou tapez le code TR puis Entrée.
+            Scannez au lecteur optique ou tapez le code TR puis Entrée.
           </p>
         </div>
 
-        {/* Chauffeur Trouvé */}
-        <div className="card p-4 sm:p-5 md:col-span-2">
+        {/* Selected Driver Banner */}
+        <div className="card-pro p-4 sm:p-5 md:col-span-2">
           {selectedDriver ? (
             <div className="flex flex-col justify-between h-full sm:flex-row sm:items-center gap-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="badge-indigo font-mono text-xs">TR {selectedDriver.tr}</span>
+                  <span className="badge-indigo font-mono text-xs font-bold">
+                    TR {selectedDriver.tr}
+                  </span>
                   <h3 className="text-base font-bold text-slate-900">{selectedDriver.nom}</h3>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  Circuit: <strong>{selectedDriver.programmeJour || 'STAND-BY'}</strong> · Statut:{' '}
+                  Circuit : <strong className="text-slate-800">{selectedDriver.programmeJour || 'STAND-BY'}</strong> · Statut :{' '}
                   <strong className={selectedDriver.statut === 'NON PAYE' ? 'text-rose-600' : 'text-emerald-600'}>
                     {selectedDriver.statut}
                   </strong>
                 </p>
                 {selectedDriver.reclamation && (
-                  <p className="mt-1 text-[11px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded inline-block">
+                  <p className="mt-1 text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-200 inline-block">
                     {selectedDriver.reclamation}
                   </p>
                 )}
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="badge-emerald px-3 py-1 text-xs font-bold">Chauffeur Prêt</span>
+                <span className="badge-solid-emerald px-3 py-1 text-xs font-bold shadow-xs">
+                  Chauffeur Pointé
+                </span>
               </div>
             </div>
           ) : (
             <div className="flex items-center justify-center h-full text-slate-400 text-xs sm:text-sm py-4">
-              Scannez ou saisissez un code chauffeur pour lier l&apos;encaissement.
+              Scannez ou sélectionnez un chauffeur pour lier l&apos;encaissement.
             </div>
           )}
         </div>
       </div>
 
-      {/* Main Cash Desk Grid (Tableau de Calcule) */}
+      {/* Main Terminal Grid */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Colonne Mobile Première: Synthèse & Équilibre (C14, C15, C16) */}
+        {/* Terminal Financial Monitor Card (Order 1 on mobile, Order 2 on desktop) */}
         <div className="space-y-4 lg:col-span-1 lg:order-2">
-          {/* Card Récapitulative Dynamique */}
-          <div className={`card p-5 sm:p-6 border-2 transition-all duration-300 shadow-md ${balanceCardBg}`}>
-            <div className="flex items-center justify-between">
-              <p className="text-xs uppercase font-bold tracking-wider opacity-85">
-                État de Caisse en Direct
-              </p>
-              <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-black/15">
+          <div className={`rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-6 text-white shadow-xl transition-all duration-300 ${balanceGlowClass}`}>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Situation Financière
+              </span>
+              <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase ${balancePillBg}`}>
                 {balanceStatusText}
               </span>
             </div>
 
-            <div className="mt-5 space-y-3 sm:space-y-4">
+            <div className="mt-5 space-y-4">
               {/* T. PAYER */}
-              <div className="flex items-center justify-between border-b border-black/10 pb-2.5">
-                <span className="text-xs sm:text-sm font-medium opacity-90">T. PAYER (Encaissé)</span>
-                <span className="num text-xl sm:text-2xl font-extrabold tracking-tight">
-                  {formatMoney(tPayer)} <span className="text-xs font-normal">TND</span>
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                <span className="text-xs text-slate-300 font-medium">T. PAYER (Encaissé)</span>
+                <span className="num text-2xl font-black tracking-tight text-white">
+                  {formatMoney(tPayer)} <span className="text-xs font-normal text-slate-400">TND</span>
                 </span>
               </div>
 
               {/* RECETTE */}
-              <div className="border-b border-black/10 pb-3">
+              <div className="border-b border-slate-800/80 pb-3">
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs sm:text-sm font-medium opacity-90">
-                    RECETTE (Attendu)
-                  </label>
-                  <span className="num text-base sm:text-lg font-bold">
-                    {formatMoney(deskRecette)} <span className="text-xs font-normal">TND</span>
+                  <label className="text-xs text-slate-300 font-medium">RECETTE (Attendu)</label>
+                  <span className="num text-base font-bold text-indigo-300">
+                    {formatMoney(deskRecette)} <span className="text-xs text-slate-400 font-normal">TND</span>
                   </span>
                 </div>
                 <input
@@ -261,78 +276,73 @@ function CaisseContent() {
                   min={0}
                   value={deskRecette === 0 ? '' : deskRecette}
                   onChange={(e) => setDeskRecette(parseFloat(e.target.value) || 0)}
-                  placeholder="Saisir la recette..."
-                  className="input num !min-h-10 !py-1 text-slate-900 bg-white font-bold text-base"
+                  placeholder="0.000 TND"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm font-bold text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
 
               {/* RES. A PAYER */}
               <div className="flex items-center justify-between pt-1">
-                <span className="text-xs sm:text-sm font-bold uppercase tracking-wider">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
                   RES. A PAYER
                 </span>
-                <span className="num text-2xl sm:text-3xl font-black tracking-tight">
-                  {resAPayer > 0 ? '+' : ''}{formatMoney(resAPayer)} <span className="text-xs font-normal">TND</span>
+                <span className={`num text-2xl sm:text-3xl font-black tracking-tight ${
+                  resAPayer > 0 ? 'text-emerald-400' : resAPayer < 0 ? 'text-rose-400' : 'text-slate-200'
+                }`}>
+                  {resAPayer > 0 ? '+' : ''}{formatMoney(resAPayer)} <span className="text-xs font-normal text-slate-400">TND</span>
                 </span>
               </div>
             </div>
 
-            {/* Desktop Action Buttons inside card */}
+            {/* Direct Action Buttons inside terminal card */}
             <div className="mt-6 space-y-2">
               <button
                 onClick={handleValidate}
-                className="btn w-full bg-white text-slate-900 shadow-md hover:bg-slate-100 font-bold !py-3"
+                className="btn w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/20 !py-3"
               >
-                <IconCheck className="h-4 w-4 text-emerald-600" />
-                Valider Vente [Touche V]
+                <IconCheck className="h-5 w-5" />
+                Valider la Vente [Touche V]
               </button>
-
               <button
-                onClick={resetDesk}
-                className="btn w-full bg-black/15 text-current hover:bg-black/25 text-xs font-semibold !py-2"
+                onClick={handleOpenPrintPreview}
+                className="btn w-full bg-white/10 hover:bg-white/20 text-white font-semibold text-xs !py-2.5"
               >
-                <IconTrash className="h-3.5 w-3.5" />
-                Nettoyer le Tableau [Touche R]
+                <IconPrinter className="h-4 w-4" />
+                Aperçu Reçu / Facture [Touche P]
               </button>
             </div>
           </div>
 
-          {/* Guide des Raccourcis (Desktop) */}
-          <div className="card p-4 hidden lg:block">
-            <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Raccourcis Clavier
-            </h4>
-            <div className="mt-2 space-y-1.5 text-xs text-slate-600">
-              <div className="flex items-center justify-between">
+          {/* Quick Hotkey Box (Desktop) */}
+          <div className="card-pro p-4 hidden lg:block text-xs text-slate-500">
+            <p className="font-bold uppercase tracking-wider text-slate-400 text-[10px] mb-2">
+              Raccourcis Clavier Rapides
+            </p>
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
                 <span>Valider et Archiver</span>
-                <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800 ring-1 ring-slate-200">
-                  V
-                </kbd>
+                <kbd className="bg-slate-100 rounded px-1.5 py-0.5 font-mono text-slate-700 border">V</kbd>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex justify-between items-center">
                 <span>Imprimer Reçu</span>
-                <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800 ring-1 ring-slate-200">
-                  P
-                </kbd>
+                <kbd className="bg-slate-100 rounded px-1.5 py-0.5 font-mono text-slate-700 border">P</kbd>
               </div>
-              <div className="flex items-center justify-between">
-                <span>Réinitialiser</span>
-                <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800 ring-1 ring-slate-200">
-                  R
-                </kbd>
+              <div className="flex justify-between items-center">
+                <span>Remettre à zéro</span>
+                <kbd className="bg-slate-100 rounded px-1.5 py-0.5 font-mono text-slate-700 border">R</kbd>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Colonnes: Tableau des Coupures */}
-        <div className="card overflow-hidden lg:col-span-2 lg:order-1">
-          <div className="card-header bg-slate-50/70">
+        {/* Coupures Table & Mobile Cards */}
+        <div className="card-pro overflow-hidden lg:col-span-2 lg:order-1">
+          <div className="card-header bg-slate-50/80">
             <div>
               <h2 className="card-title text-sm">Entrées & Sorties par Coupure</h2>
-              <p className="text-[11px] text-slate-400">Saisissez les billets/pièces encaissés et rendus</p>
+              <p className="text-[11px] text-slate-400">Saisissez les montants reçus et rendus</p>
             </div>
-            <span className="badge-indigo">Tableau interactif</span>
+            <span className="badge-indigo font-mono text-xs">Tableau dynamique</span>
           </div>
 
           {/* Mobile Denomination Cards View (sm:hidden) */}
@@ -343,17 +353,17 @@ function CaisseContent() {
               return (
                 <div key={idx} className="p-3.5 hover:bg-slate-50/60 transition-colors">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="inline-flex items-center rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700">
+                    <span className="inline-flex items-center rounded-xl bg-slate-100 px-3 py-1 text-xs font-bold text-slate-900 border border-slate-200">
                       {row.denomination} TND
                     </span>
                     <span className={`num text-xs font-bold ${netLigne >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
-                      Net: {formatMoney(netLigne)} TND
+                      Net : {formatMoney(netLigne)} TND
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] font-semibold uppercase text-emerald-700 block mb-0.5">
+                    <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-2">
+                      <label className="text-[10px] font-bold uppercase text-emerald-800 block mb-1">
                         + Entrée (Reçu)
                       </label>
                       <input
@@ -362,11 +372,11 @@ function CaisseContent() {
                         value={row.entree === 0 ? '' : row.entree}
                         onChange={(e) => setDeskEntree(idx, parseInt(e.target.value, 10) || 0)}
                         placeholder="0"
-                        className="input num !h-10 !text-center text-sm font-semibold text-emerald-700 bg-emerald-50/40 border-emerald-200"
+                        className="w-full rounded-lg border border-emerald-300 bg-white py-1.5 text-center text-sm font-bold text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
-                    <div>
-                      <label className="text-[10px] font-semibold uppercase text-rose-700 block mb-0.5">
+                    <div className="rounded-xl border border-rose-200/80 bg-rose-50/40 p-2">
+                      <label className="text-[10px] font-bold uppercase text-rose-800 block mb-1">
                         - Sortie (Rendu)
                       </label>
                       <input
@@ -375,7 +385,7 @@ function CaisseContent() {
                         value={row.sortie === 0 ? '' : row.sortie}
                         onChange={(e) => setDeskSortie(idx, parseInt(e.target.value, 10) || 0)}
                         placeholder="0"
-                        className="input num !h-10 !text-center text-sm font-semibold text-rose-700 bg-rose-50/40 border-rose-200"
+                        className="w-full rounded-lg border border-rose-300 bg-white py-1.5 text-center text-sm font-bold text-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
                       />
                     </div>
                   </div>
@@ -383,10 +393,10 @@ function CaisseContent() {
               );
             })}
 
-            {/* Mobile Versement Row */}
-            <div className="p-3.5 bg-slate-50/80">
-              <label className="text-xs uppercase font-bold text-indigo-700 block mb-1">
-                Versement direct (Banque / Coffre)
+            {/* Mobile Versement Input */}
+            <div className="p-4 bg-slate-50/90 border-t border-slate-200">
+              <label className="text-xs font-bold uppercase text-indigo-800 block mb-1">
+                Versement Direct (Banque / Coffre)
               </label>
               <input
                 type="number"
@@ -395,7 +405,7 @@ function CaisseContent() {
                 value={deskVersement === 0 ? '' : deskVersement}
                 onChange={(e) => setDeskVersement(parseFloat(e.target.value) || 0)}
                 placeholder="0.000 TND"
-                className="input num !h-10 text-sm font-bold text-indigo-700"
+                className="input num font-bold text-sm text-indigo-800 !h-11"
               />
             </div>
           </div>
@@ -405,7 +415,7 @@ function CaisseContent() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="w-24">Coupure</th>
+                  <th className="w-28">Coupure</th>
                   <th className="!text-center">L&apos;entrée de caisse</th>
                   <th className="!text-center">Sortie de caisse</th>
                   <th className="!text-right">Montant Net (TND)</th>
@@ -429,7 +439,7 @@ function CaisseContent() {
                           value={row.entree === 0 ? '' : row.entree}
                           onChange={(e) => setDeskEntree(idx, parseInt(e.target.value, 10) || 0)}
                           placeholder="0"
-                          className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-semibold text-emerald-700 bg-emerald-50/30"
+                          className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-bold text-emerald-800 bg-emerald-50/40 border-emerald-200"
                         />
                       </td>
                       <td className="text-center">
@@ -439,7 +449,7 @@ function CaisseContent() {
                           value={row.sortie === 0 ? '' : row.sortie}
                           onChange={(e) => setDeskSortie(idx, parseInt(e.target.value, 10) || 0)}
                           placeholder="0"
-                          className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-semibold text-rose-700 bg-rose-50/30"
+                          className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-bold text-rose-800 bg-rose-50/40 border-rose-200"
                         />
                       </td>
                       <td className="text-right">
@@ -451,8 +461,8 @@ function CaisseContent() {
                   );
                 })}
 
-                {/* Ligne Versement */}
-                <tr className="bg-slate-50/60 font-semibold">
+                {/* Versement Row */}
+                <tr className="bg-slate-50/80 font-semibold border-t-2 border-slate-200">
                   <td>
                     <span className="text-xs uppercase tracking-wider text-indigo-700 font-bold">
                       VERSEMENT
@@ -482,9 +492,9 @@ function CaisseContent() {
       </div>
 
       {/* Mobile Sticky Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-between border-t border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur-md shadow-lg sm:hidden">
+      <div className="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-between border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur-md shadow-lg sm:hidden">
         <div>
-          <p className="text-[10px] uppercase font-bold text-slate-400">T. Payer / Reste</p>
+          <p className="text-[10px] uppercase font-bold text-slate-400">Total Encaissé / Écart</p>
           <p className="num text-sm font-black text-slate-900">
             {formatMoney(tPayer)} /{' '}
             <span className={resAPayer >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
@@ -492,78 +502,30 @@ function CaisseContent() {
             </span>
           </p>
         </div>
-        <button
-          onClick={handleValidate}
-          className="btn-success !py-2 !px-4 text-xs font-bold shadow-md"
-        >
-          <IconCheck className="h-4 w-4" />
-          Valider Vente
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={handleOpenPrintPreview}
+            className="btn-ghost !py-2 !px-2.5 text-xs font-semibold"
+            title="Imprimer"
+          >
+            <IconPrinter className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleValidate}
+            className="btn-success !py-2 !px-3.5 text-xs font-bold shadow-md"
+          >
+            <IconCheck className="h-4 w-4" />
+            Valider
+          </button>
+        </div>
       </div>
 
-      {/* Ticket Modal de Confirmation */}
-      {printReceiptData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            onClick={() => setPrintReceiptData(null)}
-          />
-          <div className="relative w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <div className="text-center">
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 mb-2">
-                <IconCheck className="h-6 w-6" />
-              </span>
-              <h3 className="text-lg font-bold text-slate-900">Encaissement Enregistré</h3>
-              <p className="text-xs text-slate-400">{printReceiptData.date}</p>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 font-mono text-xs space-y-2">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Chauffeur:</span>
-                <span className="font-bold text-slate-900">{printReceiptData.nom}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Code TR:</span>
-                <span className="font-bold text-slate-900">{printReceiptData.tr}</span>
-              </div>
-              <div className="border-t border-slate-200 my-1 pt-1 flex justify-between">
-                <span className="text-slate-500">Recette Atten.:</span>
-                <span className="font-bold">{formatMoney(printReceiptData.recette)} TND</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Total Payé:</span>
-                <span className="font-bold text-emerald-700">
-                  {formatMoney(printReceiptData.tPayer)} TND
-                </span>
-              </div>
-              <div className="border-t border-slate-200 pt-1 flex justify-between font-bold">
-                <span>Reste / Écart:</span>
-                <span className={printReceiptData.resAPayer >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                  {formatMoney(printReceiptData.resAPayer)} TND
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-5 flex gap-2">
-              <button
-                onClick={() => {
-                  window.print();
-                  setPrintReceiptData(null);
-                }}
-                className="btn-primary flex-1 !text-xs !py-2.5"
-              >
-                <IconPrinter className="h-4 w-4" />
-                Imprimer le Reçu
-              </button>
-              <button
-                onClick={() => setPrintReceiptData(null)}
-                className="btn-ghost !text-xs !py-2.5"
-              >
-                Fermer
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* High-Definition Print & Facture Modal */}
+      {printModalData && (
+        <PrintReceiptModal
+          data={printModalData}
+          onClose={() => setPrintModalData(null)}
+        />
       )}
     </div>
   );

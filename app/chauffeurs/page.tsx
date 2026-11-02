@@ -22,6 +22,7 @@ export default function ChauffeursPage() {
   const deleteDriver = useCaisseStore((state) => state.deleteDriver);
   const addDriver = useCaisseStore((state) => state.addDriver);
   const resetAllDriversStatus = useCaisseStore((state) => state.resetAllDriversStatus);
+  const loadDemoDriversTemplate = useCaisseStore((state) => state.loadDemoDriversTemplate);
 
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<DriverStatus | 'ALL'>('ALL');
@@ -188,6 +189,17 @@ export default function ChauffeursPage() {
               <Link href="/excel" className="btn-ghost !px-3 !py-1.5 !text-xs font-semibold">
                 Importer depuis Excel
               </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Voulez-vous charger le modèle des 70 chauffeurs dans votre compte ?')) {
+                    loadDemoDriversTemplate();
+                  }
+                }}
+                className="btn-ghost !px-3 !py-1.5 !text-xs font-semibold text-indigo-700 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50"
+              >
+                ⚡ Charger Modèle 70 Chauffeurs
+              </button>
             </div>
           </EmptyState>
         ) : filtered.length === 0 ? (

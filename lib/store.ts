@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Driver, DriverStatus, CashDeskRow, CashTransaction, CoinBreakdownItem } from '@/types/caisse';
+import { INITIAL_DRIVERS } from '@/data/initialDrivers';
 import { recalculateReclamation, generateId } from './utils';
 
 export const DEFAULT_DESK_ROWS: CashDeskRow[] = [
@@ -101,6 +102,7 @@ interface CaisseStore {
   executeBascule1230: () => void;
   resetAllDriversStatus: (status: DriverStatus) => void;
   refreshAlarms: () => void;
+  loadDemoDriversTemplate: () => void;
 
   // Actions - Billetterie
   setBilletterieCount: (index: number, count: number) => void;
@@ -548,6 +550,17 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           return { ...d, reclamation };
         }),
       }));
+    },
+
+    loadDemoDriversTemplate: () => {
+      set({
+        drivers: INITIAL_DRIVERS,
+        feedbackMessage: {
+          type: 'success',
+          text: '70 chauffeurs du modèle initial ont été chargés avec succès dans votre caisse.',
+        },
+      });
+      triggerDebouncedSync();
     },
 
     setBilletterieCount: (index, count) => {

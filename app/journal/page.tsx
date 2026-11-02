@@ -6,6 +6,7 @@ import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import {
   IconDownload,
+  IconPrinter,
   IconReceipt,
 } from '@/components/Icons';
 import * as XLSX from 'xlsx';
@@ -43,14 +44,24 @@ export default function JournalPage() {
         icon={<IconReceipt className="h-5 w-5" />}
         accent="emerald"
         actions={
-          <button
-            onClick={handleExport}
-            disabled={transactions.length === 0}
-            className="btn-ghost w-full sm:w-auto min-h-11 justify-center text-xs sm:text-sm font-semibold"
-          >
-            <IconDownload className="h-4 w-4" />
-            Exporter Excel (.xlsx)
-          </button>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <button
+              onClick={() => window.print()}
+              disabled={transactions.length === 0}
+              className="btn-ghost flex-1 sm:flex-none min-h-11 justify-center text-xs sm:text-sm font-semibold"
+            >
+              <IconPrinter className="h-4 w-4" />
+              Imprimer l&apos;État
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={transactions.length === 0}
+              className="btn-primary flex-1 sm:flex-none min-h-11 justify-center text-xs sm:text-sm font-bold shadow-md"
+            >
+              <IconDownload className="h-4 w-4" />
+              Exporter (.xlsx)
+            </button>
+          </div>
         }
       />
 
