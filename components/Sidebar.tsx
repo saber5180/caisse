@@ -11,6 +11,7 @@ export default function Sidebar({ onOpenDbModal }: { onOpenDbModal?: () => void 
   const drivers = useCaisseStore((state) => state.drivers);
   const currentUser = useCaisseStore((state) => state.currentUser);
   const setCurrentUser = useCaisseStore((state) => state.setCurrentUser);
+  const resetStoreForAccount = useCaisseStore((state) => state.resetStoreForAccount);
   const isSyncing = useCaisseStore((state) => state.isSyncing);
   const lastSyncTime = useCaisseStore((state) => state.lastSyncTime);
 
@@ -19,9 +20,11 @@ export default function Sidebar({ onOpenDbModal }: { onOpenDbModal?: () => void 
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    } finally {
+      resetStoreForAccount();
       setCurrentUser(null);
-      router.push('/login');
-    } catch (e) {
       router.push('/login');
     }
   };

@@ -17,6 +17,7 @@ export default function Topbar({
   const title = PAGE_TITLES[pathname] ?? 'Caisse Chauffeurs';
   const currentUser = useCaisseStore((state) => state.currentUser);
   const setCurrentUser = useCaisseStore((state) => state.setCurrentUser);
+  const resetStoreForAccount = useCaisseStore((state) => state.resetStoreForAccount);
   const isSyncing = useCaisseStore((state) => state.isSyncing);
 
   const today = new Intl.DateTimeFormat('fr-FR', {
@@ -28,9 +29,11 @@ export default function Topbar({
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      setCurrentUser(null);
-      router.push('/login');
     } catch {
+      // ignore
+    } finally {
+      resetStoreForAccount();
+      setCurrentUser(null);
       router.push('/login');
     }
   };

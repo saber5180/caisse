@@ -142,6 +142,16 @@ export async function POST(req: NextRequest) {
 
     // Save drivers if present
     if (Array.isArray(drivers)) {
+      const driverIds = drivers.map((d) => d.id).filter(Boolean);
+      if (driverIds.length > 0) {
+        await targetPool.query(
+          'DELETE FROM caisse_drivers WHERE account_id = $1 AND NOT (id = ANY($2::text[]))',
+          [session.id, driverIds]
+        );
+      } else {
+        await targetPool.query('DELETE FROM caisse_drivers WHERE account_id = $1', [session.id]);
+      }
+
       for (const d of drivers) {
         await targetPool.query(
           `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, updated_at)

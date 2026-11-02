@@ -87,25 +87,27 @@ export async function ensureDefaultAccountsAndSeed() {
         [acc.id, acc.username, hash, acc.displayName, acc.role]
       );
 
-      // Seed initial drivers for each account
-      for (const d of INITIAL_DRIVERS) {
-        await pool.query(
-          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-           ON CONFLICT (account_id, id) DO NOTHING`,
-          [
-            d.id,
-            acc.id,
-            d.nom,
-            d.tr,
-            d.statut,
-            d.dateDerniere || new Date().toISOString(),
-            d.reclamation || '',
-            d.caissesDues || 0,
-            d.programmeJour || '',
-            d.circuitActuel || '',
-          ]
-        );
+      // Seed initial drivers ONLY for the admin demo account
+      if (acc.id === 'acc-admin') {
+        for (const d of INITIAL_DRIVERS) {
+          await pool.query(
+            `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             ON CONFLICT (account_id, id) DO NOTHING`,
+            [
+              d.id,
+              acc.id,
+              d.nom,
+              d.tr,
+              d.statut,
+              d.dateDerniere || new Date().toISOString(),
+              d.reclamation || '',
+              d.caissesDues || 0,
+              d.programmeJour || '',
+              d.circuitActuel || '',
+            ]
+          );
+        }
       }
     }
   }

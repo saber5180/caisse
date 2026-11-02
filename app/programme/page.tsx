@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useCaisseStore } from '@/lib/store';
 import { getStatusBadge } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
+import EmptyState from '@/components/EmptyState';
 import {
   IconBolt,
   IconCalendar,
@@ -147,76 +149,38 @@ export default function ProgrammePage() {
           <span className="badge-slate text-[11px]">Enregistrement direct</span>
         </div>
 
-        {/* Mobile Card View (md:hidden) */}
-        <div className="divide-y divide-slate-100 md:hidden">
-          {filteredDrivers.map((d) => (
-            <div key={d.id} className="p-3.5 hover:bg-slate-50/60 transition-colors">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="badge-indigo font-mono text-xs">TR {d.tr}</span>
-                  <p className="text-sm font-bold text-slate-900">{d.nom}</p>
-                </div>
-                <span className={getStatusBadge(d.statut)}>{d.statut}</span>
-              </div>
-
-              <div>
-                <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
-                  Circuit Affecté
-                </label>
-                <select
-                  value={d.programmeJour || d.circuitActuel || 'STAND-BY'}
-                  onChange={(e) => assignCircuit(d.id, e.target.value)}
-                  className="select !h-10 text-xs font-bold text-slate-800 bg-white"
-                >
-                  <option value="STAND-BY">STAND-BY (Sans circuit)</option>
-                  {KNOWN_CIRCUITS.filter((c) => c !== 'STAND-BY').map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Desktop Table View (hidden md:block) */}
-        <div className="table-wrap hidden md:block">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th className="w-16">TR</th>
-                <th>Nom Chauffeur</th>
-                <th>Statut Actuel</th>
-                <th>Dette</th>
-                <th>Circuit Attribué (Programme du jour)</th>
-                <th className="!text-right">Statut Sync</th>
-              </tr>
-            </thead>
-            <tbody>
+        {filteredDrivers.length === 0 ? (
+          <EmptyState
+            icon={<IconCalendar className="h-6 w-6 text-sky-500" />}
+            title="Aucun chauffeur à programmer"
+            description="Cette caisse ne comporte pas de chauffeur pour ce circuit. Ajoutez des chauffeurs pour commencer l'affectation."
+          >
+            <Link href="/chauffeurs" className="btn-primary !px-3 !py-1.5 !text-xs font-bold mt-2">
+              Aller aux Chauffeurs
+            </Link>
+          </EmptyState>
+        ) : (
+          <>
+            {/* Mobile Card View (md:hidden) */}
+            <div className="divide-y divide-slate-100 md:hidden">
               {filteredDrivers.map((d) => (
-                <tr key={d.id}>
-                  <td>
-                    <span className="num font-bold text-slate-900">{d.tr}</span>
-                  </td>
-                  <td>
-                    <div className="font-semibold text-slate-900">{d.nom}</div>
-                  </td>
-                  <td>
+                <div key={d.id} className="p-3.5 hover:bg-slate-50/60 transition-colors">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="badge-indigo font-mono text-xs">TR {d.tr}</span>
+                      <p className="text-sm font-bold text-slate-900">{d.nom}</p>
+                    </div>
                     <span className={getStatusBadge(d.statut)}>{d.statut}</span>
-                  </td>
-                  <td className="text-center">
-                    {d.caissesDues > 0 ? (
-                      <span className="badge-solid-rose font-bold">Dû (1)</span>
-                    ) : (
-                      <span className="text-slate-300">0</span>
-                    )}
-                  </td>
-                  <td>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                      Circuit Affecté
+                    </label>
                     <select
                       value={d.programmeJour || d.circuitActuel || 'STAND-BY'}
                       onChange={(e) => assignCircuit(d.id, e.target.value)}
-                      className="select !w-56 !py-1 !pl-3 !pr-8 !text-xs font-semibold text-slate-800"
+                      className="select !h-10 text-xs font-bold text-slate-800 bg-white"
                     >
                       <option value="STAND-BY">STAND-BY (Sans circuit)</option>
                       {KNOWN_CIRCUITS.filter((c) => c !== 'STAND-BY').map((c) => (
@@ -225,18 +189,70 @@ export default function ProgrammePage() {
                         </option>
                       ))}
                     </select>
-                  </td>
-                  <td className="text-right">
-                    <span className="text-xs font-semibold text-emerald-600 flex items-center justify-end gap-1">
-                      <IconCheck className="h-3.5 w-3.5" />
-                      Synchronisé
-                    </span>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* Desktop Table View (hidden md:block) */}
+            <div className="table-wrap hidden md:block">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th className="w-16">TR</th>
+                    <th>Nom Chauffeur</th>
+                    <th>Statut Actuel</th>
+                    <th>Dette</th>
+                    <th>Circuit Attribué (Programme du jour)</th>
+                    <th className="!text-right">Statut Sync</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDrivers.map((d) => (
+                    <tr key={d.id}>
+                      <td>
+                        <span className="num font-bold text-slate-900">{d.tr}</span>
+                      </td>
+                      <td>
+                        <div className="font-semibold text-slate-900">{d.nom}</div>
+                      </td>
+                      <td>
+                        <span className={getStatusBadge(d.statut)}>{d.statut}</span>
+                      </td>
+                      <td className="text-center">
+                        {d.caissesDues > 0 ? (
+                          <span className="badge-solid-rose font-bold">Dû (1)</span>
+                        ) : (
+                          <span className="text-slate-300">0</span>
+                        )}
+                      </td>
+                      <td>
+                        <select
+                          value={d.programmeJour || d.circuitActuel || 'STAND-BY'}
+                          onChange={(e) => assignCircuit(d.id, e.target.value)}
+                          className="select !w-56 !py-1 !pl-3 !pr-8 !text-xs font-semibold text-slate-800"
+                        >
+                          <option value="STAND-BY">STAND-BY (Sans circuit)</option>
+                          {KNOWN_CIRCUITS.filter((c) => c !== 'STAND-BY').map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="text-right">
+                        <span className="text-xs font-semibold text-emerald-600 flex items-center justify-end gap-1">
+                          <IconCheck className="h-3.5 w-3.5" />
+                          Synchronisé
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </>
   );

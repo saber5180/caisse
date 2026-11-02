@@ -25,6 +25,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
 
   const currentUser = useCaisseStore((state) => state.currentUser);
   const setCurrentUser = useCaisseStore((state) => state.setCurrentUser);
+  const resetStoreForAccount = useCaisseStore((state) => state.resetStoreForAccount);
   const fetchAccountData = useCaisseStore((state) => state.fetchAccountData);
 
   // Authenticate on initial mount
@@ -129,9 +130,11 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      setCurrentUser(null);
-      router.push('/login');
     } catch {
+      // ignore
+    } finally {
+      resetStoreForAccount();
+      setCurrentUser(null);
       router.push('/login');
     }
   };

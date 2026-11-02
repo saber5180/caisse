@@ -170,10 +170,30 @@ export default function ChauffeursPage() {
           </span>
         </div>
 
-        {filtered.length === 0 ? (
+        {drivers.length === 0 ? (
+          <EmptyState
+            icon={<IconTruck className="h-7 w-7 text-indigo-500" />}
+            title="Aucun chauffeur dans cette caisse"
+            description="Cette caisse dispose de sa propre base indépendante. Ajoutez vos chauffeurs ou importez votre fichier Excel."
+          >
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="btn-primary !px-3 !py-1.5 !text-xs font-bold"
+              >
+                <IconPlus className="h-4 w-4" />
+                Nouveau Chauffeur
+              </button>
+              <Link href="/excel" className="btn-ghost !px-3 !py-1.5 !text-xs font-semibold">
+                Importer depuis Excel
+              </Link>
+            </div>
+          </EmptyState>
+        ) : filtered.length === 0 ? (
           <EmptyState
             icon={<IconTruck className="h-6 w-6" />}
-            title="Aucun chauffeur trouvé"
+            title="Aucun chauffeur correspondant"
             description="Modifiez vos critères de recherche ou réinitialisez les filtres."
           />
         ) : (

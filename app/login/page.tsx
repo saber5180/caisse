@@ -8,6 +8,7 @@ import { IconAlert, IconCheck, IconCoins } from '@/components/Icons';
 export default function LoginPage() {
   const router = useRouter();
   const setCurrentUser = useCaisseStore((state) => state.setCurrentUser);
+  const resetStoreForAccount = useCaisseStore((state) => state.resetStoreForAccount);
   const fetchAccountData = useCaisseStore((state) => state.fetchAccountData);
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -40,6 +41,7 @@ export default function LoginPage() {
         throw new Error(data.error || 'Identifiants incorrects');
       }
 
+      resetStoreForAccount();
       setCurrentUser(data.user);
       await fetchAccountData();
       router.push('/caisse');
@@ -74,6 +76,7 @@ export default function LoginPage() {
       }
 
       setSuccess('Compte créé avec succès ! Initialisation de votre caisse...');
+      resetStoreForAccount();
       setCurrentUser(data.user);
       await fetchAccountData();
       setTimeout(() => {

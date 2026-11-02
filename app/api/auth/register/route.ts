@@ -57,29 +57,6 @@ export async function POST(req: NextRequest) {
     );
 
     // Target pool for driver initialization
-    const targetPool = verifiedCustomDbUrl ? getPool(verifiedCustomDbUrl) : pool;
-
-    // Seed default drivers for this new account
-    for (const d of INITIAL_DRIVERS) {
-      await targetPool.query(
-        `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (account_id, id) DO NOTHING`,
-        [
-          d.id,
-          accountId,
-          d.nom,
-          d.tr,
-          d.statut,
-          d.dateDerniere || new Date().toISOString(),
-          d.reclamation || '',
-          d.caissesDues || 0,
-          d.programmeJour || '',
-          d.circuitActuel || '',
-        ]
-      );
-    }
-
     const user = {
       id: accountId,
       username: cleanUser,

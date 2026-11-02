@@ -82,9 +82,10 @@ export default function ExcelPage() {
 
           if (newDrivers.length > 0) {
             useCaisseStore.setState({ drivers: newDrivers });
+            useCaisseStore.getState().syncToBackend();
             setFeedback({
               type: 'success',
-              text: `${importedCount} chauffeurs importés avec succès depuis "${sheetName}".`,
+              text: `${importedCount} chauffeurs importés et synchronisés avec succès depuis "${sheetName}".`,
             });
           } else {
             setFeedback({
