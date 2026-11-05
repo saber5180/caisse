@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { BilletterieHistoryEntry, CoinBreakdownItem } from '@/types/caisse';
 import { formatMoney } from '@/lib/utils';
@@ -22,6 +23,11 @@ export default function BilletterieHistoriquePage() {
   const [search, setSearch] = useState('');
   const [selectedEntry, setSelectedEntry] = useState<BilletterieHistoryEntry | null>(null);
   const [printEntry, setPrintEntry] = useState<BilletterieHistoryEntry | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchHistory = async () => {
     setLoading(true);
@@ -515,34 +521,43 @@ export default function BilletterieHistoriquePage() {
           </div>
         )}
 
-        {/* Breakdown Details Modal (Fully Responsive & Touch Pro) */}
-        {selectedEntry && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+        {/* Breakdown Details Modal (Mounted in Portal, Fully Responsive & Scrollable) */}
+        {mounted && selectedEntry && createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+            {/* Backdrop */}
             <div
-              className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm"
+              className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"
               onClick={() => setSelectedEntry(null)}
             />
-            <div className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl z-10 overflow-hidden my-auto max-h-[90vh] flex flex-col">
-              {/* Modal Topbar */}
-              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 sm:px-6 py-4">
+
+            {/* Modal Dialog Box */}
+            <div className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl z-10 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200/80">
+              {/* Pinned Modal Header */}
+              <div className="shrink-0 flex items-center justify-between border-b border-slate-100 bg-slate-50/90 px-4 sm:px-6 py-3.5">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    Détail du Comptage Journalier
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 font-black text-xs">
+                      PV
+                    </span>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Détail du Comptage Journalier
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
                     Clôturé le {new Date(selectedEntry.dateCloture).toLocaleString('fr-FR')} · {selectedEntry.caissierNom || 'Caissier'}
                   </p>
                 </div>
                 <button
                   onClick={() => setSelectedEntry(null)}
-                  className="btn-icon !h-8 !w-8"
+                  className="btn-icon !h-8 !w-8 hover:bg-slate-200"
+                  aria-label="Fermer"
                 >
                   <IconClose className="h-4 w-4" />
                 </button>
               </div>
 
-              {/* Scrollable Modal Content */}
-              <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
+              {/* Scrollable Content Body with min-h-0 flex-1 */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 overscroll-contain">
                 {/* Financial Summary */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                   <div className="bg-slate-50 p-2.5 sm:p-3 rounded-2xl border border-slate-200">
@@ -590,25 +605,34 @@ export default function BilletterieHistoriquePage() {
                 </div>
 
                 {/* Desktop 11 Denominations Table (hidden sm:block) */}
-                <div className="table-wrap hidden sm:block">
-                  <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
-                    <thead className="bg-slate-100 border-b border-slate-200">
+                <div className="rounded-2xl border border-slate-200 overflow-hidden hidden sm:block bg-white">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100/90 border-b border-slate-200 text-slate-700 sticky top-0">
                       <tr>
-                        <th className="py-2 px-3 font-bold uppercase">Coupure</th>
-                        <th className="py-2 px-3 font-bold uppercase text-center">Quantité</th>
-                        <th className="py-2 px-3 font-bold uppercase text-right">Sous-Total (TND)</th>
+                        <th className="py-2.5 px-3 font-bold uppercase text-[11px]">Coupure</th>
+                        <th className="py-2.5 px-3 font-bold uppercase text-[11px] text-center">Quantité</th>
+                        <th className="py-2.5 px-3 font-bold uppercase text-[11px] text-right">Sous-Total (TND)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-mono">
                       {selectedEntry.items.map((item, idx) => (
-                        <tr key={idx}>
-                          <td className="py-1.5 px-3 font-sans font-medium text-slate-800">
-                            {item.label}
+                        <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-2 px-3 font-sans font-medium text-slate-800 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`h-2 w-2 rounded-full ${
+                                  item.isBillet ? 'bg-indigo-500' : 'bg-amber-500'
+                                }`}
+                              />
+                              <span>{item.label}</span>
+                            </div>
                           </td>
-                          <td className="py-1.5 px-3 text-center font-bold text-slate-900">
-                            {item.nombre}
+                          <td className="py-2 px-3 text-center font-bold text-slate-900 text-xs">
+                            <span className="inline-block px-2 py-0.5 rounded-lg bg-slate-100 font-mono text-[11px]">
+                              {item.nombre}
+                            </span>
                           </td>
-                          <td className="py-1.5 px-3 text-right font-bold text-slate-900">
+                          <td className="py-2 px-3 text-right font-bold text-slate-900 text-xs">
                             {formatMoney(item.nombre * item.valeur)} TND
                           </td>
                         </tr>
@@ -625,21 +649,21 @@ export default function BilletterieHistoriquePage() {
                 )}
               </div>
 
-              {/* Modal Footer */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/80 px-4 sm:px-6 py-3.5 mt-auto">
-                <span className="text-[11px] font-mono text-slate-400 self-start sm:self-center">
+              {/* Pinned Modal Footer */}
+              <div className="shrink-0 flex items-center justify-between border-t border-slate-100 bg-slate-50/90 px-4 sm:px-6 py-3">
+                <span className="text-[11px] font-mono text-slate-400">
                   Réf: {selectedEntry.id}
                 </span>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setSelectedEntry(null)}
-                    className="btn-ghost flex-1 sm:flex-none !py-2 text-xs"
+                    className="btn-ghost !py-2 text-xs"
                   >
                     Fermer
                   </button>
                   <button
                     onClick={() => handleTriggerPrint(selectedEntry)}
-                    className="btn-primary flex-1 sm:flex-none !py-2 text-xs font-bold"
+                    className="btn-primary !py-2 text-xs font-bold shadow-md"
                   >
                     <IconPrinter className="h-4 w-4" />
                     Imprimer le PV
@@ -647,7 +671,8 @@ export default function BilletterieHistoriquePage() {
                 </div>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>
