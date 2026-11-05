@@ -46,13 +46,18 @@ function CaisseContent() {
 
   const selectedDriver = drivers.find((d) => d.id === selectedDriverId);
 
-  // Auto-select TR if query param present
+  // Auto-select TR if query param present, or default to Chauffeur Global (TR 0 / TR 1)
   useEffect(() => {
     if (initialTr) {
       setDeskTrInput(initialTr);
       selectDriverByTr(initialTr);
+    } else if (!selectedDriverId && drivers.length > 0) {
+      const defaultGlobal = drivers.find((d) => d.tr === '0') || drivers.find((d) => d.tr === '1');
+      if (defaultGlobal) {
+        selectDriverByTr(defaultGlobal.tr);
+      }
     }
-  }, [initialTr, setDeskTrInput, selectDriverByTr]);
+  }, [initialTr, selectedDriverId, drivers, setDeskTrInput, selectDriverByTr]);
 
   // Compute live totals
   const { tPayer, resAPayer } = computeDeskTotals(deskRows, deskVersement, deskRecette);
@@ -357,12 +362,14 @@ function CaisseContent() {
           <div className="divide-y divide-slate-100 sm:hidden">
             {deskRows.map((row, idx) => {
               const netLigne = row.entree * row.denomination - row.sortie * row.denomination;
+              const isOneTnd = row.denomination === 1;
+              const stepVal = isOneTnd ? '0.1' : '1';
 
               return (
                 <div key={idx} className="p-3.5 hover:bg-slate-50/60 transition-colors">
                   <div className="flex items-center justify-between mb-2">
                     <span className="inline-flex items-center rounded-xl bg-slate-100 px-3 py-1 text-xs font-bold text-slate-900 border border-slate-200">
-                      {row.denomination} TND
+                      {row.denomination} TND {isOneTnd && <span className="text-[10px] text-indigo-600 font-normal ml-1">(pas 0.1)</span>}
                     </span>
                     <span className={`num text-xs font-bold ${netLigne >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
                       Net : {formatMoney(netLigne)} TND
@@ -376,10 +383,15 @@ function CaisseContent() {
                       </label>
                       <input
                         type="number"
-                        step="0.1"
+                        step={stepVal}
                         min={0}
                         value={row.entree === 0 ? '' : row.entree}
-                        onChange={(e) => setDeskEntree(idx, parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const val = isOneTnd
+                            ? (parseFloat(e.target.value) || 0)
+                            : (parseInt(e.target.value, 10) || 0);
+                          setDeskEntree(idx, val);
+                        }}
                         placeholder="0"
                         className="w-full rounded-lg border border-emerald-300 bg-white py-1.5 text-center text-sm font-bold text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
@@ -390,10 +402,15 @@ function CaisseContent() {
                       </label>
                       <input
                         type="number"
-                        step="0.1"
+                        step={stepVal}
                         min={0}
                         value={row.sortie === 0 ? '' : row.sortie}
-                        onChange={(e) => setDeskSortie(idx, parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const val = isOneTnd
+                            ? (parseFloat(e.target.value) || 0)
+                            : (parseInt(e.target.value, 10) || 0);
+                          setDeskSortie(idx, val);
+                        }}
                         placeholder="0"
                         className="w-full rounded-lg border border-rose-300 bg-white py-1.5 text-center text-sm font-bold text-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
                       />
@@ -460,21 +477,35 @@ function CaisseContent() {
               <tbody>
                 {deskRows.map((row, idx) => {
                   const netLigne = row.entree * row.denomination - row.sortie * row.denomination;
+                  const isOneTnd = row.denomination === 1;
+                  const stepVal = isOneTnd ? '0.1' : '1';
 
                   return (
                     <tr key={idx}>
                       <td>
-                        <span className="num font-bold text-slate-900 text-sm">
-                          {row.denomination} TND
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="num font-bold text-slate-900 text-sm">
+                            {row.denomination} TND
+                          </span>
+                          {isOneTnd && (
+                            <span className="badge-slate font-mono text-[10px] text-indigo-600 bg-indigo-50 border-indigo-200">
+                              pas 0.1
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="text-center">
                         <input
                           type="number"
-                          step="0.1"
+                          step={stepVal}
                           min={0}
                           value={row.entree === 0 ? '' : row.entree}
-                          onChange={(e) => setDeskEntree(idx, parseFloat(e.target.value) || 0)}
+                          onChange={(e) => {
+                            const val = isOneTnd
+                              ? (parseFloat(e.target.value) || 0)
+                              : (parseInt(e.target.value, 10) || 0);
+                            setDeskEntree(idx, val);
+                          }}
                           placeholder="0"
                           className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-bold text-emerald-800 bg-emerald-50/40 border-emerald-200"
                         />
@@ -482,10 +513,15 @@ function CaisseContent() {
                       <td className="text-center">
                         <input
                           type="number"
-                          step="0.1"
+                          step={stepVal}
                           min={0}
                           value={row.sortie === 0 ? '' : row.sortie}
-                          onChange={(e) => setDeskSortie(idx, parseFloat(e.target.value) || 0)}
+                          onChange={(e) => {
+                            const val = isOneTnd
+                              ? (parseFloat(e.target.value) || 0)
+                              : (parseInt(e.target.value, 10) || 0);
+                            setDeskSortie(idx, val);
+                          }}
                           placeholder="0"
                           className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-bold text-rose-800 bg-rose-50/40 border-rose-200"
                         />

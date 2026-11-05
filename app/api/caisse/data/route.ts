@@ -44,6 +44,36 @@ export async function GET() {
       circuitActuel: r.circuit_actuel || '',
     }));
 
+    // Ensure global default drivers TR 0 and TR 1 are always available
+    const hasTr0 = drivers.some((d) => d.tr === '0');
+    const hasTr1 = drivers.some((d) => d.tr === '1');
+    if (!hasTr0) {
+      drivers.unshift({
+        id: 'DRV-GLOBAL-0',
+        nom: 'CHAUFFEUR GLOBAL (TR 0)',
+        tr: '0',
+        statut: 'PAYE',
+        dateDerniere: new Date().toISOString(),
+        reclamation: 'CHAUFFEUR GLOBAL PAR DÉFAUT',
+        caissesDues: 0,
+        programmeJour: 'GLOBAL',
+        circuitActuel: 'GLOBAL',
+      });
+    }
+    if (!hasTr1) {
+      drivers.unshift({
+        id: 'DRV-GLOBAL-1',
+        nom: 'CHAUFFEUR GLOBAL (TR 1)',
+        tr: '1',
+        statut: 'PAYE',
+        dateDerniere: new Date().toISOString(),
+        reclamation: 'CHAUFFEUR GLOBAL PAR DÉFAUT',
+        caissesDues: 0,
+        programmeJour: 'GLOBAL',
+        circuitActuel: 'GLOBAL',
+      });
+    }
+
     // 2. Fetch transactions for this account
     const transRes = await targetPool.query(
       `SELECT id, date, code_chauffeur, nom_chauffeur, recette, t_payer, res_a_payer, versement, status, raw_data

@@ -2,6 +2,28 @@ import { Driver } from '@/types/caisse';
 
 export const INITIAL_DRIVERS: Driver[] = [
   {
+    "id": "DRV-GLOBAL-0",
+    "nom": "CHAUFFEUR GLOBAL (TR 0)",
+    "tr": "0",
+    "statut": "PAYE",
+    "dateDerniere": "2026-11-01T00:00:00.000Z",
+    "reclamation": "CHAUFFEUR GLOBAL PAR DÉFAUT",
+    "caissesDues": 0,
+    "programmeJour": "GLOBAL",
+    "circuitActuel": "GLOBAL"
+  },
+  {
+    "id": "DRV-GLOBAL-1",
+    "nom": "CHAUFFEUR GLOBAL (TR 1)",
+    "tr": "1",
+    "statut": "PAYE",
+    "dateDerniere": "2026-11-01T00:00:00.000Z",
+    "reclamation": "CHAUFFEUR GLOBAL PAR DÉFAUT",
+    "caissesDues": 0,
+    "programmeJour": "GLOBAL",
+    "circuitActuel": "GLOBAL"
+  },
+  {
     "id": "DRV-001",
     "nom": "HASSEN YOUSSFI 37",
     "tr": "37",

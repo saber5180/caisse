@@ -122,7 +122,7 @@ export default function BilletteriePage() {
           </div>
         </div>
 
-        {/* Tableau Récapitulatif des 12 Dénominations */}
+        {/* Tableau Récapitulatif des 11 Dénominations */}
         <div className="mt-6">
           <table className="w-full text-left text-xs border border-slate-200">
             <thead>
@@ -247,37 +247,37 @@ export default function BilletteriePage() {
           icon={<IconCoins className="h-5 w-5" />}
           accent="amber"
           actions={
-            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto">
               <Link
                 href="/billetterie/historique"
-                className="btn-ghost flex-1 sm:flex-none !py-2 text-xs sm:text-sm font-semibold"
+                className="btn-ghost !py-2 text-xs sm:text-sm font-semibold justify-center"
                 title="Consulter les bilans des jours passés"
               >
-                <IconHistory className="h-4 w-4 text-indigo-600" />
-                <span>Historique Clôtures</span>
+                <IconHistory className="h-4 w-4 text-indigo-600 shrink-0" />
+                <span>Historique</span>
               </Link>
               <button
                 onClick={handleReset}
-                className="btn-ghost flex-1 sm:flex-none !py-2 text-xs sm:text-sm"
+                className="btn-ghost !py-2 text-xs sm:text-sm justify-center"
                 title="Remettre à zéro"
               >
-                <IconTrash className="h-4 w-4" />
-                <span>Réinitialiser</span>
+                <IconTrash className="h-4 w-4 text-slate-400 shrink-0" />
+                <span>RàZ</span>
               </button>
               <button
                 onClick={handlePrint}
-                className="btn-ghost flex-1 sm:flex-none !py-2 text-xs sm:text-sm font-bold"
+                className="btn-ghost !py-2 text-xs sm:text-sm font-bold justify-center"
                 title="Imprimer l'état haute définition"
               >
-                <IconPrinter className="h-4 w-4 text-slate-700" />
+                <IconPrinter className="h-4 w-4 text-slate-700 shrink-0" />
                 <span>Imprimer PV</span>
               </button>
               <button
                 onClick={() => setShowConfirmModal(true)}
-                className="btn-success w-full sm:w-auto !py-2.5 text-xs sm:text-sm font-bold shadow-md"
+                className="btn-success col-span-2 sm:col-auto !py-2.5 text-xs sm:text-sm font-bold shadow-md justify-center"
                 title="Enregistrer et clôturer définitivement cette journée de caisse"
               >
-                <IconCheck className="h-4 w-4" />
+                <IconCheck className="h-4 w-4 shrink-0" />
                 <span>Clôturer la Journée</span>
               </button>
             </div>
@@ -401,7 +401,7 @@ export default function BilletteriePage() {
                 <h2 className="card-title text-sm">Détail des Coupures</h2>
                 <p className="text-[11px] text-slate-400">Pièces & Billets en caisse</p>
               </div>
-              <span className="badge-slate font-mono text-[11px]">12 dénominations</span>
+              <span className="badge-slate font-mono text-[11px]">11 dénominations</span>
             </div>
 
             {/* Mobile Denomination Cards View (sm:hidden) */}

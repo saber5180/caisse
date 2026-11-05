@@ -27,7 +27,6 @@ export const DEFAULT_BILLETTERIE_ITEMS: CoinBreakdownItem[] = [
   { valeur: 20.000, label: '20,000 TND (Billet)', isBillet: true, nombre: 0 },
   { valeur: 50.000, label: '50,000 TND (Billet)', isBillet: true, nombre: 0 },
   { valeur: 5.000, label: '5,000 TND (Billet)', isBillet: true, nombre: 0 },
-  { valeur: 0.020, label: '0,020 TND (Pièce)', isBillet: false, nombre: 0 },
 ];
 
 export function computeDeskTotals(rows: CashDeskRow[], versement: number, recette: number) {
@@ -194,10 +193,13 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
                 })
               : [];
 
+            const rawBilletterie = (billetterie?.items || DEFAULT_BILLETTERIE_ITEMS)
+              .filter((item: CoinBreakdownItem) => Math.abs(item.valeur - 0.020) > 0.001);
+
             set({
               drivers: normalizedDrivers,
               transactions: Array.isArray(transactions) ? transactions : [],
-              billetterieItems: billetterie?.items || DEFAULT_BILLETTERIE_ITEMS,
+              billetterieItems: rawBilletterie,
               srfMoins: billetterie?.srfMoins ?? 0,
               ver: billetterie?.ver ?? 0,
               recettePhysiqueTheorique: billetterie?.recetteTheorique ?? 0,

@@ -295,7 +295,7 @@ export default function BilletterieHistoriquePage() {
 
         {/* List of Closings */}
         {loading ? (
-          <div className="p-12 text-center text-sm text-slate-400">
+          <div className="card-pro p-12 text-center text-sm text-slate-400">
             Chargement de l&apos;historique...
           </div>
         ) : filtered.length === 0 ? (
@@ -314,7 +314,99 @@ export default function BilletterieHistoriquePage() {
           </div>
         ) : (
           <div className="card-pro overflow-hidden">
-            <div className="table-wrap">
+            {/* Mobile Responsive Cards View (sm:hidden) */}
+            <div className="divide-y divide-slate-100 sm:hidden">
+              {filtered.map((item) => (
+                <div key={item.id} className="p-4 hover:bg-slate-50/60 transition-colors">
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <IconCalendar className="h-4 w-4 text-slate-400 shrink-0" />
+                        <span className="font-bold text-slate-900 text-xs">
+                          {new Date(item.dateCloture).toLocaleDateString('fr-FR', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {new Date(item.dateCloture).toLocaleTimeString('fr-FR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-slate-500 font-medium">
+                        Par : <strong className="text-slate-700">{item.caissierNom || 'Opérateur'}</strong>
+                      </p>
+                    </div>
+
+                    <span
+                      className={`inline-block px-2.5 py-1 rounded-full font-mono text-[11px] font-bold shrink-0 ${
+                        item.ecartReste >= 0
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      }`}
+                    >
+                      {item.ecartReste > 0 ? '+' : ''}
+                      {formatMoney(item.ecartReste)} TND
+                    </span>
+                  </div>
+
+                  {/* Metrics Mini Grid */}
+                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-2.5 text-xs mb-3 border border-slate-100">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Physique (TT)</span>
+                      <strong className="num text-sm text-slate-900 font-black">{formatMoney(item.ttPhysique)} TND</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Recette Attendue</span>
+                      <strong className="num text-sm text-slate-700">{formatMoney(item.recetteTheorique)} TND</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Coupures</span>
+                      <span className="num text-xs font-semibold text-slate-600">{formatMoney(item.totalCoupures)} TND</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Versements (VER)</span>
+                      <span className="num text-xs font-semibold text-indigo-700">
+                        {item.ver > 0 ? `+${formatMoney(item.ver)}` : '0.000'} TND
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEntry(item)}
+                      className="btn-ghost flex-1 !py-1.5 text-xs font-bold text-slate-700 border border-slate-200"
+                    >
+                      Détails
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTriggerPrint(item)}
+                      className="btn-ghost !py-1.5 !px-3 text-xs font-bold text-indigo-600 border border-indigo-200 bg-indigo-50/50"
+                      title="Imprimer PV"
+                    >
+                      <IconPrinter className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(item.id)}
+                      className="btn-ghost !py-1.5 !px-3 text-xs text-rose-500 hover:bg-rose-50 border border-rose-200"
+                      title="Supprimer"
+                    >
+                      <IconTrash className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View (hidden sm:block) */}
+            <div className="table-wrap hidden sm:block">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -393,7 +485,7 @@ export default function BilletterieHistoriquePage() {
                             type="button"
                             onClick={() => setSelectedEntry(item)}
                             className="btn-ghost !p-1.5 text-slate-600 hover:text-slate-900"
-                            title="Voir le détail des 12 coupures"
+                            title="Voir le détail des 11 coupures"
                           >
                             <span className="text-xs font-bold">Détails</span>
                           </button>
@@ -423,21 +515,22 @@ export default function BilletterieHistoriquePage() {
           </div>
         )}
 
-        {/* Breakdown Details Modal */}
+        {/* Breakdown Details Modal (Fully Responsive & Touch Pro) */}
         {selectedEntry && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
             <div
-              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+              className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm"
               onClick={() => setSelectedEntry(null)}
             />
-            <div className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl z-10 overflow-hidden">
-              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-6 py-4">
+            <div className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl z-10 overflow-hidden my-auto max-h-[90vh] flex flex-col">
+              {/* Modal Topbar */}
+              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 sm:px-6 py-4">
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">
                     Détail du Comptage Journalier
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Clôturé le {new Date(selectedEntry.dateCloture).toLocaleString('fr-FR')} par {selectedEntry.caissierNom || 'Caissier'}
+                    Clôturé le {new Date(selectedEntry.dateCloture).toLocaleString('fr-FR')} · {selectedEntry.caissierNom || 'Caissier'}
                   </p>
                 </div>
                 <button
@@ -448,75 +541,105 @@ export default function BilletterieHistoriquePage() {
                 </button>
               </div>
 
-              <div className="p-6 max-h-[70vh] overflow-y-auto space-y-4">
+              {/* Scrollable Modal Content */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
                 {/* Financial Summary */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <div className="bg-slate-50 p-2.5 sm:p-3 rounded-2xl border border-slate-200">
                     <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Coupures</span>
-                    <strong className="num text-sm text-slate-900">{formatMoney(selectedEntry.totalCoupures)} TND</strong>
+                    <strong className="num text-xs sm:text-sm text-slate-900">{formatMoney(selectedEntry.totalCoupures)} TND</strong>
                   </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <div className="bg-slate-50 p-2.5 sm:p-3 rounded-2xl border border-slate-200">
                     <span className="text-[10px] text-slate-400 uppercase font-bold block">Versements (VER)</span>
-                    <strong className="num text-sm text-indigo-700">{formatMoney(selectedEntry.ver)} TND</strong>
+                    <strong className="num text-xs sm:text-sm text-indigo-700">{formatMoney(selectedEntry.ver)} TND</strong>
                   </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <div className="bg-slate-50 p-2.5 sm:p-3 rounded-2xl border border-slate-200">
                     <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Physique (TT)</span>
-                    <strong className="num text-sm text-slate-900">{formatMoney(selectedEntry.ttPhysique)} TND</strong>
+                    <strong className="num text-xs sm:text-sm text-slate-900">{formatMoney(selectedEntry.ttPhysique)} TND</strong>
                   </div>
-                  <div className={`p-3 rounded-xl border ${selectedEntry.ecartReste >= 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
+                  <div className={`p-2.5 sm:p-3 rounded-2xl border ${selectedEntry.ecartReste >= 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
                     <span className="text-[10px] uppercase font-bold block">Écart / Reste</span>
-                    <strong className="num text-sm">
+                    <strong className="num text-xs sm:text-sm">
                       {selectedEntry.ecartReste > 0 ? '+' : ''}{formatMoney(selectedEntry.ecartReste)} TND
                     </strong>
                   </div>
                 </div>
 
-                {/* 12 Denominations Table */}
-                <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
-                  <thead className="bg-slate-100 border-b border-slate-200">
-                    <tr>
-                      <th className="py-2 px-3 font-bold uppercase">Coupure</th>
-                      <th className="py-2 px-3 font-bold uppercase text-center">Quantité</th>
-                      <th className="py-2 px-3 font-bold uppercase text-right">Sous-Total (TND)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono">
-                    {selectedEntry.items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="py-1.5 px-3 font-sans font-medium text-slate-800">
-                          {item.label}
-                        </td>
-                        <td className="py-1.5 px-3 text-center font-bold text-slate-900">
-                          {item.nombre}
-                        </td>
-                        <td className="py-1.5 px-3 text-right font-bold text-slate-900">
+                {/* Mobile Coupures Cards (sm:hidden) */}
+                <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white sm:hidden overflow-hidden">
+                  {selectedEntry.items.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`h-2.5 w-2.5 rounded-full ${
+                            item.isBillet ? 'bg-indigo-500' : 'bg-amber-500'
+                          }`}
+                        />
+                        <span className="font-semibold text-slate-900">{item.label}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="badge-slate font-mono text-[11px] font-bold mr-2">
+                          {item.nombre} pcs
+                        </span>
+                        <strong className="num text-slate-900">
                           {formatMoney(item.nombre * item.valeur)} TND
-                        </td>
+                        </strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop 11 Denominations Table (hidden sm:block) */}
+                <div className="table-wrap hidden sm:block">
+                  <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+                    <thead className="bg-slate-100 border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-3 font-bold uppercase">Coupure</th>
+                        <th className="py-2 px-3 font-bold uppercase text-center">Quantité</th>
+                        <th className="py-2 px-3 font-bold uppercase text-right">Sous-Total (TND)</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {selectedEntry.items.map((item, idx) => (
+                        <tr key={idx}>
+                          <td className="py-1.5 px-3 font-sans font-medium text-slate-800">
+                            {item.label}
+                          </td>
+                          <td className="py-1.5 px-3 text-center font-bold text-slate-900">
+                            {item.nombre}
+                          </td>
+                          <td className="py-1.5 px-3 text-right font-bold text-slate-900">
+                            {formatMoney(item.nombre * item.valeur)} TND
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
                 {selectedEntry.notes && (
-                  <div className="rounded-xl bg-slate-50 p-3 text-xs border border-slate-200">
-                    <span className="font-bold text-slate-600 block mb-0.5">Notes :</span>
+                  <div className="rounded-2xl bg-slate-50 p-3 text-xs border border-slate-200">
+                    <span className="font-bold text-slate-600 block mb-0.5">Observation :</span>
                     <p className="text-slate-800">{selectedEntry.notes}</p>
                   </div>
                 )}
               </div>
 
-              <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-6 py-4">
-                <span className="text-xs font-mono text-slate-400">ID: {selectedEntry.id}</span>
-                <div className="flex items-center gap-2">
+              {/* Modal Footer */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/80 px-4 sm:px-6 py-3.5 mt-auto">
+                <span className="text-[11px] font-mono text-slate-400 self-start sm:self-center">
+                  Réf: {selectedEntry.id}
+                </span>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
                   <button
                     onClick={() => setSelectedEntry(null)}
-                    className="btn-ghost !py-2 text-xs"
+                    className="btn-ghost flex-1 sm:flex-none !py-2 text-xs"
                   >
                     Fermer
                   </button>
                   <button
                     onClick={() => handleTriggerPrint(selectedEntry)}
-                    className="btn-primary !py-2 text-xs font-bold"
+                    className="btn-primary flex-1 sm:flex-none !py-2 text-xs font-bold"
                   >
                     <IconPrinter className="h-4 w-4" />
                     Imprimer le PV
@@ -530,3 +653,4 @@ export default function BilletterieHistoriquePage() {
     </div>
   );
 }
+
