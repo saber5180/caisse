@@ -96,6 +96,10 @@ interface CaisseStore {
   setSearchQuery: (q: string) => void;
   setStatusFilter: (f: DriverStatus | 'ALL') => void;
   updateDriverStatus: (id: string, status: DriverStatus) => void;
+  updateDriver: (
+    id: string,
+    patch: Partial<Pick<Driver, 'nom' | 'tr' | 'statut' | 'programmeJour' | 'circuitActuel' | 'caissesDues'>>
+  ) => void;
   assignCircuit: (id: string, circuit: string) => void;
   deleteDriver: (id: string) => void;
   addDriver: (driver: Omit<Driver, 'id' | 'reclamation'>) => void;
@@ -112,11 +116,23 @@ interface CaisseStore {
 }
 
 export const useCaisseStore = create<CaisseStore>()((set, get) => {
+  let hasPendingSync = false;
+
   const triggerDebouncedSync = () => {
+    hasPendingSync = true;
     if (syncTimeout) clearTimeout(syncTimeout);
     syncTimeout = setTimeout(() => {
       get().syncToBackend();
-    }, 600);
+    }, 500);
+  };
+
+  const triggerImmediateSync = () => {
+    hasPendingSync = true;
+    if (syncTimeout) {
+      clearTimeout(syncTimeout);
+      syncTimeout = null;
+    }
+    void get().syncToBackend();
   };
 
   const blankState = {
@@ -142,6 +158,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     currentUser: null,
     setCurrentUser: (user) => {
       if (!user) {
+        hasPendingSync = false;
         set({ currentUser: null, ...blankState });
       } else {
         set({ currentUser: user });
@@ -151,19 +168,28 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     lastSyncTime: null,
 
     resetStoreForAccount: () => {
+      hasPendingSync = false;
       set(blankState);
     },
 
     fetchAccountData: async () => {
+      if (hasPendingSync) return;
       try {
         set({ isSyncing: true });
-        const res = await fetch('/api/caisse/data');
+        const res = await fetch('/api/caisse/data', { cache: 'no-store' });
         if (res.ok) {
           const json = await res.json();
-          if (json.success && json.data) {
+          if (json.success && json.data && !hasPendingSync) {
             const { drivers, transactions, billetterie, deskState } = json.data;
+            const normalizedDrivers: Driver[] = Array.isArray(drivers)
+              ? drivers.map((d: Driver) => {
+                  const { reclamation } = recalculateReclamation(d);
+                  return { ...d, reclamation };
+                })
+              : [];
+
             set({
-              drivers: Array.isArray(drivers) ? drivers : [],
+              drivers: normalizedDrivers,
               transactions: Array.isArray(transactions) ? transactions : [],
               billetterieItems: billetterie?.items || DEFAULT_BILLETTERIE_ITEMS,
               srfMoins: billetterie?.srfMoins ?? 0,
@@ -186,32 +212,38 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     },
 
     syncToBackend: async () => {
-      const user = get().currentUser;
-      if (!user) return;
       try {
         set({ isSyncing: true });
-        await fetch('/api/caisse/data', {
+        const payload = {
+          drivers: get().drivers,
+          transactions: get().transactions,
+          billetterie: {
+            items: get().billetterieItems,
+            srfMoins: get().srfMoins,
+            ver: get().ver,
+            recetteTheorique: get().recettePhysiqueTheorique,
+          },
+          deskState: {
+            deskRows: get().deskRows,
+            deskRecette: get().deskRecette,
+            deskVersement: get().deskVersement,
+            deskTrInput: get().deskTrInput,
+            selectedDriverId: get().selectedDriverId,
+          },
+        };
+
+        const res = await fetch('/api/caisse/data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            drivers: get().drivers,
-            transactions: get().transactions,
-            billetterie: {
-              items: get().billetterieItems,
-              srfMoins: get().srfMoins,
-              ver: get().ver,
-              recetteTheorique: get().recettePhysiqueTheorique,
-            },
-            deskState: {
-              deskRows: get().deskRows,
-              deskRecette: get().deskRecette,
-              deskVersement: get().deskVersement,
-              deskTrInput: get().deskTrInput,
-              selectedDriverId: get().selectedDriverId,
-            },
-          }),
+          body: JSON.stringify(payload),
         });
-        set({ lastSyncTime: new Date().toLocaleTimeString('fr-FR') });
+
+        if (res.ok) {
+          hasPendingSync = false;
+          set({ lastSyncTime: new Date().toLocaleTimeString('fr-FR') });
+        } else {
+          console.error('Sync failed with status:', res.status);
+        }
       } catch (e) {
         console.error('Sync to backend error:', e);
       } finally {
@@ -359,7 +391,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         },
       }));
 
-      triggerDebouncedSync();
+      triggerImmediateSync();
       return newTransaction;
     },
 
@@ -375,7 +407,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           text: 'Guichet de caisse réinitialisé.',
         },
       });
-      triggerDebouncedSync();
+      triggerImmediateSync();
     },
 
     clearFeedback: () => set({ feedbackMessage: null }),
@@ -409,7 +441,45 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           },
         };
       });
-      triggerDebouncedSync();
+      triggerImmediateSync();
+    },
+
+    updateDriver: (id, patch) => {
+      set((state) => {
+        const updated = state.drivers.map((d) => {
+          if (d.id === id) {
+            const nextStatut = patch.statut ?? d.statut;
+            const nextCircuit =
+              patch.programmeJour !== undefined ? patch.programmeJour : d.programmeJour;
+            const u: Driver = {
+              ...d,
+              ...patch,
+              statut: nextStatut,
+              programmeJour: nextCircuit,
+              circuitActuel:
+                patch.circuitActuel !== undefined ? patch.circuitActuel : nextCircuit,
+              caissesDues:
+                patch.caissesDues !== undefined
+                  ? patch.caissesDues
+                  : nextStatut === 'NON PAYE'
+                  ? Math.max(1, d.caissesDues)
+                  : 0,
+            };
+            const { reclamation } = recalculateReclamation(u);
+            return { ...u, reclamation };
+          }
+          return d;
+        });
+
+        return {
+          drivers: updated,
+          feedbackMessage: {
+            type: 'success',
+            text: 'Fiche chauffeur mise à jour et synchronisée.',
+          },
+        };
+      });
+      triggerImmediateSync();
     },
 
     assignCircuit: (id, circuit) => {
@@ -435,7 +505,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           },
         };
       });
-      triggerDebouncedSync();
+      triggerImmediateSync();
     },
 
     deleteDriver: (id) => {
@@ -446,19 +516,21 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           text: 'Chauffeur supprimé avec succès.',
         },
       }));
-      triggerDebouncedSync();
+      triggerImmediateSync();
     },
 
     addDriver: (data) => {
+      const statut = data.statut || 'NON PAYE';
+      const circuit = (data.programmeJour || data.circuitActuel || '').trim().toUpperCase();
       const newDriver: Driver = {
         id: generateId('DRV'),
-        nom: data.nom,
-        tr: data.tr,
-        statut: data.statut,
+        nom: data.nom.trim().toUpperCase(),
+        tr: data.tr.trim().toUpperCase(),
+        statut,
         dateDerniere: data.dateDerniere || new Date().toISOString(),
-        caissesDues: data.caissesDues ?? 1,
-        programmeJour: data.programmeJour || '',
-        circuitActuel: data.circuitActuel || '',
+        caissesDues: statut === 'NON PAYE' ? (data.caissesDues ?? 1) : 0,
+        programmeJour: circuit,
+        circuitActuel: circuit,
         reclamation: '',
       };
       const { reclamation } = recalculateReclamation(newDriver);
@@ -468,10 +540,10 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         drivers: [newDriver, ...state.drivers],
         feedbackMessage: {
           type: 'success',
-          text: `Chauffeur ${newDriver.nom} ajouté avec succès.`,
+          text: `Chauffeur ${newDriver.nom} (TR ${newDriver.tr}) ajouté et synchronisé !`,
         },
       }));
-      triggerDebouncedSync();
+      triggerImmediateSync();
     },
 
     executeBascule1230: () => {
@@ -524,7 +596,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           },
         };
       });
-      triggerDebouncedSync();
+      triggerImmediateSync();
     },
 
     resetAllDriversStatus: (status) => {
@@ -540,7 +612,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           text: `Tous les chauffeurs ont été passés en: ${status}`,
         },
       }));
-      triggerDebouncedSync();
+      triggerImmediateSync();
     },
 
     refreshAlarms: () => {
@@ -553,14 +625,18 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     },
 
     loadDemoDriversTemplate: () => {
+      const normalized = INITIAL_DRIVERS.map((d) => {
+        const { reclamation } = recalculateReclamation(d);
+        return { ...d, reclamation };
+      });
       set({
-        drivers: INITIAL_DRIVERS,
+        drivers: normalized,
         feedbackMessage: {
           type: 'success',
           text: '70 chauffeurs du modèle initial ont été chargés avec succès dans votre caisse.',
         },
       });
-      triggerDebouncedSync();
+      triggerImmediateSync();
     },
 
     setBilletterieCount: (index, count) => {

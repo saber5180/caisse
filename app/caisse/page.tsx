@@ -226,7 +226,7 @@ function CaisseContent() {
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="badge-solid-emerald px-3 py-1 text-xs font-bold shadow-xs">
+                <span className="badge-solid-emerald px-3 py-1 text-xs font-bold shadow-sm">
                   Chauffeur Pointé
                 </span>
               </div>

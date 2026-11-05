@@ -24,15 +24,26 @@ const ICONS = {
   sheet: IconSheet,
 };
 
+const ICON_COLORS: Record<NavItem['icon'], string> = {
+  dashboard: 'text-indigo-400 group-hover:text-indigo-300',
+  calculator: 'text-sky-400 group-hover:text-sky-300',
+  coins: 'text-amber-400 group-hover:text-amber-300',
+  truck: 'text-rose-400 group-hover:text-rose-300',
+  calendar: 'text-violet-400 group-hover:text-violet-300',
+  receipt: 'text-emerald-400 group-hover:text-emerald-300',
+  sheet: 'text-teal-400 group-hover:text-teal-300',
+};
+
 const SECTIONS = [
-  { id: 'workspace', title: 'Espace Caisse' },
-  { id: 'operations', title: 'Chauffeurs & Circuits' },
-  { id: 'reports', title: 'Données & Journal' },
+  { id: 'workspace', title: 'Trésorerie & Guichet' },
+  { id: 'operations', title: 'Opérations Flotte' },
+  { id: 'reports', title: 'Audit & Intégration' },
 ] as const;
 
 export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const drivers = useCaisseStore((state) => state.drivers);
+  const transactions = useCaisseStore((state) => state.transactions);
 
   const nonPayeCount = drivers.filter((d) => d.statut === 'NON PAYE').length;
 
@@ -41,11 +52,15 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
     const active = pathname === item.href;
 
     let badgeText = '';
-    let badgeClass = 'bg-slate-200/70 text-slate-600';
+    let badgeClass = 'bg-white/10 text-slate-300 ring-1 ring-white/10';
 
     if (item.badgeKey === 'nonPaye' && nonPayeCount > 0) {
       badgeText = String(nonPayeCount);
-      badgeClass = 'bg-rose-100 text-rose-700 font-bold';
+      badgeClass =
+        'bg-rose-500/20 text-rose-300 ring-1 ring-rose-400/35 font-extrabold shadow-[0_0_12px_rgba(244,63,94,0.25)]';
+    } else if (item.href === '/journal' && transactions.length > 0) {
+      badgeText = String(transactions.length);
+      badgeClass = 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25 font-bold';
     }
 
     return (
@@ -53,19 +68,23 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
         <Link
           href={item.href}
           onClick={onNavigate}
-          className={`group nav-link min-h-11 ${active ? 'nav-link-active' : ''}`}
+          className={`group nav-link-dark min-h-[42px] ${active ? 'nav-link-dark-active' : ''}`}
         >
           {active && (
-            <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-indigo-600" />
+            <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-indigo-400 shadow-[0_0_10px_#818cf8]" />
           )}
-          <Icon
-            className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-              active ? 'text-indigo-600' : item.accent ?? 'text-slate-400 group-hover:text-slate-600'
+          <span
+            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all ${
+              active
+                ? 'bg-indigo-500/25 text-indigo-300 ring-1 ring-indigo-400/30'
+                : `bg-white/[0.03] ${ICON_COLORS[item.icon]}`
             }`}
-          />
+          >
+            <Icon className="h-[16px] w-[16px]" />
+          </span>
           <span className="flex-1 truncate">{item.label}</span>
           {badgeText && (
-            <span className={`rounded-full px-2 py-0.5 text-[10px] tabular-nums ${badgeClass}`}>
+            <span className={`rounded-full px-2 py-0.5 font-mono text-[10px] tabular-nums ${badgeClass}`}>
               {badgeText}
             </span>
           )}
@@ -75,11 +94,11 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   };
 
   return (
-    <nav className="flex-1 overflow-y-auto px-3 pb-6">
+    <nav className="flex-1 overflow-y-auto px-3 pb-4">
       {SECTIONS.map((section) => (
         <div key={section.id}>
-          <p className="nav-section">{section.title}</p>
-          <ul className="space-y-0.5">
+          <p className="nav-section-dark">{section.title}</p>
+          <ul className="space-y-1">
             {NAV_ITEMS.filter((item) => item.group === section.id).map(renderLink)}
           </ul>
         </div>
@@ -87,4 +106,3 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
     </nav>
   );
 }
-

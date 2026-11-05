@@ -65,6 +65,26 @@ export default function JournalPage() {
         }
       />
 
+      {/* Official Print Header for Journal (Print-only) */}
+      <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-lg font-black uppercase tracking-tight text-slate-900">
+              Journal Général de Caisse & Recettes
+            </h1>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Rapport d&apos;encaissement archivé · Édité le {new Date().toLocaleString('fr-FR')}
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="border border-slate-900 px-2.5 py-0.5 text-xs font-bold uppercase">
+              État Clôture
+            </span>
+            <p className="text-xs text-slate-500 mt-1">Total: {transactions.length} opération{transactions.length > 1 ? 's' : ''}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Résumé Financier du Journal */}
       <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3 mb-5">
         <div className="card p-4 sm:p-5">
@@ -142,14 +162,14 @@ export default function JournalPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Date & Heure</th>
-                    <th>Chauffeur</th>
-                    <th>TR</th>
-                    <th className="!text-right">Recette (Attendu)</th>
-                    <th className="!text-right">T. Payer (Encaissé)</th>
-                    <th className="!text-right">Écart (Reste)</th>
-                    <th className="!text-right">Versement</th>
-                    <th className="!text-center">Statut</th>
+                    <th className="w-40">Date & Heure</th>
+                    <th className="w-48">Chauffeur</th>
+                    <th className="w-20">TR</th>
+                    <th className="!text-right w-36">Recette (Attendu)</th>
+                    <th className="!text-right w-36">T. Payer (Encaissé)</th>
+                    <th className="!text-right w-36">Écart (Reste)</th>
+                    <th className="!text-right w-28">Versement</th>
+                    <th className="!text-center w-28">Statut</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -159,7 +179,9 @@ export default function JournalPage() {
                         {formatDateTime(t.date)}
                       </td>
                       <td>
-                        <span className="font-semibold text-slate-900">{t.nomChauffeur}</span>
+                        <span className="font-semibold text-slate-900 truncate max-w-[190px] block" title={t.nomChauffeur}>
+                          {t.nomChauffeur}
+                        </span>
                       </td>
                       <td>
                         <span className="num font-bold text-indigo-700">{t.codeChauffeur}</span>
@@ -188,6 +210,20 @@ export default function JournalPage() {
             </div>
           </>
         )}
+      </div>
+
+      {/* Official Signatures for Journal Print (Print-only) */}
+      <div className="hidden print:grid grid-cols-2 gap-8 mt-10 pt-4 print-avoid-break">
+        <div className="border-t border-slate-400 pt-2 text-center text-xs">
+          <p className="font-bold text-slate-900">Le Caissier Responsable</p>
+          <p className="text-[10px] text-slate-500">Signature et émargement</p>
+          <div className="h-14" />
+        </div>
+        <div className="border-t border-slate-400 pt-2 text-center text-xs">
+          <p className="font-bold text-slate-900">Contrôle de Gestion / Direction</p>
+          <p className="text-[10px] text-slate-500">Visa pour audit et conformité</p>
+          <div className="h-14" />
+        </div>
       </div>
     </>
   );

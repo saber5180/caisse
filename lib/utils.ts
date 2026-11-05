@@ -82,7 +82,7 @@ export function recalculateReclamation(driver: Pick<Driver, 'statut' | 'dateDern
 
   if (driver.statut === 'PAYE') {
     return {
-      reclamation: `PAYE ENCAISSER DEPUIS ${text}`,
+      reclamation: `Réglé (${circuit}) · depuis ${text}`,
       isAlert: false,
       isUrgent: false,
     };
@@ -90,7 +90,7 @@ export function recalculateReclamation(driver: Pick<Driver, 'statut' | 'dateDern
 
   if (driver.statut === 'PAS DE CAISSE') {
     return {
-      reclamation: `PAS DE CAISSE ENCAISSER DEPUIS ${text}`,
+      reclamation: `Sans caisse (${circuit}) · depuis ${text}`,
       isAlert: false,
       isUrgent: false,
     };
@@ -99,7 +99,7 @@ export function recalculateReclamation(driver: Pick<Driver, 'statut' | 'dateDern
   // NON PAYE
   const isUrgent = days >= 1;
   return {
-    reclamation: `ALERTE NON PAYE CAISSE ${circuit} DEPUIS ${text}`,
+    reclamation: `Impayé (${circuit}) · retard: ${text}`,
     isAlert: true,
     isUrgent,
   };

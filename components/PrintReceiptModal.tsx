@@ -36,7 +36,7 @@ export default function PrintReceiptModal({
   const activeRows = (data.rows || []).filter((r) => r.entree > 0 || r.sortie > 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+    <div className="printable-modal fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-slate-900/70 backdrop-blur-md transition-opacity no-print"
@@ -44,7 +44,7 @@ export default function PrintReceiptModal({
       />
 
       {/* Main Modal Dialog */}
-      <div className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl ring-1 ring-slate-900/10 z-10 my-auto overflow-hidden">
+      <div className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl ring-1 ring-slate-900/10 z-10 my-auto overflow-hidden print:shadow-none print:ring-0 print:rounded-none print:max-w-none print:my-0 print:overflow-visible">
         {/* Modal Top Control Bar (Hidden during print) */}
         <div className="no-print flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-6 py-4">
           <div className="flex items-center gap-3">
@@ -91,7 +91,7 @@ export default function PrintReceiptModal({
         </div>
 
         {/* Printable Document Body */}
-        <div className="p-6 sm:p-10 max-h-[75vh] overflow-y-auto">
+        <div className="p-6 sm:p-10 max-h-[75vh] overflow-y-auto print:max-h-none print:overflow-visible print:p-0">
           {printFormat === 'A4' ? (
             /* =================== FORMAT FACTURE / DÉCHARGE A4 =================== */
             <div className="printable-document border border-slate-200 rounded-2xl p-8 bg-white text-slate-900">

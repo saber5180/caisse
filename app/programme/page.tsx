@@ -200,11 +200,11 @@ export default function ProgrammePage() {
                 <thead>
                   <tr>
                     <th className="w-16">TR</th>
-                    <th>Nom Chauffeur</th>
-                    <th>Statut Actuel</th>
-                    <th>Dette</th>
+                    <th className="w-48">Nom Chauffeur</th>
+                    <th className="w-36">Statut Actuel</th>
+                    <th className="w-24 !text-center">Dette</th>
                     <th>Circuit Attribué (Programme du jour)</th>
-                    <th className="!text-right">Statut Sync</th>
+                    <th className="w-32 !text-right">Statut Sync</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -214,7 +214,9 @@ export default function ProgrammePage() {
                         <span className="num font-bold text-slate-900">{d.tr}</span>
                       </td>
                       <td>
-                        <div className="font-semibold text-slate-900">{d.nom}</div>
+                        <div className="font-semibold text-slate-900 truncate max-w-[200px]" title={d.nom}>
+                          {d.nom}
+                        </div>
                       </td>
                       <td>
                         <span className={getStatusBadge(d.statut)}>{d.statut}</span>
@@ -223,14 +225,14 @@ export default function ProgrammePage() {
                         {d.caissesDues > 0 ? (
                           <span className="badge-solid-rose font-bold">Dû (1)</span>
                         ) : (
-                          <span className="text-slate-300">0</span>
+                          <span className="text-slate-300 font-medium">0</span>
                         )}
                       </td>
                       <td>
                         <select
                           value={d.programmeJour || d.circuitActuel || 'STAND-BY'}
                           onChange={(e) => assignCircuit(d.id, e.target.value)}
-                          className="select !w-56 !py-1 !pl-3 !pr-8 !text-xs font-semibold text-slate-800"
+                          className="select !w-full max-w-xs !py-1 !pl-3 !pr-8 !text-xs font-semibold text-slate-800"
                         >
                           <option value="STAND-BY">STAND-BY (Sans circuit)</option>
                           {KNOWN_CIRCUITS.filter((c) => c !== 'STAND-BY').map((c) => (

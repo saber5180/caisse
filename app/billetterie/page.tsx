@@ -340,7 +340,7 @@ export default function BilletteriePage() {
                       <button
                         type="button"
                         onClick={() => setBilletterieCount(idx, Math.max(0, item.nombre - 1))}
-                        className="h-10 w-10 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 shadow-xs active:bg-slate-100 text-base"
+                        className="h-10 w-10 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 shadow-sm active:bg-slate-100 text-base"
                       >
                         -
                       </button>
@@ -357,7 +357,7 @@ export default function BilletteriePage() {
                       <button
                         type="button"
                         onClick={() => setBilletterieCount(idx, item.nombre + 1)}
-                        className="h-10 w-10 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 shadow-xs active:bg-slate-100 text-base"
+                        className="h-10 w-10 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 shadow-sm active:bg-slate-100 text-base"
                       >
                         +
                       </button>

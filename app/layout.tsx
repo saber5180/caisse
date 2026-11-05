@@ -3,15 +3,16 @@ import type { Metadata, Viewport } from 'next';
 import AppChrome from '@/components/AppChrome';
 
 export const metadata: Metadata = {
-  title: 'Caisse Chauffeurs — Gestion & Recettes',
-  description: 'Système complet de caisse, billetterie et suivi des mouvements de chauffeurs',
+  title: 'CaissePro — Trésorerie, Flotte & Billetterie',
+  description:
+    'Plateforme Enterprise de gestion de caisse chauffeurs, billetterie, rapprochement financier et facturation multi-comptes',
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#4f46e5',
+  themeColor: '#0B0F19',
 };
 
 export default function RootLayout({
@@ -25,7 +26,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
       </head>
@@ -35,4 +36,3 @@ export default function RootLayout({
     </html>
   );
 }
-
