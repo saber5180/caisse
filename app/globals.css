@@ -272,8 +272,21 @@
     display: none !important;
   }
 
-  body:has(.printable-modal) #app-chrome-content {
+  /* When a printable modal is open, hide the rest of the application and show only the modal */
+  body.has-printable-modal > *:not(.printable-modal),
+  body:has(.printable-modal) > *:not(.printable-modal) {
     display: none !important;
+  }
+
+  body.has-printable-modal,
+  body:has(.printable-modal) {
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   .printable-modal {
@@ -295,6 +308,8 @@
     box-shadow: none !important;
     border: none !important;
     overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   .printable-document {
@@ -303,10 +318,12 @@
     background: #ffffff !important;
     color: #0f172a !important;
     border: 1.5pt solid #0f172a !important;
-    padding: 10mm !important;
+    padding: 8mm !important;
     margin: 0 auto !important;
     box-shadow: none !important;
     border-radius: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   table {

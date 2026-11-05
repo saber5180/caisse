@@ -69,6 +69,8 @@ interface CaisseStore {
   deskRows: CashDeskRow[];
   deskRecette: number;
   deskVersement: number;
+  deskVersementBanque: number;
+  deskVersementCoffre: number;
   deskTrInput: string;
   feedbackMessage: { type: 'success' | 'error' | 'info'; text: string } | null;
 
@@ -86,6 +88,8 @@ interface CaisseStore {
   setDeskSortie: (index: number, val: number) => void;
   setDeskRecette: (val: number) => void;
   setDeskVersement: (val: number) => void;
+  setDeskVersementBanque: (val: number) => void;
+  setDeskVersementCoffre: (val: number) => void;
   setDeskTrInput: (val: string) => void;
   selectDriverByTr: (tr: string) => Driver | null;
   validateCurrentSale: () => CashTransaction | null;
@@ -143,6 +147,8 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     deskRows: DEFAULT_DESK_ROWS,
     deskRecette: 0,
     deskVersement: 0,
+    deskVersementBanque: 0,
+    deskVersementCoffre: 0,
     deskTrInput: '',
     feedbackMessage: null,
     billetterieItems: DEFAULT_BILLETTERIE_ITEMS,
@@ -261,6 +267,8 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     deskRows: DEFAULT_DESK_ROWS,
     deskRecette: 0,
     deskVersement: 0,
+    deskVersementBanque: 0,
+    deskVersementCoffre: 0,
     deskTrInput: '',
     feedbackMessage: null,
 
@@ -298,7 +306,26 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     },
 
     setDeskVersement: (val) => {
-      set({ deskVersement: Math.max(0, val) });
+      const v = Math.max(0, val);
+      set({ deskVersement: v, deskVersementBanque: v, deskVersementCoffre: 0 });
+      triggerDebouncedSync();
+    },
+
+    setDeskVersementBanque: (val) => {
+      set((state) => {
+        const v = Math.max(0, val);
+        const total = Math.round((v + state.deskVersementCoffre) * 1000) / 1000;
+        return { deskVersementBanque: v, deskVersement: total };
+      });
+      triggerDebouncedSync();
+    },
+
+    setDeskVersementCoffre: (val) => {
+      set((state) => {
+        const v = Math.max(0, val);
+        const total = Math.round((state.deskVersementBanque + v) * 1000) / 1000;
+        return { deskVersementCoffre: v, deskVersement: total };
+      });
       triggerDebouncedSync();
     },
 
@@ -331,7 +358,18 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     },
 
     validateCurrentSale: () => {
-      const { deskRows, deskVersement, deskRecette, selectedDriverId, drivers } = get();
+      const {
+        deskRows,
+        deskVersement,
+        deskVersementBanque,
+        deskVersementCoffre,
+        deskRecette,
+        selectedDriverId,
+        drivers,
+        billetterieItems,
+        ver,
+        recettePhysiqueTheorique,
+      } = get();
       const { tPayer, resAPayer } = computeDeskTotals(deskRows, deskVersement, deskRecette);
 
       const driver = drivers.find((d) => d.id === selectedDriverId);
@@ -358,6 +396,8 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         rawData: {
           rows: deskRows,
           versement: deskVersement,
+          versementBanque: deskVersementBanque,
+          versementCoffre: deskVersementCoffre,
           recette: deskRecette,
         },
       };
@@ -377,17 +417,53 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         return d;
       });
 
+      // Update billetterie items counts with net cash denominations (entree - sortie)
+      const updatedBilletterieItems = billetterieItems.map((bItem) => ({ ...bItem }));
+      deskRows.forEach((row) => {
+        const netCount = (row.entree || 0) - (row.sortie || 0);
+        if (netCount !== 0) {
+          // Find matching item by value
+          let matchIdx = updatedBilletterieItems.findIndex(
+            (b) => Math.abs(b.valeur - row.denomination) < 0.001 && (row.denomination === 5 ? b.isBillet : true)
+          );
+          if (matchIdx === -1) {
+            matchIdx = updatedBilletterieItems.findIndex(
+              (b) => Math.abs(b.valeur - row.denomination) < 0.001
+            );
+          }
+          if (matchIdx !== -1) {
+            const currentItem = updatedBilletterieItems[matchIdx];
+            const newTotalCount = Math.max(0, Math.round((currentItem.nombre + netCount) * 100) / 100);
+            updatedBilletterieItems[matchIdx] = {
+              ...currentItem,
+              nombre: newTotalCount,
+            };
+          }
+        }
+      });
+
+      // Add sale's versement into Comptage Billetterie's ver
+      const updatedVer = Math.max(0, Math.round(((ver || 0) + deskVersement) * 1000) / 1000);
+
+      // Add theoretical receipt into Comptage Billetterie's recetteTheorique
+      const updatedRecetteTheorique = Math.max(0, Math.round(((recettePhysiqueTheorique || 0) + deskRecette) * 1000) / 1000);
+
       set((state) => ({
         transactions: [newTransaction, ...state.transactions],
         drivers: updatedDrivers,
+        billetterieItems: updatedBilletterieItems,
+        ver: updatedVer,
+        recettePhysiqueTheorique: updatedRecetteTheorique,
         deskRows: DEFAULT_DESK_ROWS,
         deskVersement: 0,
+        deskVersementBanque: 0,
+        deskVersementCoffre: 0,
         deskRecette: 0,
         selectedDriverId: null,
         deskTrInput: '',
         feedbackMessage: {
           type: 'success',
-          text: `Encaissement validé pour ${driver.nom} (Total: ${tPayer.toFixed(3)} TND) !`,
+          text: `Encaissement validé pour ${driver.nom} (${tPayer.toFixed(3)} TND) ! Billetterie mise à jour (+${deskVersement.toFixed(3)} TND versement).`,
         },
       }));
 
@@ -399,6 +475,8 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       set({
         deskRows: DEFAULT_DESK_ROWS,
         deskVersement: 0,
+        deskVersementBanque: 0,
+        deskVersementCoffre: 0,
         deskRecette: 0,
         selectedDriverId: null,
         deskTrInput: '',

@@ -96,6 +96,24 @@ export async function initDatabaseSchema(customUrl?: string) {
       selected_driver_id VARCHAR(64),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS caisse_billetterie_history (
+      id VARCHAR(64) NOT NULL,
+      account_id VARCHAR(64) NOT NULL REFERENCES caisse_accounts(id) ON DELETE CASCADE,
+      date_cloture TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      total_coupures NUMERIC(12, 3) NOT NULL DEFAULT 0,
+      srf_pieces NUMERIC(12, 3) NOT NULL DEFAULT 0,
+      srf_moins NUMERIC(12, 3) NOT NULL DEFAULT 0,
+      ver NUMERIC(12, 3) NOT NULL DEFAULT 0,
+      tt_physique NUMERIC(12, 3) NOT NULL DEFAULT 0,
+      recette_theorique NUMERIC(12, 3) NOT NULL DEFAULT 0,
+      ecart_reste NUMERIC(12, 3) NOT NULL DEFAULT 0,
+      items JSONB NOT NULL DEFAULT '[]'::jsonb,
+      caissier_nom VARCHAR(255),
+      notes TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (account_id, id)
+    );
   `);
 }
 

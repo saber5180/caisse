@@ -1,10 +1,14 @@
 'use client';
 
+import { useState } from 'react';
+import Link from 'next/link';
 import { useCaisseStore } from '@/lib/store';
 import { formatMoney } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import {
+  IconCheck,
   IconCoins,
+  IconHistory,
   IconPrinter,
   IconTrash,
 } from '@/components/Icons';
@@ -20,6 +24,11 @@ export default function BilletteriePage() {
   const setSrfMoins = useCaisseStore((state) => state.setSrfMoins);
   const setVer = useCaisseStore((state) => state.setVer);
   const setRecetteTheorique = useCaisseStore((state) => state.setRecettePhysiqueTheorique);
+
+  const [savingCloture, setSavingCloture] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [clotureNotes, setClotureNotes] = useState('');
 
   // Totaux
   const totalCoupures = items.reduce((sum, item) => sum + item.nombre * item.valeur, 0);
@@ -41,6 +50,40 @@ export default function BilletteriePage() {
       items.forEach((_, idx) => setBilletterieCount(idx, 0));
       setSrfMoins(0);
       setVer(0);
+    }
+  };
+
+  const handleSaveCloture = async () => {
+    setSavingCloture(true);
+    try {
+      const res = await fetch('/api/caisse/billetterie/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          totalCoupures,
+          srfPieces: srfCoinsOnly,
+          srfMoins,
+          ver,
+          ttPhysique: tt,
+          recetteTheorique,
+          ecartReste: reste,
+          items,
+          notes: clotureNotes.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setSaveSuccessMsg('Clôture journalière enregistrée avec succès dans l’historique !');
+        setShowConfirmModal(false);
+        setClotureNotes('');
+        setTimeout(() => setSaveSuccessMsg(null), 6000);
+      } else {
+        alert(json.error || 'Erreur lors de la sauvegarde');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Erreur de connexion');
+    } finally {
+      setSavingCloture(false);
     }
   };
 
@@ -178,28 +221,64 @@ export default function BilletteriePage() {
 
       {/* ===================== INTERACTIVE SCREEN UI ===================== */}
       <div className="print:hidden">
+        {saveSuccessMsg && (
+          <div className="mb-4 flex items-center justify-between rounded-2xl bg-emerald-500/10 border border-emerald-500/30 p-4 text-emerald-900 shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500 text-white font-bold">
+                ✓
+              </span>
+              <div>
+                <p className="text-sm font-bold">{saveSuccessMsg}</p>
+                <p className="text-xs text-emerald-700">Vous pouvez consulter, imprimer ou exporter ce bilan à tout moment.</p>
+              </div>
+            </div>
+            <Link
+              href="/billetterie/historique"
+              className="btn bg-emerald-600 hover:bg-emerald-700 text-white !py-1.5 !px-3 text-xs font-bold"
+            >
+              Voir l&apos;Historique →
+            </Link>
+          </div>
+        )}
+
         <PageHeader
           title="Comptage Billetterie"
           subtitle="Dénombrement physique des pièces, billets, versements et rapprochement avec la recette"
           icon={<IconCoins className="h-5 w-5" />}
           accent="amber"
           actions={
-            <div className="flex w-full items-center gap-2 sm:w-auto">
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              <Link
+                href="/billetterie/historique"
+                className="btn-ghost flex-1 sm:flex-none !py-2 text-xs sm:text-sm font-semibold"
+                title="Consulter les bilans des jours passés"
+              >
+                <IconHistory className="h-4 w-4 text-indigo-600" />
+                <span>Historique Clôtures</span>
+              </Link>
               <button
                 onClick={handleReset}
                 className="btn-ghost flex-1 sm:flex-none !py-2 text-xs sm:text-sm"
                 title="Remettre à zéro"
               >
                 <IconTrash className="h-4 w-4" />
-                Réinitialiser
+                <span>Réinitialiser</span>
               </button>
               <button
                 onClick={handlePrint}
-                className="btn-primary flex-1 sm:flex-none !py-2 text-xs sm:text-sm font-bold shadow-md"
+                className="btn-ghost flex-1 sm:flex-none !py-2 text-xs sm:text-sm font-bold"
                 title="Imprimer l'état haute définition"
               >
-                <IconPrinter className="h-4 w-4" />
-                Imprimer l&apos;État Pro
+                <IconPrinter className="h-4 w-4 text-slate-700" />
+                <span>Imprimer PV</span>
+              </button>
+              <button
+                onClick={() => setShowConfirmModal(true)}
+                className="btn-success w-full sm:w-auto !py-2.5 text-xs sm:text-sm font-bold shadow-md"
+                title="Enregistrer et clôturer définitivement cette journée de caisse"
+              >
+                <IconCheck className="h-4 w-4" />
+                <span>Clôturer la Journée</span>
               </button>
             </div>
           }
@@ -299,6 +378,18 @@ export default function BilletteriePage() {
                     {reste >= 0 ? '✓ Excédent en caisse physique' : '⚠️ Déficit en caisse physique'}
                   </p>
                 </div>
+
+                {/* Quick Save Closing Button */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmModal(true)}
+                    className="btn-success w-full !py-3 text-sm font-black shadow-lg"
+                  >
+                    <IconCheck className="h-4 w-4" />
+                    Enregistrer la Clôture du Jour
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -346,10 +437,11 @@ export default function BilletteriePage() {
                       </button>
                       <input
                         type="number"
+                        step="0.1"
                         min={0}
                         value={item.nombre === 0 ? '' : item.nombre}
                         onChange={(e) =>
-                          setBilletterieCount(idx, parseInt(e.target.value, 10) || 0)
+                          setBilletterieCount(idx, parseFloat(e.target.value) || 0)
                         }
                         placeholder="0"
                         className="input num flex-1 !h-10 !text-center text-sm font-bold text-slate-900"
@@ -398,10 +490,11 @@ export default function BilletteriePage() {
                         <td className="text-center">
                           <input
                             type="number"
+                            step="0.1"
                             min={0}
                             value={item.nombre === 0 ? '' : item.nombre}
                             onChange={(e) =>
-                              setBilletterieCount(idx, parseInt(e.target.value, 10) || 0)
+                              setBilletterieCount(idx, parseFloat(e.target.value) || 0)
                             }
                             placeholder="0"
                             className="input num !w-28 !min-h-9 !py-1 !text-center text-sm font-bold text-slate-900"
@@ -420,6 +513,78 @@ export default function BilletteriePage() {
             </div>
           </div>
         </div>
+
+        {/* Confirmation Modal for Clôture de Journée */}
+        {showConfirmModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => setShowConfirmModal(false)}
+            />
+            <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl z-10">
+              <h3 className="text-base font-bold text-slate-900 mb-2">
+                Confirmer la Clôture de Journée
+              </h3>
+              <p className="text-xs text-slate-500 mb-4">
+                Cette action va enregistrer l&apos;état exact du comptage physique et du rapprochement dans l&apos;historique journalier.
+              </p>
+
+              <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 mb-4 text-xs space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Total Coupures :</span>
+                  <strong className="num text-slate-900">{formatMoney(totalCoupures)} TND</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Versements (VER) :</span>
+                  <strong className="num text-indigo-700">{formatMoney(ver)} TND</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Total Physique (TT) :</span>
+                  <strong className="num text-slate-900">{formatMoney(tt)} TND</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Recette Attendue :</span>
+                  <strong className="num text-slate-900">{formatMoney(recetteTheorique)} TND</strong>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-slate-200 font-bold">
+                  <span>Écart / Reste :</span>
+                  <span className={`num ${reste >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {reste > 0 ? '+' : ''}{formatMoney(reste)} TND
+                  </span>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="label text-xs">Note ou observation (facultatif)</label>
+                <textarea
+                  rows={2}
+                  value={clotureNotes}
+                  onChange={(e) => setClotureNotes(e.target.value)}
+                  placeholder="Ex: Écart de 0.200 TND justifié par arrondi monnaie..."
+                  className="input !h-auto py-2 text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(false)}
+                  className="btn-ghost !py-2 text-xs"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  disabled={savingCloture}
+                  onClick={handleSaveCloture}
+                  className="btn-success !py-2 text-xs font-bold"
+                >
+                  {savingCloture ? 'Enregistrement...' : 'Confirmer & Enregistrer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

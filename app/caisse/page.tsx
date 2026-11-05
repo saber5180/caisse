@@ -25,6 +25,8 @@ function CaisseContent() {
   const deskRows = useCaisseStore((state) => state.deskRows);
   const deskRecette = useCaisseStore((state) => state.deskRecette);
   const deskVersement = useCaisseStore((state) => state.deskVersement);
+  const deskVersementBanque = useCaisseStore((state) => state.deskVersementBanque);
+  const deskVersementCoffre = useCaisseStore((state) => state.deskVersementCoffre);
   const deskTrInput = useCaisseStore((state) => state.deskTrInput);
   const selectedDriverId = useCaisseStore((state) => state.selectedDriverId);
 
@@ -32,6 +34,8 @@ function CaisseContent() {
   const setDeskSortie = useCaisseStore((state) => state.setDeskSortie);
   const setDeskRecette = useCaisseStore((state) => state.setDeskRecette);
   const setDeskVersement = useCaisseStore((state) => state.setDeskVersement);
+  const setDeskVersementBanque = useCaisseStore((state) => state.setDeskVersementBanque);
+  const setDeskVersementCoffre = useCaisseStore((state) => state.setDeskVersementCoffre);
   const setDeskTrInput = useCaisseStore((state) => state.setDeskTrInput);
   const selectDriverByTr = useCaisseStore((state) => state.selectDriverByTr);
   const validateCurrentSale = useCaisseStore((state) => state.validateCurrentSale);
@@ -94,6 +98,8 @@ function CaisseContent() {
       tPayer,
       resAPayer,
       versement: deskVersement,
+      versementBanque: deskVersementBanque,
+      versementCoffre: deskVersementCoffre,
       rows: deskRows,
       date: new Date().toLocaleString('fr-FR'),
       caisseName: currentUser?.displayName,
@@ -113,6 +119,8 @@ function CaisseContent() {
         tPayer: txn.tPayer,
         resAPayer: txn.resAPayer,
         versement: txn.versement,
+        versementBanque: deskVersementBanque,
+        versementCoffre: deskVersementCoffre,
         rows: deskRows,
         date: new Date().toLocaleString('fr-FR'),
         caisseName: currentUser?.displayName,
@@ -368,9 +376,10 @@ function CaisseContent() {
                       </label>
                       <input
                         type="number"
+                        step="0.1"
                         min={0}
                         value={row.entree === 0 ? '' : row.entree}
-                        onChange={(e) => setDeskEntree(idx, parseInt(e.target.value, 10) || 0)}
+                        onChange={(e) => setDeskEntree(idx, parseFloat(e.target.value) || 0)}
                         placeholder="0"
                         className="w-full rounded-lg border border-emerald-300 bg-white py-1.5 text-center text-sm font-bold text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
@@ -381,9 +390,10 @@ function CaisseContent() {
                       </label>
                       <input
                         type="number"
+                        step="0.1"
                         min={0}
                         value={row.sortie === 0 ? '' : row.sortie}
-                        onChange={(e) => setDeskSortie(idx, parseInt(e.target.value, 10) || 0)}
+                        onChange={(e) => setDeskSortie(idx, parseFloat(e.target.value) || 0)}
                         placeholder="0"
                         className="w-full rounded-lg border border-rose-300 bg-white py-1.5 text-center text-sm font-bold text-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
                       />
@@ -393,20 +403,46 @@ function CaisseContent() {
               );
             })}
 
-            {/* Mobile Versement Input */}
-            <div className="p-4 bg-slate-50/90 border-t border-slate-200">
-              <label className="text-xs font-bold uppercase text-indigo-800 block mb-1">
-                Versement Direct (Banque / Coffre)
-              </label>
-              <input
-                type="number"
-                step="0.001"
-                min={0}
-                value={deskVersement === 0 ? '' : deskVersement}
-                onChange={(e) => setDeskVersement(parseFloat(e.target.value) || 0)}
-                placeholder="0.000 TND"
-                className="input num font-bold text-sm text-indigo-800 !h-11"
-              />
+            {/* Mobile Versement Inputs */}
+            <div className="p-4 bg-slate-50/90 border-t border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase text-indigo-900">
+                  Versements Directs
+                </span>
+                <span className="num text-xs font-bold text-indigo-700">
+                  Total : {formatMoney(deskVersement)} TND
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-indigo-800 block mb-1">
+                    Versement Banque
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min={0}
+                    value={deskVersementBanque === 0 ? '' : deskVersementBanque}
+                    onChange={(e) => setDeskVersementBanque(parseFloat(e.target.value) || 0)}
+                    placeholder="0.000 TND"
+                    className="input num font-bold text-xs text-indigo-800 !h-10"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-indigo-800 block mb-1">
+                    Versement Coffre
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min={0}
+                    value={deskVersementCoffre === 0 ? '' : deskVersementCoffre}
+                    onChange={(e) => setDeskVersementCoffre(parseFloat(e.target.value) || 0)}
+                    placeholder="0.000 TND"
+                    className="input num font-bold text-xs text-indigo-800 !h-10"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -435,9 +471,10 @@ function CaisseContent() {
                       <td className="text-center">
                         <input
                           type="number"
+                          step="0.1"
                           min={0}
                           value={row.entree === 0 ? '' : row.entree}
-                          onChange={(e) => setDeskEntree(idx, parseInt(e.target.value, 10) || 0)}
+                          onChange={(e) => setDeskEntree(idx, parseFloat(e.target.value) || 0)}
                           placeholder="0"
                           className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-bold text-emerald-800 bg-emerald-50/40 border-emerald-200"
                         />
@@ -445,9 +482,10 @@ function CaisseContent() {
                       <td className="text-center">
                         <input
                           type="number"
+                          step="0.1"
                           min={0}
                           value={row.sortie === 0 ? '' : row.sortie}
-                          onChange={(e) => setDeskSortie(idx, parseInt(e.target.value, 10) || 0)}
+                          onChange={(e) => setDeskSortie(idx, parseFloat(e.target.value) || 0)}
                           placeholder="0"
                           className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-bold text-rose-800 bg-rose-50/40 border-rose-200"
                         />
@@ -461,16 +499,16 @@ function CaisseContent() {
                   );
                 })}
 
-                {/* Versement Row */}
+                {/* Versement Banque Row */}
                 <tr className="bg-slate-50/80 font-semibold border-t-2 border-slate-200">
                   <td>
                     <span className="text-xs uppercase tracking-wider text-indigo-700 font-bold">
-                      VERSEMENT
+                      VER. BANQUE
                     </span>
                   </td>
                   <td colSpan={2} className="text-right pr-4">
                     <span className="text-xs text-slate-500 font-normal">
-                      Versement direct (Banque / Coffre) :
+                      Versement direct Banque / Virement :
                     </span>
                   </td>
                   <td className="text-right">
@@ -478,11 +516,51 @@ function CaisseContent() {
                       type="number"
                       step="0.001"
                       min={0}
-                      value={deskVersement === 0 ? '' : deskVersement}
-                      onChange={(e) => setDeskVersement(parseFloat(e.target.value) || 0)}
+                      value={deskVersementBanque === 0 ? '' : deskVersementBanque}
+                      onChange={(e) => setDeskVersementBanque(parseFloat(e.target.value) || 0)}
                       placeholder="0.000"
                       className="input num !w-32 !min-h-9 !py-1 !text-right text-sm font-bold text-indigo-700"
                     />
+                  </td>
+                </tr>
+
+                {/* Versement Coffre Row */}
+                <tr className="bg-slate-50/80 font-semibold border-t border-slate-200">
+                  <td>
+                    <span className="text-xs uppercase tracking-wider text-indigo-700 font-bold">
+                      VER. COFFRE
+                    </span>
+                  </td>
+                  <td colSpan={2} className="text-right pr-4">
+                    <span className="text-xs text-slate-500 font-normal">
+                      Versement direct Coffre-Fort :
+                    </span>
+                  </td>
+                  <td className="text-right">
+                    <input
+                      type="number"
+                      step="0.001"
+                      min={0}
+                      value={deskVersementCoffre === 0 ? '' : deskVersementCoffre}
+                      onChange={(e) => setDeskVersementCoffre(parseFloat(e.target.value) || 0)}
+                      placeholder="0.000"
+                      className="input num !w-32 !min-h-9 !py-1 !text-right text-sm font-bold text-indigo-700"
+                    />
+                  </td>
+                </tr>
+
+                {/* Total Versements Directs */}
+                <tr className="bg-indigo-50/60 font-bold border-t border-indigo-200 text-indigo-900">
+                  <td>
+                    <span className="text-xs uppercase tracking-wider font-extrabold text-indigo-900">
+                      TOTAL VERSEMENT
+                    </span>
+                  </td>
+                  <td colSpan={2} className="text-right pr-4 text-xs font-semibold text-indigo-800">
+                    Cumul Banque + Coffre :
+                  </td>
+                  <td className="text-right num font-black text-sm text-indigo-950">
+                    {formatMoney(deskVersement)} TND
                   </td>
                 </tr>
               </tbody>

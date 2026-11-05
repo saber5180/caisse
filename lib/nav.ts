@@ -11,13 +11,15 @@ export type NavItem = {
     | 'truck'
     | 'calendar'
     | 'receipt'
-    | 'sheet';
+    | 'sheet'
+    | 'history';
 };
 
 export const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Tableau de bord', icon: 'dashboard', group: 'workspace' },
   { href: '/caisse', label: 'Guichet de Caisse', icon: 'calculator', group: 'workspace', accent: 'text-indigo-600' },
   { href: '/billetterie', label: 'Comptage Billetterie', icon: 'coins', group: 'workspace', accent: 'text-amber-500' },
+  { href: '/billetterie/historique', label: 'Historique Clôtures', icon: 'history', group: 'workspace', accent: 'text-amber-400' },
 
   {
     href: '/chauffeurs',
@@ -55,6 +57,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/': 'Tableau de bord',
   '/caisse': 'Guichet de Caisse (Tableau de Calcule)',
   '/billetterie': 'Comptage Billetterie & Monnaie (Feuil3)',
+  '/billetterie/historique': 'Historique des Clôtures de Billetterie',
   '/chauffeurs': 'Mouvement des Chauffeurs',
   '/programme': 'Programme des Tournées & Bascule 12:30',
   '/journal': 'Journal des Transactions (Feuil2)',

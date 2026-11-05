@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { formatMoney } from '@/lib/utils';
 import { IconCheck, IconClose, IconPrinter } from './Icons';
 import { CashDeskRow } from '@/types/caisse';
@@ -14,6 +15,8 @@ export interface ReceiptData {
   tPayer: number;
   resAPayer: number;
   versement: number;
+  versementBanque?: number;
+  versementCoffre?: number;
   rows?: CashDeskRow[];
   date: string;
   caisseName?: string;
@@ -28,6 +31,15 @@ export default function PrintReceiptModal({
   onClose: () => void;
 }) {
   const [printFormat, setPrintFormat] = useState<'A4' | 'TICKET'>('A4');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    document.body.classList.add('has-printable-modal');
+    return () => {
+      document.body.classList.remove('has-printable-modal');
+    };
+  }, []);
 
   const handleDirectPrint = () => {
     window.print();
@@ -35,11 +47,11 @@ export default function PrintReceiptModal({
 
   const activeRows = (data.rows || []).filter((r) => r.entree > 0 || r.sortie > 0);
 
-  return (
-    <div className="printable-modal fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+  const modalContent = (
+    <div className="printable-modal fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/70 backdrop-blur-md transition-opacity no-print"
+        className="fixed inset-0 bg-slate-900/75 backdrop-blur-md transition-opacity no-print"
         onClick={onClose}
       />
 
@@ -166,13 +178,34 @@ export default function PrintReceiptModal({
                         {formatMoney(data.recette)} TND
                       </td>
                     </tr>
-                    {data.versement > 0 && (
-                      <tr>
-                        <td className="py-2 px-3 text-slate-700">Versement Direct (Coffre / Banque)</td>
-                        <td className="py-2 px-3 text-right font-mono font-bold text-indigo-700">
-                          {formatMoney(data.versement)} TND
-                        </td>
-                      </tr>
+                    {((data.versementBanque && data.versementBanque > 0) || (data.versementCoffre && data.versementCoffre > 0)) ? (
+                      <>
+                        {data.versementBanque && data.versementBanque > 0 ? (
+                          <tr>
+                            <td className="py-2 px-3 text-slate-700">Versement Direct (Banque / Virement)</td>
+                            <td className="py-2 px-3 text-right font-mono font-bold text-indigo-700">
+                              {formatMoney(data.versementBanque)} TND
+                            </td>
+                          </tr>
+                        ) : null}
+                        {data.versementCoffre && data.versementCoffre > 0 ? (
+                          <tr>
+                            <td className="py-2 px-3 text-slate-700">Versement Direct (Coffre-Fort)</td>
+                            <td className="py-2 px-3 text-right font-mono font-bold text-indigo-700">
+                              {formatMoney(data.versementCoffre)} TND
+                            </td>
+                          </tr>
+                        ) : null}
+                      </>
+                    ) : (
+                      data.versement > 0 && (
+                        <tr>
+                          <td className="py-2 px-3 text-slate-700">Versement Direct (Banque / Coffre)</td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-indigo-700">
+                            {formatMoney(data.versement)} TND
+                          </td>
+                        </tr>
+                      )
                     )}
                     <tr className="bg-slate-50/50">
                       <td className="py-2.5 px-3 font-bold text-slate-900">
@@ -323,11 +356,14 @@ export default function PrintReceiptModal({
               className="btn-primary flex-1 sm:flex-none !py-2.5 text-xs font-bold shadow-md"
             >
               <IconPrinter className="h-4 w-4" />
-              Lancer l&apos;Impression Haute Qualité
+              Lancer l&apos;Impression / Télécharger
             </button>
           </div>
         </div>
       </div>
     </div>
   );
+
+  if (!mounted) return null;
+  return createPortal(modalContent, document.body);
 }

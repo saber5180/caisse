@@ -52,3 +52,20 @@ export interface BilletterieReport {
   ver: number; // Versements
   recetteTheorique: number;
 }
+
+export interface BilletterieHistoryEntry {
+  id: string;
+  accountId?: string;
+  dateCloture: string;
+  totalCoupures: number;
+  srfPieces: number;
+  srfMoins: number;
+  ver: number;
+  ttPhysique: number;
+  recetteTheorique: number;
+  ecartReste: number;
+  items: CoinBreakdownItem[];
+  caissierNom?: string;
+  notes?: string;
+  createdAt?: string;
+}
