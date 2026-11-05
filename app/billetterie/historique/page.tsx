@@ -27,7 +27,17 @@ export default function BilletterieHistoriquePage() {
 
   useEffect(() => {
     setMounted(true);
+    const handleAfterPrint = () => {
+      setPrintEntry(null);
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
   }, []);
+
+  const filterOutOldCoin = (items: CoinBreakdownItem[] = []) =>
+    items.filter((item) => Math.abs(item.valeur - 0.02) > 0.001);
 
   const fetchHistory = async () => {
     setLoading(true);
@@ -65,10 +75,14 @@ export default function BilletterieHistoriquePage() {
   };
 
   const handleTriggerPrint = (entry: BilletterieHistoryEntry) => {
+    // 1. Fermer le popup modal pour éviter toute superposition
+    setSelectedEntry(null);
+    // 2. Définir le document à imprimer
     setPrintEntry(entry);
+    // 3. Lancer l'impression A4 après rendu complet
     setTimeout(() => {
       window.print();
-    }, 100);
+    }, 150);
   };
 
   const filtered = history.filter((item) => {
@@ -124,12 +138,12 @@ export default function BilletterieHistoriquePage() {
               <thead>
                 <tr className="bg-slate-100 border-b border-slate-300">
                   <th className="py-2 px-3 font-bold uppercase">Coupure / Type</th>
-                  <th className="py-2 px-3 font-bold uppercase text-center">Quantité</th>
+                  <th className="py-2 px-3 font-bold uppercase text-center">Quantité Dénombrée</th>
                   <th className="py-2 px-3 font-bold uppercase text-right">Sous-Total (TND)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-mono">
-                {printEntry.items.map((item: CoinBreakdownItem, idx: number) => (
+                {filterOutOldCoin(printEntry.items).map((item: CoinBreakdownItem, idx: number) => (
                   <tr key={idx}>
                     <td className="py-1.5 px-3 font-sans font-medium text-slate-800">
                       {item.label}
@@ -144,7 +158,7 @@ export default function BilletterieHistoriquePage() {
                 ))}
                 <tr className="bg-slate-100 font-bold border-t-2 border-slate-900 font-sans">
                   <td colSpan={2} className="py-2 px-3 uppercase text-slate-800">
-                    Total Coupures Physiques en Caisse :
+                    Total des Coupures Physiques en Caisse :
                   </td>
                   <td className="py-2 px-3 text-right font-mono text-sm text-slate-900">
                     {formatMoney(printEntry.totalCoupures)} TND
@@ -521,17 +535,21 @@ export default function BilletterieHistoriquePage() {
           </div>
         )}
 
-        {/* Breakdown Details Modal (Mounted in Portal, Fully Responsive & Scrollable) */}
+        {/* Breakdown Details Modal (Mounted in Portal, Fully Responsive & Scrollable, STRICTLY HIDDEN ON PRINT) */}
         {mounted && selectedEntry && createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="no-print print:hidden fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 overflow-hidden"
+          >
             {/* Backdrop */}
             <div
-              className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"
+              className="no-print print:hidden fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"
               onClick={() => setSelectedEntry(null)}
             />
 
             {/* Modal Dialog Box */}
-            <div className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl z-10 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200/80">
+            <div className="no-print print:hidden relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl z-10 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] border border-slate-200/80">
               {/* Pinned Modal Header */}
               <div className="shrink-0 flex items-center justify-between border-b border-slate-100 bg-slate-50/90 px-4 sm:px-6 py-3.5">
                 <div>
@@ -582,7 +600,7 @@ export default function BilletterieHistoriquePage() {
 
                 {/* Mobile Coupures Cards (sm:hidden) */}
                 <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white sm:hidden overflow-hidden">
-                  {selectedEntry.items.map((item, idx) => (
+                  {filterOutOldCoin(selectedEntry.items).map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between p-3 text-xs">
                       <div className="flex items-center gap-2">
                         <span
@@ -615,7 +633,7 @@ export default function BilletterieHistoriquePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-mono">
-                      {selectedEntry.items.map((item, idx) => (
+                      {filterOutOldCoin(selectedEntry.items).map((item, idx) => (
                         <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
                           <td className="py-2 px-3 font-sans font-medium text-slate-800 text-xs">
                             <div className="flex items-center gap-2">

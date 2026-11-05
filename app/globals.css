@@ -268,7 +268,10 @@
   header,
   nav,
   button,
-  .no-print {
+  .no-print,
+  .print\:hidden,
+  [role="dialog"],
+  .fixed.inset-0 {
     display: none !important;
   }
 
