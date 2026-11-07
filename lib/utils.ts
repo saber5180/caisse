@@ -122,3 +122,14 @@ export function generateId(prefix = 'ID'): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 }
 
+/**
+ * Normalise un code chauffeur scanné ou saisi en supprimant les zéros superflus au début.
+ * Exemples: "037" -> "37", "0045" -> "45", "001" -> "1", "0" -> "0", "000" -> "0"
+ */
+export function cleanScannerTr(raw: string | undefined | null): string {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  const stripped = trimmed.replace(/^0+/, '');
+  return stripped === '' ? '0' : stripped;
+}
+

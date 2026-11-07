@@ -116,6 +116,9 @@ export default function ChauffeursPage() {
   const [formTr, setFormTr] = useState('');
   const [formCircuit, setFormCircuit] = useState('');
   const [formStatut, setFormStatut] = useState<DriverStatus>('NON PAYE');
+  const [formSerie, setFormSerie] = useState('');
+  const [formSousSerie, setFormSousSerie] = useState('');
+  const [formMontantBordereau, setFormMontantBordereau] = useState<number>(0);
   const [formError, setFormError] = useState<string | null>(null);
 
   const nextSuggestedTr = useMemo(() => {
@@ -160,6 +163,9 @@ export default function ChauffeursPage() {
     setFormTr(nextSuggestedTr);
     setFormCircuit('');
     setFormStatut('NON PAYE');
+    setFormSerie('');
+    setFormSousSerie('');
+    setFormMontantBordereau(0);
     setFormError(null);
     setModalOpen(true);
   };
@@ -170,6 +176,9 @@ export default function ChauffeursPage() {
     setFormTr(d.tr);
     setFormCircuit(d.programmeJour || d.circuitActuel || '');
     setFormStatut(d.statut);
+    setFormSerie(d.serie || '');
+    setFormSousSerie(d.sousSerie || '');
+    setFormMontantBordereau(d.montantBordereau || 0);
     setFormError(null);
     setModalOpen(true);
   };
@@ -206,6 +215,9 @@ export default function ChauffeursPage() {
         statut: formStatut,
         programmeJour: cleanCircuit,
         circuitActuel: cleanCircuit,
+        serie: formSerie.trim(),
+        sousSerie: formSousSerie.trim(),
+        montantBordereau: formMontantBordereau,
       });
     } else {
       addDriver({
@@ -216,6 +228,9 @@ export default function ChauffeursPage() {
         caissesDues: formStatut === 'NON PAYE' ? 1 : 0,
         programmeJour: cleanCircuit,
         circuitActuel: cleanCircuit,
+        serie: formSerie.trim(),
+        sousSerie: formSousSerie.trim(),
+        montantBordereau: formMontantBordereau,
       });
     }
 
@@ -881,6 +896,42 @@ export default function ChauffeursPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Colonne Série</label>
+                  <input
+                    type="text"
+                    value={formSerie}
+                    onChange={(e) => setFormSerie(e.target.value)}
+                    placeholder="Ex: S-01, A"
+                    className="input font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="label">Colonne Sous-série</label>
+                  <input
+                    type="text"
+                    value={formSousSerie}
+                    onChange={(e) => setFormSousSerie(e.target.value)}
+                    placeholder="Ex: SS-1, 01"
+                    className="input font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Montant des Bordereaux Saisis (TND)</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  min={0}
+                  value={formMontantBordereau === 0 ? '' : formMontantBordereau}
+                  onChange={(e) => setFormMontantBordereau(parseFloat(e.target.value) || 0)}
+                  placeholder="0.000 TND"
+                  className="input num font-bold text-sm"
+                />
               </div>
 
               <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 pt-4">

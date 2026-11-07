@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Driver, DriverStatus, CashDeskRow, CashTransaction, CoinBreakdownItem } from '@/types/caisse';
 import { INITIAL_DRIVERS } from '@/data/initialDrivers';
-import { recalculateReclamation, generateId } from './utils';
+import { recalculateReclamation, generateId, cleanScannerTr } from './utils';
 
 export const DEFAULT_DESK_ROWS: CashDeskRow[] = [
   { denomination: 20, entree: 0, sortie: 0 },
@@ -101,7 +101,7 @@ interface CaisseStore {
   updateDriverStatus: (id: string, status: DriverStatus) => void;
   updateDriver: (
     id: string,
-    patch: Partial<Pick<Driver, 'nom' | 'tr' | 'statut' | 'programmeJour' | 'circuitActuel' | 'caissesDues'>>
+    patch: Partial<Pick<Driver, 'nom' | 'tr' | 'statut' | 'programmeJour' | 'circuitActuel' | 'caissesDues' | 'serie' | 'sousSerie' | 'montantBordereau'>>
   ) => void;
   assignCircuit: (id: string, circuit: string) => void;
   deleteDriver: (id: string) => void;
@@ -110,6 +110,7 @@ interface CaisseStore {
   resetAllDriversStatus: (status: DriverStatus) => void;
   refreshAlarms: () => void;
   loadDemoDriversTemplate: () => void;
+  cloturerJournee: () => void;
 
   // Actions - Billetterie
   setBilletterieCount: (index: number, count: number) => void;
@@ -334,8 +335,9 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     setDeskTrInput: (val) => set({ deskTrInput: val }),
 
     selectDriverByTr: (tr) => {
-      const cleanTr = tr.trim().toUpperCase();
-      const found = get().drivers.find((d) => d.tr.toUpperCase() === cleanTr);
+      // Normalisation du scan : supprime les "0" superflus au début (ex: "037" -> "37", "001" -> "1")
+      const cleanTr = cleanScannerTr(tr).toUpperCase();
+      const found = get().drivers.find((d) => cleanScannerTr(d.tr).toUpperCase() === cleanTr);
       if (found) {
         set({
           selectedDriverId: found.id,
@@ -741,6 +743,28 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     setRecettePhysiqueTheorique: (val) => {
       set({ recettePhysiqueTheorique: Math.max(0, val) });
       triggerDebouncedSync();
+    },
+
+    cloturerJournee: () => {
+      // Archiver et réinitialiser les transactions actives du journal et l'état de caisse
+      set({
+        transactions: [],
+        deskRows: DEFAULT_DESK_ROWS,
+        deskRecette: 0,
+        deskVersement: 0,
+        deskVersementBanque: 0,
+        deskVersementCoffre: 0,
+        deskTrInput: '',
+        selectedDriverId: null,
+        recettePhysiqueTheorique: 0,
+        ver: 0,
+        srfMoins: 0,
+        feedbackMessage: {
+          type: 'success',
+          text: 'Journée clôturée avec succès : les transactions ont été archivées et le journal actif est réinitialisé.',
+        },
+      });
+      triggerImmediateSync();
     },
   };
 });

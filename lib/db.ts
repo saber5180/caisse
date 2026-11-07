@@ -58,9 +58,17 @@ export async function initDatabaseSchema(customUrl?: string) {
       caisses_dues INT DEFAULT 0,
       programme_jour VARCHAR(100) DEFAULT '',
       circuit_actuel VARCHAR(100) DEFAULT '',
+      serie VARCHAR(50) DEFAULT '',
+      sous_serie VARCHAR(50) DEFAULT '',
+      montant_bordereau NUMERIC(12, 3) DEFAULT 0,
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (account_id, id)
     );
+
+    -- Auto-migrations for existing installations
+    ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS serie VARCHAR(50) DEFAULT '';
+    ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS sous_serie VARCHAR(50) DEFAULT '';
+    ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS montant_bordereau NUMERIC(12, 3) DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS caisse_transactions (
       id VARCHAR(64) NOT NULL,
@@ -109,11 +117,14 @@ export async function initDatabaseSchema(customUrl?: string) {
       recette_theorique NUMERIC(12, 3) NOT NULL DEFAULT 0,
       ecart_reste NUMERIC(12, 3) NOT NULL DEFAULT 0,
       items JSONB NOT NULL DEFAULT '[]'::jsonb,
+      archived_transactions JSONB NOT NULL DEFAULT '[]'::jsonb,
       caissier_nom VARCHAR(255),
       notes TEXT,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (account_id, id)
     );
+
+    ALTER TABLE caisse_billetterie_history ADD COLUMN IF NOT EXISTS archived_transactions JSONB NOT NULL DEFAULT '[]'::jsonb;
   `);
 }
 

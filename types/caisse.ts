@@ -10,6 +10,12 @@ export interface Driver {
   caissesDues: number; // 0, 1, or special codes
   programmeJour: string; // Assigned circuit, e.g. "SFAX 1", "DJERBA 2", "STAND-BY"
   circuitActuel?: string;
+  // Champs pour le suivi des bordereaux et mouvements
+  serie?: string; // e.g. "S-01", "A"
+  sousSerie?: string; // e.g. "SS-01", "1"
+  montantBordereau?: number; // Montant théorique calculé des bordereaux saisis
+  mouvementCaisse?: number; // État réel de mouvement de caisse (encaissé)
+  ecartBordereau?: number; // Écart automatique (montantBordereau - mouvementCaisse)
 }
 
 export interface CashDeskRow {
@@ -65,6 +71,7 @@ export interface BilletterieHistoryEntry {
   recetteTheorique: number;
   ecartReste: number;
   items: CoinBreakdownItem[];
+  archivedTransactions?: CashTransaction[];
   caissierNom?: string;
   notes?: string;
   createdAt?: string;

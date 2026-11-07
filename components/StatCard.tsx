@@ -8,6 +8,8 @@ interface StatCardProps {
   accent?: 'indigo' | 'rose' | 'amber' | 'emerald' | 'sky';
   hint?: string;
   progress?: number;
+  onClick?: () => void;
+  className?: string;
 }
 
 const accents = {
@@ -51,11 +53,26 @@ export default function StatCard({
   accent = 'indigo',
   hint,
   progress,
+  onClick,
+  className = '',
 }: StatCardProps) {
   const a = accents[accent];
 
   return (
-    <div className="card card-hover relative overflow-hidden p-5">
+    <div
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={`card card-hover relative overflow-hidden p-5 ${
+        onClick ? 'cursor-pointer hover:shadow-pro-lg hover:border-slate-300 transition-all select-none' : ''
+      } ${className}`}
+    >
       {/* Subtle ambient corner glow */}
       <div
         className={`pointer-events-none absolute -right-6 -top-6 h-28 w-28 rounded-full bg-gradient-to-bl ${a.glow} blur-xl`}

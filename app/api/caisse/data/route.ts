@@ -25,7 +25,7 @@ export async function GET() {
 
     // 1. Fetch drivers for this account
     const driversRes = await targetPool.query(
-      `SELECT id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel
+      `SELECT id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau
        FROM caisse_drivers
        WHERE account_id = $1
        ORDER BY tr ASC, nom ASC`,
@@ -42,6 +42,9 @@ export async function GET() {
       caissesDues: r.caisses_dues || 0,
       programmeJour: r.programme_jour || '',
       circuitActuel: r.circuit_actuel || '',
+      serie: r.serie || '',
+      sousSerie: r.sous_serie || '',
+      montantBordereau: parseFloat(r.montant_bordereau) || 0,
     }));
 
     // Ensure global default drivers TR 0 and TR 1 are always available
@@ -184,8 +187,8 @@ export async function POST(req: NextRequest) {
 
       for (const d of drivers) {
         await targetPool.query(
-          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
            ON CONFLICT (account_id, id) DO UPDATE SET
              nom = EXCLUDED.nom,
              tr = EXCLUDED.tr,
@@ -195,6 +198,9 @@ export async function POST(req: NextRequest) {
              caisses_dues = EXCLUDED.caisses_dues,
              programme_jour = EXCLUDED.programme_jour,
              circuit_actuel = EXCLUDED.circuit_actuel,
+             serie = EXCLUDED.serie,
+             sous_serie = EXCLUDED.sous_serie,
+             montant_bordereau = EXCLUDED.montant_bordereau,
              updated_at = CURRENT_TIMESTAMP`,
           [
             d.id,
@@ -207,6 +213,9 @@ export async function POST(req: NextRequest) {
             d.caissesDues || 0,
             d.programmeJour || '',
             d.circuitActuel || '',
+            d.serie || '',
+            d.sousSerie || '',
+            d.montantBordereau || 0,
           ]
         );
       }

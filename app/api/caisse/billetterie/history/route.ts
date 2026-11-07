@@ -24,7 +24,7 @@ export async function GET() {
     const targetPool = account.custom_db_url ? getPool(account.custom_db_url) : mainPool;
 
     const res = await targetPool.query(
-      `SELECT id, account_id, date_cloture, total_coupures, srf_pieces, srf_moins, ver, tt_physique, recette_theorique, ecart_reste, items, caissier_nom, notes, created_at
+      `SELECT id, account_id, date_cloture, total_coupures, srf_pieces, srf_moins, ver, tt_physique, recette_theorique, ecart_reste, items, archived_transactions, caissier_nom, notes, created_at
        FROM caisse_billetterie_history
        WHERE account_id = $1
        ORDER BY date_cloture DESC`,
@@ -43,6 +43,7 @@ export async function GET() {
       recetteTheorique: parseFloat(r.recette_theorique) || 0,
       ecartReste: parseFloat(r.ecart_reste) || 0,
       items: Array.isArray(r.items) ? r.items : [],
+      archivedTransactions: Array.isArray(r.archived_transactions) ? r.archived_transactions : [],
       caissierNom: r.caissier_nom || '',
       notes: r.notes || '',
       createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
@@ -93,10 +94,33 @@ export async function POST(req: NextRequest) {
     const account = accRes.rows[0];
     const targetPool = account.custom_db_url ? getPool(account.custom_db_url) : mainPool;
 
+    // 1. Récupérer toutes les transactions actives de la journée pour les archiver
+    const activeTransRes = await targetPool.query(
+      `SELECT id, date, code_chauffeur, nom_chauffeur, recette, t_payer, res_a_payer, versement, status, raw_data
+       FROM caisse_transactions
+       WHERE account_id = $1
+       ORDER BY date DESC`,
+      [session.id]
+    );
+
+    const activeTransactions = activeTransRes.rows.map((r) => ({
+      id: r.id,
+      date: r.date ? new Date(r.date).toISOString() : new Date().toISOString(),
+      codeChauffeur: r.code_chauffeur,
+      nomChauffeur: r.nom_chauffeur,
+      recette: parseFloat(r.recette) || 0,
+      tPayer: parseFloat(r.t_payer) || 0,
+      resAPayer: parseFloat(r.res_a_payer) || 0,
+      versement: parseFloat(r.versement) || 0,
+      status: r.status,
+      rawData: r.raw_data || undefined,
+    }));
+
+    // 2. Enregistrer la clôture avec l'ensemble des transactions archivées
     await targetPool.query(
       `INSERT INTO caisse_billetterie_history (
-        id, account_id, date_cloture, total_coupures, srf_pieces, srf_moins, ver, tt_physique, recette_theorique, ecart_reste, items, caissier_nom, notes
-      ) VALUES ($1, $2, NOW(), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        id, account_id, date_cloture, total_coupures, srf_pieces, srf_moins, ver, tt_physique, recette_theorique, ecart_reste, items, archived_transactions, caissier_nom, notes
+      ) VALUES ($1, $2, NOW(), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         id,
         session.id,
@@ -108,9 +132,16 @@ export async function POST(req: NextRequest) {
         recetteTheorique,
         ecartReste,
         JSON.stringify(items),
+        JSON.stringify(activeTransactions),
         session.username || account.display_name,
         notes,
       ]
+    );
+
+    // 3. Vider les transactions actives du journal en cours après clôture réussie
+    await targetPool.query(
+      'DELETE FROM caisse_transactions WHERE account_id = $1',
+      [session.id]
     );
 
     return NextResponse.json({

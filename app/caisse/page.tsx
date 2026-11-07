@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useCaisseStore, computeDeskTotals } from '@/lib/store';
-import { formatMoney, generateId } from '@/lib/utils';
+import { formatMoney, generateId, cleanScannerTr } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import PrintReceiptModal, { ReceiptData } from '@/components/PrintReceiptModal';
 import {
@@ -86,10 +86,55 @@ function CaisseContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   });
 
-  const handleScannerSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (deskTrInput.trim()) {
-      selectDriverByTr(deskTrInput.trim());
+  const handleNavKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentId: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+
+      if (currentId === 'scanner-tr') {
+        const clean = cleanScannerTr(deskTrInput);
+        if (clean) {
+          setDeskTrInput(clean);
+          selectDriverByTr(clean);
+        }
+      }
+
+      const navSequence = [
+        'scanner-tr',
+        'desk-recette',
+        ...deskRows.flatMap((_, idx) => [`entree-${idx}`, `sortie-${idx}`]),
+        'versement-banque',
+        'versement-coffre',
+        'btn-valider-vente',
+      ];
+
+      const curIdx = navSequence.indexOf(currentId);
+      if (curIdx !== -1) {
+        const nextIdx = e.shiftKey
+          ? (curIdx - 1 + navSequence.length) % navSequence.length
+          : (curIdx + 1) % navSequence.length;
+        const targetId = navSequence[nextIdx];
+        const nextEl = document.getElementById(targetId) as HTMLElement | null;
+        if (nextEl) {
+          nextEl.focus();
+          if ('select' in nextEl && typeof (nextEl as any).select === 'function') {
+            (nextEl as HTMLInputElement).select();
+          }
+        }
+      }
+    }
+  };
+
+  const handleScannerSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const clean = cleanScannerTr(deskTrInput);
+    if (clean) {
+      setDeskTrInput(clean);
+      selectDriverByTr(clean);
+      const recEl = document.getElementById('desk-recette') as HTMLInputElement | null;
+      if (recEl) {
+        recEl.focus();
+        recEl.select();
+      }
     }
   };
 
@@ -197,10 +242,22 @@ function CaisseContent() {
             <div className="relative flex-1">
               <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
+                id="scanner-tr"
                 ref={scannerInputRef}
                 type="text"
                 value={deskTrInput}
-                onChange={(e) => setDeskTrInput(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  // Si un "0" non unique est tapé/scanné au début (ex: "037", "001"), on le supprime automatiquement
+                  const cleaned = cleanScannerTr(val);
+                  setDeskTrInput(val.startsWith('0') && val.length > 1 ? cleaned : val);
+                }}
+                onBlur={() => {
+                  if (deskTrInput.trim()) {
+                    setDeskTrInput(cleanScannerTr(deskTrInput));
+                  }
+                }}
+                onKeyDown={(e) => handleNavKeyDown(e, 'scanner-tr')}
                 placeholder="Ex: 37, 34, 107..."
                 className="input num !pl-9 uppercase font-bold"
               />
@@ -284,11 +341,13 @@ function CaisseContent() {
                   </span>
                 </div>
                 <input
+                  id="desk-recette"
                   type="number"
                   step="0.001"
                   min={0}
                   value={deskRecette === 0 ? '' : deskRecette}
                   onChange={(e) => setDeskRecette(parseFloat(e.target.value) || 0)}
+                  onKeyDown={(e) => handleNavKeyDown(e, 'desk-recette')}
                   placeholder="0.000 TND"
                   className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm font-bold text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
@@ -310,6 +369,7 @@ function CaisseContent() {
             {/* Direct Action Buttons inside terminal card */}
             <div className="mt-6 space-y-2">
               <button
+                id="btn-valider-vente"
                 onClick={handleValidate}
                 className="btn w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/20 !py-3"
               >
@@ -392,6 +452,7 @@ function CaisseContent() {
                             : (parseInt(e.target.value, 10) || 0);
                           setDeskEntree(idx, val);
                         }}
+                        onKeyDown={(e) => handleNavKeyDown(e, `entree-${idx}`)}
                         placeholder="0"
                         className="w-full rounded-lg border border-emerald-300 bg-white py-1.5 text-center text-sm font-bold text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
@@ -411,6 +472,7 @@ function CaisseContent() {
                             : (parseInt(e.target.value, 10) || 0);
                           setDeskSortie(idx, val);
                         }}
+                        onKeyDown={(e) => handleNavKeyDown(e, `sortie-${idx}`)}
                         placeholder="0"
                         className="w-full rounded-lg border border-rose-300 bg-white py-1.5 text-center text-sm font-bold text-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
                       />
@@ -496,6 +558,7 @@ function CaisseContent() {
                       </td>
                       <td className="text-center">
                         <input
+                          id={`entree-${idx}`}
                           type="number"
                           step={stepVal}
                           min={0}
@@ -506,12 +569,14 @@ function CaisseContent() {
                               : (parseInt(e.target.value, 10) || 0);
                             setDeskEntree(idx, val);
                           }}
+                          onKeyDown={(e) => handleNavKeyDown(e, `entree-${idx}`)}
                           placeholder="0"
                           className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-bold text-emerald-800 bg-emerald-50/40 border-emerald-200"
                         />
                       </td>
                       <td className="text-center">
                         <input
+                          id={`sortie-${idx}`}
                           type="number"
                           step={stepVal}
                           min={0}
@@ -522,6 +587,7 @@ function CaisseContent() {
                               : (parseInt(e.target.value, 10) || 0);
                             setDeskSortie(idx, val);
                           }}
+                          onKeyDown={(e) => handleNavKeyDown(e, `sortie-${idx}`)}
                           placeholder="0"
                           className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-bold text-rose-800 bg-rose-50/40 border-rose-200"
                         />
@@ -549,11 +615,13 @@ function CaisseContent() {
                   </td>
                   <td className="text-right">
                     <input
+                      id="versement-banque"
                       type="number"
                       step="0.001"
                       min={0}
                       value={deskVersementBanque === 0 ? '' : deskVersementBanque}
                       onChange={(e) => setDeskVersementBanque(parseFloat(e.target.value) || 0)}
+                      onKeyDown={(e) => handleNavKeyDown(e, 'versement-banque')}
                       placeholder="0.000"
                       className="input num !w-32 !min-h-9 !py-1 !text-right text-sm font-bold text-indigo-700"
                     />
@@ -574,11 +642,13 @@ function CaisseContent() {
                   </td>
                   <td className="text-right">
                     <input
+                      id="versement-coffre"
                       type="number"
                       step="0.001"
                       min={0}
                       value={deskVersementCoffre === 0 ? '' : deskVersementCoffre}
                       onChange={(e) => setDeskVersementCoffre(parseFloat(e.target.value) || 0)}
+                      onKeyDown={(e) => handleNavKeyDown(e, 'versement-coffre')}
                       placeholder="0.000"
                       className="input num !w-32 !min-h-9 !py-1 !text-right text-sm font-bold text-indigo-700"
                     />

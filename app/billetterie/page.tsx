@@ -24,6 +24,7 @@ export default function BilletteriePage() {
   const setSrfMoins = useCaisseStore((state) => state.setSrfMoins);
   const setVer = useCaisseStore((state) => state.setVer);
   const setRecetteTheorique = useCaisseStore((state) => state.setRecettePhysiqueTheorique);
+  const cloturerJournee = useCaisseStore((state) => state.cloturerJournee);
 
   const [savingCloture, setSavingCloture] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
@@ -73,10 +74,11 @@ export default function BilletteriePage() {
       });
       const json = await res.json();
       if (res.ok && json.success) {
-        setSaveSuccessMsg('Clôture journalière enregistrée avec succès dans l’historique !');
+        cloturerJournee();
+        setSaveSuccessMsg('Clôture journalière validée avec succès ! Les transactions du journal ont été archivées et la caisse active est réinitialisée.');
         setShowConfirmModal(false);
         setClotureNotes('');
-        setTimeout(() => setSaveSuccessMsg(null), 6000);
+        setTimeout(() => setSaveSuccessMsg(null), 8000);
       } else {
         alert(json.error || 'Erreur lors de la sauvegarde');
       }
