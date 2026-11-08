@@ -287,8 +287,16 @@ export default function BilletterieHistoriquePage() {
       {/* ==================== INTERACTIVE SCREEN ==================== */}
       <div className="print:hidden">
         <PageHeader
-          title="Historique de Clôture des Caisses (CRNU · CRSF · CRTN)"
-          subtitle="Total de clôture individuel par caisse, montant global cumulé et détail complet de chaque clôture"
+          title={
+            isSupervisorOrAdmin
+              ? 'Historique de Clôture des Caisses (CRNU · CRSF · CRTN)'
+              : `Historique de Clôture — ${currentUser?.displayName || 'Ma Caisse'}`
+          }
+          subtitle={
+            isSupervisorOrAdmin
+              ? 'Total de clôture individuel par caisse, montant global cumulé et détail complet de chaque clôture'
+              : 'Consultation, réimpression des PV officiels A4 et archivage des arrêtés journaliers de votre caisse'
+          }
           icon={<IconHistory className="h-5 w-5" />}
           accent="amber"
           actions={
@@ -322,10 +330,13 @@ export default function BilletterieHistoriquePage() {
                   Cumul Global des Clôtures
                 </span>
                 <h2 className="mt-2 text-lg font-extrabold text-white sm:text-xl">
-                  Montant Global de Clôture (Toutes Caisses Cumulées)
+                  {isSupervisorOrAdmin
+                    ? 'Montant Global de Clôture (Toutes Caisses Cumulées)'
+                    : `Montant Cumulé des Clôtures (${currentUser?.displayName || 'Ma Caisse'})`}
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Total cumulé des {history.length} clôture{history.length > 1 ? 's' : ''} archivée{history.length > 1 ? 's' : ''} (CRNU + CRSF + CRTN)
+                  Total cumulé des {history.length} clôture{history.length > 1 ? 's' : ''} archivée{history.length > 1 ? 's' : ''}{' '}
+                  {isSupervisorOrAdmin ? '(CRNU + CRSF + CRTN)' : ''}
                 </p>
               </div>
 

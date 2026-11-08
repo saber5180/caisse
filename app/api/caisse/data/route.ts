@@ -302,8 +302,8 @@ export async function GET() {
       data: {
         drivers,
         transactions,
-        allTransactions,
-        caissesSummary,
+        allTransactions: isSupervisorOrAdmin ? allTransactions : transactions,
+        caissesSummary: isSupervisorOrAdmin ? caissesSummary : [],
         billetterie,
         deskState,
       },

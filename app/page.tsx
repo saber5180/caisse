@@ -12,7 +12,6 @@ import {
   IconAlert,
   IconArrowRight,
   IconBolt,
-  IconBuilding,
   IconCalculator,
   IconCheck,
   IconClose,
@@ -95,24 +94,26 @@ export default function DashboardPage() {
   const settlementPct =
     activeTours > 0 ? Math.round((payes.length / activeTours) * 100) : totalDrivers > 0 ? 100 : 0;
 
-  // Calcul des totaux globaux des 3 caisses (CRNU + CRSF + CRTN) (Spécification 1 & 5)
+  // Calcul des totaux globaux des 3 caisses (UNIQUEMENT pour Superviseur / Admin)
   const globalMontantActuel = caissesSummary.reduce((sum, c) => sum + c.montantActuel, 0);
   const globalMtEspece = caissesSummary.reduce((sum, c) => sum + c.mtEspece, 0);
   const globalVersement = caissesSummary.reduce((sum, c) => sum + c.versement, 0);
   const globalTotalCloture = caissesSummary.reduce((sum, c) => sum + c.totalCloture, 0);
+  const globalTotalClotureEspece = caissesSummary.reduce((sum, c) => sum + c.totalClotureEspece, 0);
+  const globalTotalClotureVer = caissesSummary.reduce((sum, c) => sum + c.totalClotureVersement, 0);
 
   const totalEncaisse = transactions.reduce((sum, t) => sum + t.tPayer, 0);
   const totalAttendu = transactions.reduce((sum, t) => sum + t.recette, 0);
   const ecartGlobal = totalEncaisse - totalAttendu;
 
-  // Source globale de transactions pour calculer le mouvement de caisse inter-modules
-  const globalTxnsSource = allTransactions.length > 0 ? allTransactions : transactions;
+  // Source de transactions : globale pour Superviseur/Admin, strictement locale pour chaque caisse CRNU/CRSF/CRTN
+  const txnsSource = isSupervisorOrAdmin && allTransactions.length > 0 ? allTransactions : transactions;
 
   // Calcul dynamique des métriques enrichies par chauffeur (Bordereaux, Mouvements, Écarts)
   const enrichedDrivers = useMemo(() => {
     return drivers.map((d) => {
       const dTrClean = cleanScannerTr(d.tr);
-      const driverTxns = globalTxnsSource.filter(
+      const driverTxns = txnsSource.filter(
         (t) => cleanScannerTr(t.codeChauffeur) === dTrClean
       );
 
@@ -123,7 +124,9 @@ export default function DashboardPage() {
           : driverTxns.reduce((sum, t) => sum + t.recette, 0);
 
       const ecart = Math.round((mtBordereau - mvtCaisse) * 1000) / 1000;
-      const lastPaidCaisse = driverTxns.find((t) => t.status === 'PAYE')?.caisseCode;
+      const lastPaidCaisse = isSupervisorOrAdmin
+        ? driverTxns.find((t) => t.status === 'PAYE')?.caisseCode
+        : undefined;
 
       return {
         ...d,
@@ -135,7 +138,7 @@ export default function DashboardPage() {
         paidCaisseCode: lastPaidCaisse,
       };
     });
-  }, [drivers, globalTxnsSource]);
+  }, [drivers, txnsSource, isSupervisorOrAdmin]);
 
   // Filtrage combiné (Statut + Recherche)
   const filteredDrivers = useMemo(() => {
@@ -163,24 +166,23 @@ export default function DashboardPage() {
     });
   }, [enrichedDrivers, tableFilter, tableSearch]);
 
-  // Filtrage du Journal Temps Réel des 3 Caisses (CRNU, CRSF, CRTN)
+  // Filtrage du Journal Temps Réel
   const filteredJournalTransactions = useMemo(() => {
-    const source = isSupervisorOrAdmin ? globalTxnsSource : transactions;
-    return source.filter((t) => {
+    return txnsSource.filter((t) => {
       const matchCaisse =
-        journalCaisseFilter === 'ALL'
+        !isSupervisorOrAdmin || journalCaisseFilter === 'ALL'
           ? true
           : (t.caisseCode || '').toUpperCase() === journalCaisseFilter;
       const q = journalSearch.toLowerCase().trim();
       const matchSearch = q
         ? (t.nomChauffeur || '').toLowerCase().includes(q) ||
           (t.codeChauffeur || '').toLowerCase().includes(q) ||
-          (t.caisseCode || '').toLowerCase().includes(q) ||
+          (isSupervisorOrAdmin && (t.caisseCode || '').toLowerCase().includes(q)) ||
           (t.id || '').toLowerCase().includes(q)
         : true;
       return matchCaisse && matchSearch;
     });
-  }, [isSupervisorOrAdmin, globalTxnsSource, transactions, journalCaisseFilter, journalSearch]);
+  }, [isSupervisorOrAdmin, txnsSource, journalCaisseFilter, journalSearch]);
 
   const cumulBordereaux = enrichedDrivers.reduce((sum, d) => sum + (d.montantBordereau || 0), 0);
   const cumulMouvements = enrichedDrivers.reduce((sum, d) => sum + (d.mouvementCaisse || 0), 0);
@@ -198,8 +200,12 @@ export default function DashboardPage() {
       versement: t.versement,
       rows: t.rawData?.rows || [],
       date: formatDateTime(t.date),
-      caisseName: t.caisseName || currentUser?.displayName,
-      cashierName: t.caisseCode || currentUser?.username,
+      caisseName: isSupervisorOrAdmin
+        ? t.caisseName || currentUser?.displayName
+        : currentUser?.displayName,
+      cashierName: isSupervisorOrAdmin
+        ? t.caisseCode || currentUser?.username
+        : currentUser?.username,
     });
   };
 
@@ -239,22 +245,23 @@ export default function DashboardPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[11px] font-bold text-indigo-300 backdrop-blur-sm">
               <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
               <span>
-                {currentUser?.displayName || 'Trésorerie Centrale'} · Synchronisation Temps Réel Active
+                {currentUser?.displayName || 'Trésorerie Centrale'} ·{' '}
+                {isSupervisorOrAdmin ? 'Supervision Multi-Caisses Active' : 'Caisse Isolée Active'}
               </span>
             </div>
 
             <h1 className="mt-3 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
               {isSuperviseur
                 ? 'Tableau de Bord Superviseur — Pilotage Temps Réel'
-                : 'Centre de Pilotage Trésorerie & Flotte'}
+                : `Centre de Pilotage — ${currentUser?.displayName || 'Caisse'}`}
             </h1>
             <p className="mt-1 max-w-xl text-xs text-slate-400 sm:text-sm">
               {isSuperviseur
                 ? 'Suivi en direct des recettes des caisses CRNU, CRSF et CRTN (MT Espèce & Versement), statut des chauffeurs, journal consolidé et contrôle à distance des caissiers.'
-                : 'Suivi en temps réel des bordereaux, états de mouvement de caisse, décompte des coupures et liaison automatique inter-modules.'}
+                : 'Suivi en temps réel de votre caisse, calcul automatique des bordereaux et synchronisation instantanée des statuts chauffeurs.'}
             </p>
 
-            {/* Actions Rapides (adaptées selon les restrictions Superviseur) */}
+            {/* Actions Rapides */}
             <div className="mt-5 flex flex-wrap items-center gap-2.5">
               {!isSuperviseur ? (
                 <>
@@ -318,7 +325,7 @@ export default function DashboardPage() {
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
                 {isSupervisorOrAdmin
                   ? 'Total Global des Caisses (CRNU+CRSF+CRTN)'
-                  : `Total Encaissé (${currentUser?.caisseCode || 'Journal'})`}
+                  : `Total Encaissé (${currentUser?.caisseCode || 'Ma Caisse'})`}
               </span>
               <span
                 className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold ${
@@ -327,7 +334,9 @@ export default function DashboardPage() {
                     : 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-400/30'
                 }`}
               >
-                En Direct
+                {isSupervisorOrAdmin
+                  ? 'Temps Réel'
+                  : `Écart ${ecartGlobal > 0 ? '+' : ''}${formatMoney(ecartGlobal)} TND`}
               </span>
             </div>
 
@@ -381,13 +390,13 @@ export default function DashboardPage() {
 
       {/* =========================================================================
           SPÉCIFICATION 1 & CONTRÔLE : SUIVI EN TEMPS RÉEL DES CAISSES CRNU, CRSF, CRTN
-          + GESTION DES DROITS ET DES CAISSIERS (BLOCAGE / DÉBLOCAGE / DÉCONNEXION)
+          (VISIBLE UNIQUEMENT POUR LE SUPERVISEUR ET L'ADMIN)
       ========================================================================= */}
-      {caissesSummary.length > 0 && (
+      {isSupervisorOrAdmin && caissesSummary.length > 0 && (
         <div className="mb-6">
-          <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
+          <div className="mb-3.5 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
                 <IconCoins className="h-4 w-4" />
               </span>
               <div>
@@ -395,20 +404,20 @@ export default function DashboardPage() {
                   1. Suivi des Recettes des Caisses en Temps Réel (CRNU · CRSF · CRTN)
                 </h2>
                 <p className="text-[11px] font-medium text-slate-500">
-                  Affichage dynamique en direct du Montant Actuel, MT Espèce, Versement, Total Clôture{isSupervisorOrAdmin ? ' et Contrôle à distance des caissiers' : ''}
+                  Montant actuel en direct, détail MT Espèce / Versement et contrôle à distance des caissiers
                 </p>
               </div>
             </div>
 
             {/* Cumul Global des 3 Caisses */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 px-3 py-1.5 text-xs">
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 px-3.5 py-1.5 text-xs">
                 <span className="font-bold text-indigo-950">Total Global Caisses : </span>
                 <strong className="font-mono font-black text-indigo-700">
                   {formatMoney(globalMontantActuel)} TND
                 </strong>
               </div>
-              <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-1.5 text-xs">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-3.5 py-1.5 text-xs">
                 <span className="font-bold text-amber-950">Cumul Clôtures : </span>
                 <strong className="font-mono font-black text-amber-700">
                   {formatMoney(globalTotalCloture)} TND
@@ -417,169 +426,169 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
             {caissesSummary.map((caisse) => (
               <div
                 key={caisse.accountId}
-                className={`card relative overflow-hidden p-5 transition-all ${
+                className={`card relative flex flex-col justify-between overflow-hidden p-5 transition-all ${
                   caisse.isBlocked
                     ? 'border-2 border-rose-300 bg-rose-50/20'
                     : 'border border-slate-200/90 bg-white'
                 }`}
               >
-                {/* Top Header */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className={`flex h-10 w-10 items-center justify-center rounded-2xl font-mono text-xs font-black text-white shadow-sm ${
+                <div>
+                  {/* Top Header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`flex h-10 w-10 items-center justify-center rounded-2xl font-mono text-xs font-black text-white shadow-sm ${
+                          caisse.isBlocked
+                            ? 'bg-rose-600'
+                            : caisse.caisseCode === 'CRNU'
+                            ? 'bg-indigo-600'
+                            : caisse.caisseCode === 'CRSF'
+                            ? 'bg-emerald-600'
+                            : 'bg-sky-600'
+                        }`}
+                      >
+                        {caisse.caisseCode}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-sm font-extrabold text-slate-900">
+                            {caisse.displayName}
+                          </h3>
+                          <span className="font-mono text-[10px] font-bold text-slate-400">
+                            @{caisse.username}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-medium text-slate-500">
+                          {caisse.nbTransactions} opération{caisse.nbTransactions > 1 ? 's' : ''} aujourd&apos;hui
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Live Status Pill */}
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider ${
                         caisse.isBlocked
-                          ? 'bg-rose-600'
-                          : caisse.caisseCode === 'CRNU'
-                          ? 'bg-indigo-600'
-                          : caisse.caisseCode === 'CRSF'
-                          ? 'bg-emerald-600'
-                          : 'bg-sky-600'
+                          ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-300'
+                          : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
                       }`}
                     >
-                      {caisse.caisseCode}
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          caisse.isBlocked ? 'bg-rose-500' : 'animate-pulse bg-emerald-500'
+                        }`}
+                      />
+                      {caisse.isBlocked ? 'Bloquée' : 'En Direct'}
+                    </span>
+                  </div>
+
+                  {/* Montant Actuel en Temps Réel */}
+                  <div className="mt-4 rounded-2xl bg-slate-900 p-4 text-white">
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <span>Montant Actuel Temps Réel</span>
+                      <span className="font-mono text-emerald-400">{caisse.caisseCode}</span>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <h3 className="text-sm font-extrabold text-slate-900">
-                          {caisse.displayName}
-                        </h3>
-                        <span className="font-mono text-[10px] font-bold text-slate-400">
-                          @{caisse.username}
-                        </span>
-                      </div>
-                      <p className="text-[11px] font-medium text-slate-500">
-                        {caisse.nbTransactions} opération{caisse.nbTransactions > 1 ? 's' : ''} en cours aujourd&apos;hui
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Live Status Pill */}
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider ${
-                      caisse.isBlocked
-                        ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-300'
-                        : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                    }`}
-                  >
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        caisse.isBlocked ? 'bg-rose-500' : 'animate-pulse bg-emerald-500'
-                      }`}
-                    />
-                    {caisse.isBlocked ? 'Bloquée' : 'En Direct'}
-                  </span>
-                </div>
-
-                {/* Montant Actuel en Temps Réel */}
-                <div className="mt-4 rounded-2xl bg-slate-900 p-4 text-white">
-                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    <span>Montant Actuel Temps Réel</span>
-                    <span className="font-mono text-emerald-400">{caisse.caisseCode}</span>
-                  </div>
-                  <div className="mt-1 flex items-baseline gap-1.5">
-                    <span className="font-mono text-2xl font-black tracking-tight text-white tabular-nums">
-                      {formatMoney(caisse.montantActuel)}
-                    </span>
-                    <span className="font-mono text-xs font-bold text-slate-400">TND</span>
-                  </div>
-                </div>
-
-                {/* Détails Spécifiques par Caisse : MT Espèce & Versement */}
-                <div className="mt-3 grid grid-cols-2 gap-2.5">
-                  <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3">
-                    <span className="block text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">
-                      MT Espèce
-                    </span>
-                    <strong className="num mt-0.5 block text-sm font-black text-emerald-900">
-                      {formatMoney(caisse.mtEspece)} TND
-                    </strong>
-                  </div>
-
-                  <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/50 p-3">
-                    <span className="block text-[10px] font-extrabold uppercase tracking-wider text-indigo-700">
-                      Versement
-                    </span>
-                    <strong className="num mt-0.5 block text-sm font-black text-indigo-900">
-                      {formatMoney(caisse.versement)} TND
-                    </strong>
-                  </div>
-                </div>
-
-                {/* Total de Clôture Individuel de la Caisse (Spécification 5) */}
-                <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2 text-xs">
-                  <span className="font-semibold text-slate-600">
-                    Total Clôtures ({caisse.nbClotures}) :
-                  </span>
-                  <Link
-                    href={`/billetterie/historique?caisse=${caisse.caisseCode}`}
-                    className="font-mono font-extrabold text-slate-900 hover:text-indigo-600 hover:underline"
-                  >
-                    {formatMoney(caisse.totalCloture)} TND →
-                  </Link>
-                </div>
-
-                {/* Gestion des Droits et des Caissiers (Contrôle à distance) - Réservé Superviseur & Admin */}
-                {isSupervisorOrAdmin && (
-                  <div className="mt-3.5 border-t border-slate-100 pt-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                        <IconShield className="h-3 w-3 text-violet-600" />
-                        Contrôle à distance Caissier
+                    <div className="mt-1 flex items-baseline gap-1.5">
+                      <span className="font-mono text-2xl font-black tracking-tight text-white tabular-nums">
+                        {formatMoney(caisse.montantActuel)}
                       </span>
+                      <span className="font-mono text-xs font-bold text-slate-400">TND</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {caisse.isBlocked ? (
-                        <button
-                          type="button"
-                          onClick={() => controlCaisse(caisse.accountId, 'unblock')}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-emerald-700"
-                        >
-                          <IconCheck className="h-3.5 w-3.5" />
-                          Débloquer {caisse.caisseCode}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (
-                              confirm(
-                                `Bloquer temporairement la caisse ${caisse.caisseCode} à distance ? Le caissier sera immédiatement déconnecté et ne pourra plus saisir.`
-                              )
-                            ) {
-                              controlCaisse(caisse.accountId, 'block');
-                            }
-                          }}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100"
-                        >
-                          <IconAlert className="h-3.5 w-3.5" />
-                          Bloquer Caisse
-                        </button>
-                      )}
+                  </div>
 
+                  {/* Détails Spécifiques par Caisse : MT Espèce & Versement */}
+                  <div className="mt-3 grid grid-cols-2 gap-2.5">
+                    <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3">
+                      <span className="block text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">
+                        MT Espèce
+                      </span>
+                      <strong className="num mt-0.5 block text-sm font-black text-emerald-900">
+                        {formatMoney(caisse.mtEspece)} TND
+                      </strong>
+                    </div>
+
+                    <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/50 p-3">
+                      <span className="block text-[10px] font-extrabold uppercase tracking-wider text-indigo-700">
+                        Versement
+                      </span>
+                      <strong className="num mt-0.5 block text-sm font-black text-indigo-900">
+                        {formatMoney(caisse.versement)} TND
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Total de Clôture Individuel de la Caisse */}
+                  <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2 text-xs">
+                    <span className="font-semibold text-slate-600">
+                      Total Clôtures ({caisse.nbClotures}) :
+                    </span>
+                    <Link
+                      href={`/billetterie/historique?caisse=${caisse.caisseCode}`}
+                      className="font-mono font-extrabold text-slate-900 hover:text-indigo-600 hover:underline"
+                    >
+                      {formatMoney(caisse.totalCloture)} TND →
+                    </Link>
+                  </div>
+                </div>
+
+                {/* Gestion des Droits et des Caissiers (Contrôle à distance) */}
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                      <IconShield className="h-3 w-3 text-violet-600" />
+                      Contrôle à distance Caissier
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {caisse.isBlocked ? (
+                      <button
+                        type="button"
+                        onClick={() => controlCaisse(caisse.accountId, 'unblock')}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-emerald-700"
+                      >
+                        <IconCheck className="h-3.5 w-3.5" />
+                        Débloquer {caisse.caisseCode}
+                      </button>
+                    ) : (
                       <button
                         type="button"
                         onClick={() => {
                           if (
                             confirm(
-                              `Forcer la déconnexion immédiate de l'utilisateur de la caisse ${caisse.caisseCode} ?`
+                              `Bloquer temporairement la caisse ${caisse.caisseCode} à distance ? Le caissier sera immédiatement déconnecté et ne pourra plus saisir.`
                             )
                           ) {
-                            controlCaisse(caisse.accountId, 'force_logout');
+                            controlCaisse(caisse.accountId, 'block');
                           }
                         }}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100"
                       >
-                        <IconLogout className="h-3.5 w-3.5" />
-                        Déconnecter
+                        <IconAlert className="h-3.5 w-3.5" />
+                        Bloquer Caisse
                       </button>
-                    </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            `Forcer la déconnexion immédiate de l'utilisateur de la caisse ${caisse.caisseCode} ?`
+                          )
+                        ) {
+                          controlCaisse(caisse.accountId, 'force_logout');
+                        }
+                      }}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200"
+                    >
+                      <IconLogout className="h-3.5 w-3.5" />
+                      Déconnecter
+                    </button>
                   </div>
-                )}
+                </div>
               </div>
             ))}
           </div>
@@ -588,17 +597,20 @@ export default function DashboardPage() {
 
       {/* =========================================================================
           SPÉCIFICATION 2 : SUIVI DU STATUT DES CHAUFFEURS (4 STATUTS VISUELS CLIQUABLES)
-          1. Chauffeur Non Payé
-          2. Chauffeur Stand-by / Non Payé
-          3. Chauffeur Payé
-          4. Chauffeur Sans Caisse
       ========================================================================= */}
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-extrabold tracking-tight text-slate-900 sm:text-base">
-          2. Suivi du Statut des Chauffeurs (Synchronisation Temps Réel)
-        </h2>
-        <span className="text-xs font-semibold text-slate-500">
-          Total Flotte : <strong>{totalDrivers}</strong> chauffeurs
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
+            <IconTruck className="h-4 w-4" />
+          </span>
+          <h2 className="text-sm font-extrabold tracking-tight text-slate-900 sm:text-base">
+            {isSupervisorOrAdmin
+              ? '2. Suivi du Statut des Chauffeurs (Synchronisation Temps Réel)'
+              : 'Statut de la Flotte Chauffeurs (Synchronisation Temps Réel)'}
+          </h2>
+        </div>
+        <span className="rounded-xl bg-white px-3 py-1 text-xs font-bold text-slate-600 shadow-sm ring-1 ring-slate-200/80">
+          Flotte : <strong className="font-mono text-slate-900">{totalDrivers}</strong> chauffeurs
         </span>
       </div>
 
@@ -724,420 +736,488 @@ export default function DashboardPage() {
       )}
 
       {/* =========================================================================
-          TABLEAU DE BORD : BORDEREAUX, SÉRIE, SOUS-SÉRIE & JOURNAL DES CAISSES
+          SECTION A (PLEINE LARGEUR) : SUIVI GLOBAL DES CHAUFFEURS & LIAISON INTER-MODULES
       ========================================================================= */}
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
-        {/* Colonnes 1 & 2 : Tableau Consolidé des Chauffeurs avec Lignes Cliquables */}
-        <div className="card overflow-hidden xl:col-span-2">
-          <div className="card-header flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="card mt-6 overflow-hidden">
+        {/* Top Header : Title + Cumuls Financiers */}
+        <div className="card-header flex-col items-stretch gap-3 border-b border-slate-100 bg-white sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200/70">
+              <IconSheet className="h-4 w-4" />
+            </span>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 font-bold text-xs ring-1 ring-indigo-200/70">
-                  <IconSheet className="h-4 w-4" />
-                </span>
-                <h2 className="card-title text-sm">
-                  Suivi Global des Chauffeurs & Liaison Inter-Modules
-                </h2>
-              </div>
+              <h2 className="card-title text-sm sm:text-base">
+                Suivi Global des Chauffeurs & Liaison Inter-Modules
+              </h2>
               <p className="text-[11px] font-medium text-slate-400 mt-0.5">
-                Synchronisation automatique en temps réel entre Programme, Mouvement et Caisses (CRNU, CRSF, CRTN)
+                Synchronisation automatique en temps réel entre Programme, Mouvements et Statut Global ({filteredDrivers.length} affichés)
               </p>
             </div>
-
-            {/* Onglets Filtre Rapide selon les 4 Statuts */}
-            <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setTableFilter('ALL')}
-                className={`rounded-xl px-2.5 py-1 text-xs font-bold transition-all ${
-                  tableFilter === 'ALL'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Tous ({totalDrivers})
-              </button>
-              <button
-                type="button"
-                onClick={() => setTableFilter('NON_PAYE_ACTIF')}
-                className={`rounded-xl px-2.5 py-1 text-xs font-bold transition-all ${
-                  tableFilter === 'NON_PAYE_ACTIF'
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-                }`}
-              >
-                Non Payé ({nonPayesActifs.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setTableFilter('STANDBY_NON_PAYE')}
-                className={`rounded-xl px-2.5 py-1 text-xs font-bold transition-all ${
-                  tableFilter === 'STANDBY_NON_PAYE'
-                    ? 'bg-amber-500 text-white shadow-sm'
-                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-                }`}
-              >
-                Stand-by / Non Payé ({standbyNonPayes.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setTableFilter('PAYE')}
-                className={`rounded-xl px-2.5 py-1 text-xs font-bold transition-all ${
-                  tableFilter === 'PAYE'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                }`}
-              >
-                Payé ({payes.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setTableFilter('PAS DE CAISSE')}
-                className={`rounded-xl px-2.5 py-1 text-xs font-bold transition-all ${
-                  tableFilter === 'PAS DE CAISSE'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                }`}
-              >
-                Sans Caisse ({pasDeCaisse.length})
-              </button>
-            </div>
           </div>
 
-          {/* Search Bar & Totaux Row */}
-          <div className="p-3.5 sm:p-4 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="relative flex-1">
-              <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={tableSearch}
-                onChange={(e) => setTableSearch(e.target.value)}
-                placeholder="Rechercher par chauffeur, TR, série, sous-série, circuit..."
-                className="input !pl-8 !py-1.5 text-xs font-medium w-full"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 text-xs flex-wrap">
-              <span className="badge-slate font-mono text-[11px]">
-                Bordereaux: <strong>{formatMoney(cumulBordereaux)}</strong> TND
-              </span>
-              <span className="badge-indigo font-mono text-[11px]">
-                Mouvements: <strong>{formatMoney(cumulMouvements)}</strong> TND
-              </span>
-              <span
-                className={`font-mono text-[11px] px-2 py-0.5 rounded-full font-bold ${
-                  cumulEcart === 0
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : cumulEcart > 0
-                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                    : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                }`}
-              >
-                Écart: {cumulEcart > 0 ? '+' : ''}{formatMoney(cumulEcart)} TND
-              </span>
-            </div>
+          {/* Cumuls Pills */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-[11px] text-slate-700">
+              Bordereaux : <strong className="text-slate-900">{formatMoney(cumulBordereaux)} TND</strong>
+            </span>
+            <span className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-1.5 font-mono text-[11px] text-emerald-800">
+              Mouvements : <strong className="text-emerald-900">{formatMoney(cumulMouvements)} TND</strong>
+            </span>
+            <span
+              className={`rounded-xl px-3 py-1.5 font-mono text-[11px] font-bold ${
+                cumulEcart === 0
+                  ? 'border border-slate-200 bg-slate-50 text-slate-700'
+                  : cumulEcart > 0
+                  ? 'border border-rose-200 bg-rose-50 text-rose-700'
+                  : 'border border-indigo-200 bg-indigo-50 text-indigo-700'
+              }`}
+            >
+              Écart : {cumulEcart > 0 ? '+' : ''}
+              {formatMoney(cumulEcart)} TND
+            </span>
           </div>
-
-          {filteredDrivers.length === 0 ? (
-            <EmptyState
-              icon={<IconCheck className="h-7 w-7 text-emerald-600" />}
-              title="Aucun chauffeur trouvé"
-              description="Aucun résultat ne correspond aux critères de filtre ou de recherche sélectionnés."
-            />
-          ) : (
-            <>
-              {/* Mobile Cards (sm:hidden) */}
-              <div className="divide-y divide-slate-100 sm:hidden">
-                {filteredDrivers.map((d) => (
-                  <div
-                    key={d.id}
-                    onClick={() => setSelectedDriverDetails(d)}
-                    className="p-4 hover:bg-slate-50/80 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="rounded-md bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-white">
-                          TR {d.tr}
-                        </span>
-                        <p className="truncate text-sm font-extrabold text-slate-900">{d.nom}</p>
-                      </div>
-                      <span className={getStatusBadge(d.statut)}>{d.statut}</span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 rounded-xl p-2.5 mb-2.5">
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">
-                          Série / Sous-série
-                        </span>
-                        <span className="font-semibold text-slate-800">
-                          {d.serie} / {d.sousSerie}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">
-                          Circuit
-                        </span>
-                        <span className="font-semibold text-slate-800 truncate block">
-                          {d.programmeJour || 'STAND-BY'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">
-                          Montant Bordereaux
-                        </span>
-                        <strong className="num text-slate-900">
-                          {formatMoney(d.montantBordereau)} TND
-                        </strong>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">
-                          Mouvement Caisse
-                        </span>
-                        <strong className="num text-emerald-700">
-                          {formatMoney(d.mouvementCaisse)} TND
-                        </strong>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-500 font-medium text-[11px]">Écart :</span>
-                        <span
-                          className={`font-mono font-black text-xs ${
-                            d.ecartBordereau === 0
-                              ? 'text-slate-700'
-                              : d.ecartBordereau > 0
-                              ? 'text-rose-600'
-                              : 'text-emerald-600'
-                          }`}
-                        >
-                          {d.ecartBordereau > 0 ? '+' : ''}{formatMoney(d.ecartBordereau)} TND
-                        </span>
-                      </div>
-
-                      {!isSuperviseur && (
-                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={(e) => startEditDriver(e, d)}
-                            className="btn-ghost !py-1 !px-2 text-xs font-semibold"
-                            title="Modifier Série / Bordereau"
-                          >
-                            <IconEdit className="h-3.5 w-3.5" />
-                          </button>
-                          <Link
-                            href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                            className="btn-primary !py-1 !px-2.5 text-xs font-bold"
-                          >
-                            Encaisser
-                          </Link>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Desktop Table View (hidden sm:block) */}
-              <div className="table-wrap hidden sm:block">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th className="w-16">Code TR</th>
-                      <th className="w-40">Chauffeur</th>
-                      <th className="w-20">Série</th>
-                      <th className="w-20">Sous-série</th>
-                      <th className="!text-right w-28">Bordereaux (TND)</th>
-                      <th className="!text-right w-28">Mvt Caisse (TND)</th>
-                      <th className="!text-right w-28">Écart (TND)</th>
-                      <th className="w-28">Circuit</th>
-                      <th className="w-28">Statut</th>
-                      {!isSuperviseur && <th className="!text-center w-28">Actions</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredDrivers.map((d) => (
-                      <tr
-                        key={d.id}
-                        onClick={() => setSelectedDriverDetails(d)}
-                        className="cursor-pointer hover:bg-slate-50/80 transition-colors group"
-                        title="Cliquez pour afficher la fiche détaillée du chauffeur"
-                      >
-                        <td>
-                          <span className="inline-flex rounded-lg bg-slate-900 px-2 py-0.5 font-mono text-xs font-extrabold text-white">
-                            #{d.tr}
-                          </span>
-                        </td>
-                        <td>
-                          <p className="max-w-[150px] truncate font-bold text-slate-900" title={d.nom}>
-                            {d.nom}
-                          </p>
-                        </td>
-                        <td>
-                          <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                            {d.serie}
-                          </span>
-                        </td>
-                        <td>
-                          <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                            {d.sousSerie}
-                          </span>
-                        </td>
-                        <td className="text-right num font-black text-xs text-slate-900">
-                          {formatMoney(d.montantBordereau)}
-                        </td>
-                        <td className="text-right num font-black text-xs text-emerald-700">
-                          {formatMoney(d.mouvementCaisse)}
-                        </td>
-                        <td className="text-right">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded-full font-mono text-xs font-black ${
-                              d.ecartBordereau === 0
-                                ? 'bg-slate-100 text-slate-700'
-                                : d.ecartBordereau > 0
-                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            }`}
-                          >
-                            {d.ecartBordereau > 0 ? '+' : ''}{formatMoney(d.ecartBordereau)}
-                          </span>
-                        </td>
-                        <td>
-                          <span className="badge-slate max-w-[110px] truncate" title={d.programmeJour}>
-                            {d.programmeJour || 'STAND-BY'}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="flex flex-col items-start gap-0.5">
-                            <span className={getStatusBadge(d.statut)}>
-                              {d.statut === 'NON PAYE' && isStandbyCircuit(d.programmeJour)
-                                ? 'STAND-BY / NON PAYÉ'
-                                : d.statut === 'PAS DE CAISSE'
-                                ? 'SANS CAISSE'
-                                : d.statut}
-                            </span>
-                            {d.paidCaisseCode && d.statut === 'PAYE' && (
-                              <span className="font-mono text-[9px] font-bold text-emerald-700">
-                                Réglé : {d.paidCaisseCode}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        {!isSuperviseur && (
-                          <td className="text-center" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={(e) => startEditDriver(e, d)}
-                                className="btn-ghost !p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
-                                title="Modifier Série / Sous-série / Bordereau"
-                              >
-                                <IconEdit className="h-3.5 w-3.5" />
-                              </button>
-                              <Link
-                                href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                                className="btn-primary !px-2.5 !py-1 !text-xs font-bold"
-                                title="Ouvrir au Guichet POS Caisse"
-                              >
-                                Encaisser
-                              </Link>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
         </div>
 
-        {/* Colonne 3 : Historique & Journal des Caisses (CRNU, CRSF, CRTN) + Historique Clôtures */}
-        <div className="space-y-6 xl:col-span-1">
-          {/* Spécification 5 : Résumé Historique de Clôture par Caisse */}
-          <div className="card p-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-amber-200/70">
-                  <IconHistory className="h-4 w-4" />
-                </span>
-                <h3 className="text-sm font-extrabold tracking-tight text-slate-900">
-                  Historique de Clôture
-                </h3>
+        {/* Second Toolbar : Filter Tabs + Search Input */}
+        <div className="flex flex-col justify-between gap-3 border-b border-slate-100 bg-slate-50/70 p-3.5 sm:px-5 lg:flex-row lg:items-center">
+          {/* Onglets Filtre Rapide selon les 4 Statuts */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setTableFilter('ALL')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                tableFilter === 'ALL'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-100'
+              }`}
+            >
+              Tous ({totalDrivers})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableFilter('NON_PAYE_ACTIF')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                tableFilter === 'NON_PAYE_ACTIF'
+                  ? 'bg-rose-600 text-white shadow-sm'
+                  : 'bg-rose-50 text-rose-700 border border-rose-200/60 hover:bg-rose-100'
+              }`}
+            >
+              Non Payé ({nonPayesActifs.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableFilter('STANDBY_NON_PAYE')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                tableFilter === 'STANDBY_NON_PAYE'
+                  ? 'bg-amber-500 text-white shadow-sm'
+                  : 'bg-amber-50 text-amber-800 border border-amber-200/60 hover:bg-amber-100'
+              }`}
+            >
+              Stand-by / Non Payé ({standbyNonPayes.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableFilter('PAYE')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                tableFilter === 'PAYE'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60 hover:bg-emerald-100'
+              }`}
+            >
+              Payé ({payes.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableFilter('PAS DE CAISSE')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                tableFilter === 'PAS DE CAISSE'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200/60 hover:bg-indigo-100'
+              }`}
+            >
+              Sans Caisse ({pasDeCaisse.length})
+            </button>
+          </div>
+
+          {/* Search Input */}
+          <div className="relative w-full lg:w-80">
+            <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              placeholder="Rechercher chauffeur, TR, série, circuit..."
+              className="input !pl-8 !py-1.5 text-xs font-medium w-full bg-white"
+            />
+          </div>
+        </div>
+
+        {filteredDrivers.length === 0 ? (
+          <EmptyState
+            icon={<IconCheck className="h-7 w-7 text-emerald-600" />}
+            title="Aucun chauffeur trouvé"
+            description="Aucun résultat ne correspond aux critères de filtre ou de recherche sélectionnés."
+          />
+        ) : (
+          <>
+            {/* Mobile Cards (sm:hidden) */}
+            <div className="divide-y divide-slate-100 max-h-[520px] overflow-y-auto sm:hidden">
+              {filteredDrivers.map((d) => (
+                <div
+                  key={d.id}
+                  onClick={() => setSelectedDriverDetails(d)}
+                  className="p-4 hover:bg-slate-50/80 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="rounded-md bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-white">
+                        TR {d.tr}
+                      </span>
+                      <p className="truncate text-sm font-extrabold text-slate-900">{d.nom}</p>
+                    </div>
+                    <span className={getStatusBadge(d.statut)}>{d.statut}</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 rounded-xl p-2.5 mb-2.5">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">
+                        Série / Sous-série
+                      </span>
+                      <span className="font-semibold text-slate-800">
+                        {d.serie} / {d.sousSerie}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">
+                        Circuit
+                      </span>
+                      <span className="font-semibold text-slate-800 truncate block">
+                        {d.programmeJour || 'STAND-BY'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">
+                        Montant Bordereaux
+                      </span>
+                      <strong className="num text-slate-900">
+                        {formatMoney(d.montantBordereau)} TND
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">
+                        Mouvement Caisse
+                      </span>
+                      <strong className="num text-emerald-700">
+                        {formatMoney(d.mouvementCaisse)} TND
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500 font-medium text-[11px]">Écart :</span>
+                      <span
+                        className={`font-mono font-black text-xs ${
+                          d.ecartBordereau === 0
+                            ? 'text-slate-700'
+                            : d.ecartBordereau > 0
+                            ? 'text-rose-600'
+                            : 'text-emerald-600'
+                        }`}
+                      >
+                        {d.ecartBordereau > 0 ? '+' : ''}{formatMoney(d.ecartBordereau)} TND
+                      </span>
+                    </div>
+
+                    {!isSuperviseur && (
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={(e) => startEditDriver(e, d)}
+                          className="btn-ghost !py-1 !px-2 text-xs font-semibold"
+                          title="Modifier Série / Bordereau"
+                        >
+                          <IconEdit className="h-3.5 w-3.5" />
+                        </button>
+                        <Link
+                          href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
+                          className="btn-primary !py-1 !px-2.5 text-xs font-bold"
+                        >
+                          Encaisser
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View with Sticky Header & Clean Scroll (hidden sm:block) */}
+            <div className="table-wrap hidden max-h-[520px] overflow-y-auto sm:block">
+              <table className="data-table">
+                <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_rgba(226,232,240,1)]">
+                  <tr>
+                    <th className="w-20">Code TR</th>
+                    <th>Chauffeur</th>
+                    <th className="w-24">Série</th>
+                    <th className="w-24">Sous-série</th>
+                    <th className="!text-right w-32">Bordereaux (TND)</th>
+                    <th className="!text-right w-32">Mvt Caisse (TND)</th>
+                    <th className="!text-right w-32">Écart (TND)</th>
+                    <th className="w-32">Circuit</th>
+                    <th className="w-36">Statut</th>
+                    {!isSuperviseur && <th className="!text-center w-32">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDrivers.map((d) => (
+                    <tr
+                      key={d.id}
+                      onClick={() => setSelectedDriverDetails(d)}
+                      className="cursor-pointer hover:bg-slate-50/80 transition-colors group"
+                      title="Cliquez pour afficher la fiche détaillée du chauffeur"
+                    >
+                      <td>
+                        <span className="inline-flex rounded-lg bg-slate-900 px-2.5 py-0.5 font-mono text-xs font-extrabold text-white">
+                          #{d.tr}
+                        </span>
+                      </td>
+                      <td>
+                        <p className="font-bold text-slate-900" title={d.nom}>
+                          {d.nom}
+                        </p>
+                      </td>
+                      <td>
+                        <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                          {d.serie}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                          {d.sousSerie}
+                        </span>
+                      </td>
+                      <td className="text-right num font-black text-xs text-slate-900">
+                        {formatMoney(d.montantBordereau)}
+                      </td>
+                      <td className="text-right num font-black text-xs text-emerald-700">
+                        {formatMoney(d.mouvementCaisse)}
+                      </td>
+                      <td className="text-right">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-full font-mono text-xs font-black ${
+                            d.ecartBordereau === 0
+                              ? 'bg-slate-100 text-slate-700'
+                              : d.ecartBordereau > 0
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          }`}
+                        >
+                          {d.ecartBordereau > 0 ? '+' : ''}{formatMoney(d.ecartBordereau)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="badge-slate truncate" title={d.programmeJour}>
+                          {d.programmeJour || 'STAND-BY'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span className={getStatusBadge(d.statut)}>
+                            {d.statut === 'NON PAYE' && isStandbyCircuit(d.programmeJour)
+                              ? 'STAND-BY / NON PAYÉ'
+                              : d.statut === 'PAS DE CAISSE'
+                              ? 'SANS CAISSE'
+                              : d.statut}
+                          </span>
+                          {isSupervisorOrAdmin && d.paidCaisseCode && d.statut === 'PAYE' && (
+                            <span className="font-mono text-[9px] font-bold text-emerald-700">
+                              Réglé : {d.paidCaisseCode}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      {!isSuperviseur && (
+                        <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => startEditDriver(e, d)}
+                              className="btn-ghost !p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                              title="Modifier Série / Sous-série / Bordereau"
+                            >
+                              <IconEdit className="h-3.5 w-3.5" />
+                            </button>
+                            <Link
+                              href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
+                              className="btn-primary !px-2.5 !py-1 !text-xs font-bold"
+                              title="Ouvrir au Guichet POS Caisse"
+                            >
+                              Encaisser
+                            </Link>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* =========================================================================
+          SECTION B (2 COLONNES ÉQUILIBRÉES CÔTE À CÔTE) :
+          - POUR SUPERVISEUR / ADMIN : HISTORIQUE DE CLÔTURE + JOURNAL DES CAISSES
+          - POUR CAISSES NORMALES (CRNU, CRSF, CRTN) : MODULES OPÉRATIONNELS + REÇUS DE LA CAISSE
+      ========================================================================= */}
+      {isSupervisorOrAdmin ? (
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Colonne 1 : Spécification 5 — Historique de Clôture (CRNU, CRSF, CRTN & Global) */}
+          <div className="card flex flex-col justify-between overflow-hidden">
+            <div>
+              <div className="card-header border-b border-slate-100 bg-white">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-amber-200/70">
+                    <IconHistory className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <h3 className="card-title text-sm sm:text-base">
+                      3. Historique de Clôture (CRNU · CRSF · CRTN)
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Totaux individuels par caisse et montant global cumulé
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/billetterie/historique"
+                  className="btn-ghost !py-1.5 !px-3 text-xs font-bold text-indigo-600 border border-indigo-200 bg-indigo-50/50"
+                >
+                  Ouvrir l&apos;Historique →
+                </Link>
               </div>
+
+              <div className="p-5 space-y-4">
+                {/* Montant Global de Clôture */}
+                <div className="rounded-2xl bg-slate-900 p-4 text-white">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Montant Global de Clôture (CRNU + CRSF + CRTN)
+                    </span>
+                    <span className="rounded-full bg-amber-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-amber-300">
+                      Cumul Global
+                    </span>
+                  </div>
+                  <p className="mt-1.5 font-mono text-2xl font-black text-amber-400">
+                    {formatMoney(globalTotalCloture)}{' '}
+                    <span className="text-xs font-normal text-slate-300">TND</span>
+                  </p>
+                  <div className="mt-2.5 flex items-center gap-4 border-t border-white/10 pt-2.5 text-xs text-slate-300">
+                    <span>
+                      MT Espèce :{' '}
+                      <strong className="font-mono text-emerald-300">
+                        {formatMoney(globalTotalClotureEspece)} TND
+                      </strong>
+                    </span>
+                    <span>
+                      Versement :{' '}
+                      <strong className="font-mono text-sky-300">
+                        {formatMoney(globalTotalClotureVer)} TND
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Détail Individuel pour chaque Caisse : CRNU, CRSF et CRTN */}
+                <div className="space-y-2.5">
+                  {caissesSummary.map((c) => (
+                    <Link
+                      key={c.accountId}
+                      href={`/billetterie/historique?caisse=${c.caisseCode}`}
+                      className="group flex items-center justify-between rounded-2xl border border-slate-200/90 bg-slate-50/60 p-3.5 text-xs transition-all hover:border-indigo-300 hover:bg-white hover:shadow-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`flex h-9 w-9 items-center justify-center rounded-xl font-mono text-xs font-black text-white ${
+                            c.caisseCode === 'CRNU'
+                              ? 'bg-indigo-600'
+                              : c.caisseCode === 'CRSF'
+                              ? 'bg-emerald-600'
+                              : 'bg-sky-600'
+                          }`}
+                        >
+                          {c.caisseCode}
+                        </span>
+                        <div>
+                          <p className="font-extrabold text-slate-900 text-sm">
+                            {c.displayName}
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Esp: <strong className="font-mono text-emerald-700">{formatMoney(c.totalClotureEspece)}</strong> · Ver: <strong className="font-mono text-indigo-700">{formatMoney(c.totalClotureVersement)}</strong>
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono text-sm font-black text-slate-900 block">
+                          {formatMoney(c.totalCloture)} TND
+                        </span>
+                        <span className="text-[10.5px] font-semibold text-indigo-600 group-hover:underline">
+                          {c.nbClotures} clôture{c.nbClotures > 1 ? 's' : ''} · Voir détail →
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-3 text-right">
               <Link
                 href="/billetterie/historique"
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700"
               >
-                Détails →
+                <span>Consulter et imprimer tous les PV de clôture</span>
+                <IconArrowRight className="h-3.5 w-3.5" />
               </Link>
-            </div>
-
-            <div className="mt-3 rounded-2xl bg-slate-900 p-3.5 text-white">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Montant Global de Clôture (CRNU + CRSF + CRTN)
-              </span>
-              <p className="mt-1 font-mono text-xl font-black text-amber-400">
-                {formatMoney(globalTotalCloture)} <span className="text-xs text-slate-300">TND</span>
-              </p>
-            </div>
-
-            <div className="mt-3 space-y-2">
-              {caissesSummary.map((c) => (
-                <Link
-                  key={c.accountId}
-                  href={`/billetterie/historique?caisse=${c.caisseCode}`}
-                  className="flex items-center justify-between rounded-xl border border-slate-200/90 p-2.5 text-xs transition-all hover:border-amber-300 hover:bg-amber-50/30"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-md bg-slate-900 px-2 py-0.5 font-mono text-[10px] font-black text-white">
-                      {c.caisseCode}
-                    </span>
-                    <span className="font-bold text-slate-800">{c.displayName}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-mono font-extrabold text-slate-900 block">
-                      {formatMoney(c.totalCloture)} TND
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      {c.nbClotures} clôture{c.nbClotures > 1 ? 's' : ''}
-                    </span>
-                  </div>
-                </Link>
-              ))}
             </div>
           </div>
 
-          {/* Spécification 3 & 6 : Journal des Transactions en Temps Réel (CRNU, CRSF, CRTN) */}
-          <div className="card overflow-hidden">
-            <div className="card-header !py-3.5">
-              <div>
-                <h3 className="card-title text-sm">
-                  Journal des Caisses (CRNU · CRSF · CRTN)
-                </h3>
-                <p className="text-[10px] text-slate-400">
-                  Mouvements du jour en temps réel
-                </p>
+          {/* Colonne 2 : Spécification 3 & 6 — Journal des Caisses en Temps Réel (CRNU, CRSF, CRTN) */}
+          <div className="card flex flex-col justify-between overflow-hidden">
+            <div>
+              <div className="card-header border-b border-slate-100 bg-white">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200/70">
+                    <IconReceipt className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <h3 className="card-title text-sm sm:text-base">
+                      4. Journal des Caisses (CRNU · CRSF · CRTN)
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Transactions de la journée en temps réel ({filteredJournalTransactions.length})
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/journal"
+                  className="btn-ghost !py-1.5 !px-3 text-xs font-bold text-emerald-700 border border-emerald-200 bg-emerald-50/50"
+                >
+                  Fenêtre Dédiée →
+                </Link>
               </div>
-              <Link
-                href="/journal"
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
-              >
-                Fenêtre Dédiée →
-              </Link>
-            </div>
 
-            {/* Filtre par Caisse & Recherche Rapide */}
-            <div className="border-b border-slate-100 bg-slate-50/70 p-3 space-y-2">
-              {isSupervisorOrAdmin && (
-                <div className="grid grid-cols-4 gap-1">
+              {/* Filtre par Caisse & Recherche Rapide */}
+              <div className="border-b border-slate-100 bg-slate-50/70 p-3.5 space-y-2.5">
+                <div className="grid grid-cols-4 gap-1.5">
                   {(['ALL', 'CRNU', 'CRSF', 'CRTN'] as const).map((code) => (
                     <button
                       key={code}
                       type="button"
                       onClick={() => setJournalCaisseFilter(code)}
-                      className={`rounded-lg py-1 text-[11px] font-extrabold transition-all ${
+                      className={`rounded-xl py-1.5 text-xs font-extrabold transition-all ${
                         journalCaisseFilter === code
                           ? 'bg-slate-900 text-white shadow-sm'
                           : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
@@ -1147,50 +1227,187 @@ export default function DashboardPage() {
                     </button>
                   ))}
                 </div>
-              )}
 
-              <div className="relative">
-                <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={journalSearch}
-                  onChange={(e) => setJournalSearch(e.target.value)}
-                  placeholder="Filtrer par chauffeur, TR, caisse..."
-                  className="input !pl-8 !py-1 text-xs"
-                />
+                <div className="relative">
+                  <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={journalSearch}
+                    onChange={(e) => setJournalSearch(e.target.value)}
+                    placeholder="Rechercher une transaction par chauffeur, TR, caisse..."
+                    className="input !pl-8 !py-1.5 text-xs bg-white"
+                  />
+                </div>
               </div>
+
+              {filteredJournalTransactions.length === 0 ? (
+                <div className="p-10 text-center text-xs font-medium text-slate-400">
+                  Aucune transaction enregistrée pour ce filtre aujourd&apos;hui.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 max-h-[340px] overflow-y-auto">
+                  {filteredJournalTransactions.slice(0, 15).map((t) => {
+                    const mtEspece =
+                      typeof t.mtEspece === 'number'
+                        ? t.mtEspece
+                        : Math.round((t.tPayer - t.versement) * 1000) / 1000;
+                    return (
+                      <div
+                        key={`${t.accountId || ''}-${t.id}`}
+                        className="flex items-center justify-between gap-2 px-4 py-3 text-xs transition-colors hover:bg-slate-50/80"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded bg-indigo-600 px-1.5 py-0.5 font-mono text-[9px] font-black text-white">
+                              {t.caisseCode || 'CAISSE'}
+                            </span>
+                            <p className="truncate font-bold text-slate-900">
+                              {t.nomChauffeur} (TR {t.codeChauffeur})
+                            </p>
+                          </div>
+                          <p className="mt-0.5 text-[10.5px] text-slate-400">
+                            {formatDateTime(t.date)} · Esp: <strong>{formatMoney(mtEspece)}</strong> | Ver: <strong>{formatMoney(t.versement)}</strong>
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="text-right">
+                            <p className="font-mono font-extrabold text-emerald-700">
+                              {formatMoney(t.tPayer)} TND
+                            </p>
+                            <p className="font-mono text-[10px] text-slate-400">
+                              Att: {formatMoney(t.recette)}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openTransactionReceipt(t)}
+                            className="btn-icon !h-8 !w-8 text-slate-400 hover:!bg-indigo-50 hover:!text-indigo-600"
+                            title="Consulter / Imprimer Reçu"
+                          >
+                            <IconPrinter className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {filteredJournalTransactions.length === 0 ? (
-              <div className="p-8 text-center text-xs font-medium text-slate-400">
-                Aucune transaction trouvée pour ce filtre.
+            <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-3 text-right">
+              <Link
+                href="/journal"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700"
+              >
+                <span>Ouvrir le Journal Avancé & Archives de Clôture</span>
+                <IconArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* VUE CAISSE NORMALE (CRNU, CRSF ou CRTN) : STRICTEMENT ISOLÉE À SA PROPRE CAISSE */
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Colonne 1 : Modules Opérationnels de la Caisse */}
+          <div className="card p-5 flex flex-col justify-between">
+            <div>
+              <h3 className="text-sm font-extrabold tracking-tight text-slate-900 sm:text-base">
+                Modules Opérationnels — {currentUser?.displayName}
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Accès rapide aux outils de votre caisse ({currentUser?.caisseCode || currentUser?.username?.toUpperCase()})
+              </p>
+
+              <div className="mt-4 space-y-2.5">
+                <Link
+                  href="/caisse"
+                  className="group flex items-center justify-between rounded-2xl border border-slate-200/90 p-3.5 transition-all hover:border-indigo-300 hover:bg-indigo-50/35"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200/70 transition-transform group-hover:scale-105">
+                      <IconCalculator className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">Guichet POS Caisse</p>
+                      <p className="text-[11px] text-slate-500">Scanner TR, coupures & factures</p>
+                    </div>
+                  </div>
+                  <IconArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-600" />
+                </Link>
+
+                <Link
+                  href="/billetterie"
+                  className="group flex items-center justify-between rounded-2xl border border-slate-200/90 p-3.5 transition-all hover:border-amber-300 hover:bg-amber-50/35"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-amber-200/70 transition-transform group-hover:scale-105">
+                      <IconCoins className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">Comptage Billetterie & Clôture</p>
+                      <p className="text-[11px] text-slate-500">Inventaire coffre & clôture journalière</p>
+                    </div>
+                  </div>
+                  <IconArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-amber-600" />
+                </Link>
+
+                <Link
+                  href="/billetterie/historique"
+                  className="group flex items-center justify-between rounded-2xl border border-slate-200/90 p-3.5 transition-all hover:border-emerald-300 hover:bg-emerald-50/35"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200/70 transition-transform group-hover:scale-105">
+                      <IconHistory className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">Historique de mes Clôtures</p>
+                      <p className="text-[11px] text-slate-500">Consultation et impression des PV A4</p>
+                    </div>
+                  </div>
+                  <IconArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-600" />
+                </Link>
               </div>
-            ) : (
-              <div className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
-                {filteredJournalTransactions.slice(0, 15).map((t) => {
-                  const mtEspece =
-                    typeof t.mtEspece === 'number'
-                      ? t.mtEspece
-                      : Math.round((t.tPayer - t.versement) * 1000) / 1000;
-                  return (
+            </div>
+          </div>
+
+          {/* Colonne 2 : Derniers Reçus Validés de cette Caisse uniquement */}
+          <div className="card overflow-hidden flex flex-col justify-between">
+            <div>
+              <div className="card-header !py-3.5">
+                <div>
+                  <h3 className="card-title text-sm sm:text-base">
+                    Derniers Reçus Validés ({currentUser?.displayName})
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Opérations enregistrées dans votre caisse aujourd&apos;hui
+                  </p>
+                </div>
+                <Link
+                  href="/journal"
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
+                >
+                  Mon Journal →
+                </Link>
+              </div>
+
+              {transactions.length === 0 ? (
+                <div className="p-10 text-center text-xs font-medium text-slate-400">
+                  Aucun reçu d&apos;encaissement validé dans votre caisse pour le moment.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 max-h-[300px] overflow-y-auto">
+                  {transactions.slice(0, 10).map((t) => (
                     <div
-                      key={`${t.accountId || ''}-${t.id}`}
+                      key={t.id}
                       className="flex items-center justify-between gap-2 px-4 py-3 text-xs transition-colors hover:bg-slate-50/80"
                     >
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="rounded bg-indigo-600 px-1.5 py-0.5 font-mono text-[9px] font-black text-white">
-                            {t.caisseCode || 'CAISSE'}
-                          </span>
-                          <p className="truncate font-bold text-slate-900">
-                            {t.nomChauffeur} (TR {t.codeChauffeur})
-                          </p>
-                        </div>
-                        <p className="mt-0.5 text-[10.5px] text-slate-400">
-                          {formatDateTime(t.date)} · Esp: <strong>{formatMoney(mtEspece)}</strong> | Ver: <strong>{formatMoney(t.versement)}</strong>
+                        <p className="truncate font-bold text-slate-900">
+                          {t.nomChauffeur} (TR {t.codeChauffeur})
                         </p>
+                        <p className="text-[11px] text-slate-400">{formatDateTime(t.date)}</p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2">
                         <div className="text-right">
                           <p className="font-mono font-extrabold text-emerald-700">
                             {formatMoney(t.tPayer)} TND
@@ -1203,19 +1420,29 @@ export default function DashboardPage() {
                           type="button"
                           onClick={() => openTransactionReceipt(t)}
                           className="btn-icon !h-8 !w-8 text-slate-400 hover:!bg-indigo-50 hover:!text-indigo-600"
-                          title="Consulter / Imprimer Reçu"
+                          title="Imprimer Reçu / Facture HD"
                         >
                           <IconPrinter className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-3 text-right">
+              <Link
+                href="/journal"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700"
+              >
+                <span>Voir tout le journal de ma caisse</span>
+                <IconArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* =========================================================================
           MODAL 1 : LES 4 STATUTS CHAUFFEURS & OPÉRATIONS VALIDÉES
@@ -1243,7 +1470,7 @@ export default function DashboardPage() {
                     '📄 Opérations de Caisse Validées'}
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Synchronisé en temps réel sur l&apos;ensemble des comptes (CRNU, CRSF, CRTN, Superviseur, Admin)
+                  Synchronisé en temps réel
                 </p>
               </div>
               <button
@@ -1270,9 +1497,11 @@ export default function DashboardPage() {
                       >
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="badge-indigo font-mono font-bold">
-                              {t.caisseCode || 'CAISSE'}
-                            </span>
+                            {isSupervisorOrAdmin && (
+                              <span className="badge-indigo font-mono font-bold">
+                                {t.caisseCode || 'CAISSE'}
+                              </span>
+                            )}
                             <span className="badge-slate font-mono font-bold">
                               TR {t.codeChauffeur}
                             </span>

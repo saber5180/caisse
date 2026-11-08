@@ -167,8 +167,16 @@ export default function JournalPage() {
       )}
 
       <PageHeader
-        title="Journal des Transactions Avancé (CRNU · CRSF · CRTN)"
-        subtitle="Suivi en temps réel du journal du jour, filtrage par recherche et accès complet aux archives de clôture de toutes les caisses"
+        title={
+          isSupervisorOrAdmin
+            ? 'Journal des Transactions Avancé (CRNU · CRSF · CRTN)'
+            : `Journal des Transactions — ${currentUser?.displayName || 'Ma Caisse'}`
+        }
+        subtitle={
+          isSupervisorOrAdmin
+            ? 'Suivi en temps réel du journal du jour, filtrage par recherche et accès complet aux archives de clôture de toutes les caisses'
+            : 'Suivi en temps réel des encaissements du jour, recherche rapide et archives de clôture de votre caisse'
+        }
         icon={<IconReceipt className="h-5 w-5" />}
         accent="emerald"
         actions={
@@ -358,7 +366,11 @@ export default function JournalPage() {
             ({displayedTransactions.length} opération{displayedTransactions.length > 1 ? 's' : ''})
           </h2>
           <span className="badge-emerald font-semibold text-[11px]">
-            {caisseFilter === 'ALL' ? 'CRNU · CRSF · CRTN' : `Caisse ${caisseFilter}`}
+            {isSupervisorOrAdmin
+              ? caisseFilter === 'ALL'
+                ? 'CRNU · CRSF · CRTN'
+                : `Caisse ${caisseFilter}`
+              : currentUser?.displayName || 'Session Active'}
           </span>
         </div>
 
