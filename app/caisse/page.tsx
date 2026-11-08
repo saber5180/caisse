@@ -39,6 +39,7 @@ function CaisseContent() {
   const setDeskTrInput = useCaisseStore((state) => state.setDeskTrInput);
   const selectDriverByTr = useCaisseStore((state) => state.selectDriverByTr);
   const selectDriverById = useCaisseStore((state) => state.selectDriverById);
+  const updateDriverStatus = useCaisseStore((state) => state.updateDriverStatus);
   const validateCurrentSale = useCaisseStore((state) => state.validateCurrentSale);
   const resetDesk = useCaisseStore((state) => state.resetDesk);
 
@@ -46,54 +47,61 @@ function CaisseContent() {
   const hasAppliedInitialTr = useRef(false);
   const [printModalData, setPrintModalData] = useState<ReceiptData | null>(null);
   const [showDriverDropdown, setShowDriverDropdown] = useState(false);
-  const [driverListTab, setDriverListTab] = useState<'NON_PAYE' | 'ALL'>('NON_PAYE');
-  const [showUnpaidPanel, setShowUnpaidPanel] = useState(true);
 
   const selectedDriver = drivers.find((d) => d.id === selectedDriverId);
 
   // Filtrer les chauffeurs valides (sans chauffeur global "0")
   const validDrivers = drivers.filter((d) => d.tr !== '0' && d.id !== 'DRV-GLOBAL-0');
-  const unpaidDrivers = validDrivers.filter((d) => d.statut === 'NON PAYE');
 
-  // Recherche en direct selon la saisie dans le champ TR / Nom
+  // Extraire le nom de base d'un chauffeur (ex: "CHELBI TRICHILI 2 174" -> "CHELBI TRICHILI")
+  const getDriverBaseName = (nom: string) =>
+    (nom || '').replace(/\s+\d+(\s+\d+)?$/, '').trim().toUpperCase();
+
+  // Recherche en direct UNIQUEMENT quand l'utilisateur tape dans le champ TR / Nom
   const searchTerm = deskTrInput.trim().replace(/^tr\s*/i, '').toUpperCase();
   const normalizedSearchTr = cleanScannerTr(searchTerm).toUpperCase();
 
-  const matchingDrivers = validDrivers
-    .filter((d) => {
-      if (!searchTerm) return d.statut === 'NON PAYE';
-      const dTrClean = cleanScannerTr(d.tr).toUpperCase();
-      const dTrRaw = d.tr.toUpperCase();
-      const dNom = d.nom.toUpperCase();
-      return (
-        dTrClean.includes(normalizedSearchTr) ||
-        dTrRaw.includes(searchTerm) ||
-        dNom.includes(searchTerm)
-      );
-    })
-    .sort((a, b) => {
-      // Prioriser correspondance exacte de TR, puis les NON PAYE
-      const aExact = cleanScannerTr(a.tr).toUpperCase() === normalizedSearchTr ? 0 : 1;
-      const bExact = cleanScannerTr(b.tr).toUpperCase() === normalizedSearchTr ? 0 : 1;
-      if (aExact !== bExact) return aExact - bExact;
-      const aUnpaid = a.statut === 'NON PAYE' ? 0 : 1;
-      const bUnpaid = b.statut === 'NON PAYE' ? 0 : 1;
-      return aUnpaid - bUnpaid;
-    });
+  const matchingDrivers = searchTerm
+    ? validDrivers
+        .filter((d) => {
+          const dTrClean = cleanScannerTr(d.tr).toUpperCase();
+          const dTrRaw = d.tr.toUpperCase();
+          const dNom = d.nom.toUpperCase();
+          return (
+            dTrClean.includes(normalizedSearchTr) ||
+            dTrRaw.includes(searchTerm) ||
+            dNom.includes(searchTerm)
+          );
+        })
+        .sort((a, b) => {
+          const aExact = cleanScannerTr(a.tr).toUpperCase() === normalizedSearchTr ? 0 : 1;
+          const bExact = cleanScannerTr(b.tr).toUpperCase() === normalizedSearchTr ? 0 : 1;
+          if (aExact !== bExact) return aExact - bExact;
+          const aUnpaid = a.statut === 'NON PAYE' ? 0 : 1;
+          const bUnpaid = b.statut === 'NON PAYE' ? 0 : 1;
+          return aUnpaid - bUnpaid;
+        })
+    : [];
 
-  const displayedPanelDrivers = (driverListTab === 'NON_PAYE' ? unpaidDrivers : validDrivers).filter(
-    (d) => {
-      if (!searchTerm || (selectedDriver && selectedDriver.tr.toUpperCase() === searchTerm)) {
-        return true;
-      }
-      const dTrClean = cleanScannerTr(d.tr).toUpperCase();
-      return (
-        dTrClean.includes(normalizedSearchTr) ||
-        d.tr.toUpperCase().includes(searchTerm) ||
-        d.nom.toUpperCase().includes(searchTerm)
-      );
-    }
-  );
+  // Caisses appartenant UNIQUEMENT au chauffeur sélectionné (même TR ou même nom de chauffeur)
+  const selectedDriverCaisses = selectedDriver
+    ? validDrivers
+        .filter((d) => {
+          if (d.id === selectedDriver.id) return true;
+          const sameTr =
+            cleanScannerTr(d.tr).toUpperCase() ===
+            cleanScannerTr(selectedDriver.tr).toUpperCase();
+          const baseSelected = getDriverBaseName(selectedDriver.nom);
+          const baseCurrent = getDriverBaseName(d.nom);
+          const sameBaseName = baseSelected.length >= 3 && baseSelected === baseCurrent;
+          return sameTr || sameBaseName;
+        })
+        .sort((a, b) => {
+          const aUnpaid = a.statut === 'NON PAYE' ? 0 : 1;
+          const bUnpaid = b.statut === 'NON PAYE' ? 0 : 1;
+          return aUnpaid - bUnpaid;
+        })
+    : [];
 
   // Nettoyer tout ancien chauffeur par défaut ("0") au montage, ou appliquer uniquement ?tr=... s'il est dans l'URL
   useEffect(() => {
@@ -108,7 +116,10 @@ function CaisseContent() {
     }
   }, [initialTr, validDrivers.length, deskTrInput, selectedDriverId, setDeskTrInput, selectDriverByTr, selectDriverById]);
 
-  const handlePickDriver = (driverId: string) => {
+  const handlePickDriver = (driverId: string, forceNonPaye = false) => {
+    if (forceNonPaye) {
+      updateDriverStatus(driverId, 'NON PAYE');
+    }
     selectDriverById(driverId);
     setShowDriverDropdown(false);
     setTimeout(() => {
@@ -341,15 +352,11 @@ function CaisseContent() {
                 </button>
               )}
 
-              {/* Dropdown de suggestion immédiate lors de la saisie / focus */}
-              {showDriverDropdown && matchingDrivers.length > 0 && (
+              {/* Dropdown de suggestion uniquement pendant la saisie d'un code TR ou nom */}
+              {showDriverDropdown && searchTerm && matchingDrivers.length > 0 && (
                 <div className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-64 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
                   <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                    <span>
-                      {searchTerm
-                        ? `Résultats (${matchingDrivers.length})`
-                        : `Chauffeurs Non Payés (${matchingDrivers.length})`}
-                    </span>
+                    <span>Chauffeurs trouvés ({matchingDrivers.length})</span>
                     <span>Cliquez pour choisir</span>
                   </div>
                   {matchingDrivers.slice(0, 12).map((d) => (
@@ -391,7 +398,7 @@ function CaisseContent() {
             </button>
           </form>
           <p className="mt-2 text-[11px] text-slate-400">
-            Scannez ou tapez un code TR / nom, ou cliquez sur une caisse non payée ci-dessous.
+            Scannez au lecteur optique ou tapez le code TR / nom puis Entrée.
           </p>
         </div>
 
@@ -427,7 +434,16 @@ function CaisseContent() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedDriver.statut !== 'NON PAYE' && (
+                  <button
+                    type="button"
+                    onClick={() => handlePickDriver(selectedDriver.id, true)}
+                    className="rounded-xl bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition"
+                  >
+                    Passer en NON PAYÉ & Travailler
+                  </button>
+                )}
                 <span className="badge-solid-emerald px-3 py-1 text-xs font-bold shadow-sm">
                   Chauffeur Pointé
                 </span>
@@ -446,147 +462,114 @@ function CaisseContent() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col sm:flex-row items-center justify-between h-full gap-3 py-2 text-slate-500">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 border border-rose-200">
-                  <IconTruck className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs sm:text-sm font-bold text-slate-800">
-                    Aucun chauffeur sélectionné par défaut
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    Tapez un code TR ou cliquez directement sur un chauffeur <strong className="text-rose-600">Non Payé</strong> ci-dessous pour travailler sur sa caisse.
-                  </p>
-                </div>
-              </div>
-              <span className="badge-rose shrink-0 font-bold text-xs px-3 py-1">
-                {unpaidDrivers.length} Non Payé{unpaidDrivers.length > 1 ? 's' : ''}
-              </span>
+            <div className="flex items-center justify-center h-full text-slate-400 text-xs sm:text-sm py-4">
+              Scannez ou tapez un code chauffeur (TR) pour afficher sa caisse et travailler dessus.
             </div>
           )}
         </div>
       </div>
 
-      {/* Panneau de Sélection Rapide : Caisses / Chauffeurs Non Payés */}
-      <div className="mt-4 card-pro p-4 sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse" />
-            <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800">
-              Caisses Chauffeurs Non Payées — Cliquez pour sélectionner et encaisser
-            </h3>
+      {/* Caisses UNIQUEMENT du Chauffeur Sélectionné */}
+      {selectedDriver && (
+        <div className="mt-4 card-pro p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse" />
+              <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800">
+                Caisse(s) du Chauffeur Sélectionné : {getDriverBaseName(selectedDriver.nom)} ({selectedDriverCaisses.length})
+              </h3>
+            </div>
+            <span className="text-[11px] font-medium text-slate-500">
+              Cliquez sur une caisse pour la passer en <strong>NON PAYÉ</strong> et travailler dessus
+            </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                setDriverListTab('NON_PAYE');
-                setShowUnpaidPanel(true);
-              }}
-              className={`rounded-xl px-3 py-1 text-xs font-bold transition ${
-                driverListTab === 'NON_PAYE'
-                  ? 'bg-rose-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Non Payés ({unpaidDrivers.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDriverListTab('ALL');
-                setShowUnpaidPanel(true);
-              }}
-              className={`rounded-xl px-3 py-1 text-xs font-bold transition ${
-                driverListTab === 'ALL'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Tous ({validDrivers.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowUnpaidPanel((v) => !v)}
-              className="rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200"
-            >
-              {showUnpaidPanel ? 'Masquer' : 'Afficher'}
-            </button>
-          </div>
-        </div>
-
-        {showUnpaidPanel && (
-          <div className="mt-3">
-            {displayedPanelDrivers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 py-6 text-center text-xs text-slate-400">
-                {driverListTab === 'NON_PAYE'
-                  ? 'Aucun chauffeur non payé correspondant.'
-                  : 'Aucun chauffeur trouvé.'}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 max-h-56 overflow-y-auto pr-1">
-                {displayedPanelDrivers.map((d) => {
-                  const isSelected = selectedDriverId === d.id;
-                  const isUnpaid = d.statut === 'NON PAYE';
-                  return (
-                    <button
-                      key={d.id}
-                      type="button"
-                      onClick={() => handlePickDriver(d.id)}
-                      className={`group flex flex-col justify-between rounded-2xl border p-3 text-left transition-all ${
-                        isSelected
-                          ? 'border-indigo-600 bg-indigo-50/90 ring-2 ring-indigo-500/20 shadow-sm'
-                          : isUnpaid
-                          ? 'border-rose-200/80 bg-rose-50/40 hover:border-rose-400 hover:bg-rose-50/80 hover:shadow-sm'
-                          : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50'
+          <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {selectedDriverCaisses.map((c) => {
+              const isSelected = selectedDriverId === c.id;
+              const isUnpaid = c.statut === 'NON PAYE';
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => handlePickDriver(c.id, !isUnpaid)}
+                  className={`cursor-pointer rounded-2xl border p-3.5 transition-all ${
+                    isSelected
+                      ? 'border-indigo-600 bg-indigo-50/90 ring-2 ring-indigo-500/20 shadow-sm'
+                      : isUnpaid
+                      ? 'border-rose-200 bg-rose-50/50 hover:border-rose-400 hover:bg-rose-50'
+                      : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`font-mono text-xs font-black px-2 py-0.5 rounded-lg ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white'
+                            : isUnpaid
+                            ? 'bg-rose-600 text-white'
+                            : 'bg-slate-200 text-slate-800'
+                        }`}
+                      >
+                        TR {c.tr}
+                      </span>
+                      <span className="text-xs font-bold text-slate-900 truncate">{c.nom}</span>
+                    </div>
+                    <span
+                      className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        isUnpaid
+                          ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                          : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-1.5 w-full">
-                        <span
-                          className={`font-mono text-xs font-black px-2 py-0.5 rounded-lg ${
-                            isSelected
-                              ? 'bg-indigo-600 text-white'
-                              : isUnpaid
-                              ? 'bg-rose-600 text-white'
-                              : 'bg-slate-200 text-slate-800'
-                          }`}
-                        >
-                          TR {d.tr}
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            isUnpaid
-                              ? 'bg-rose-100 text-rose-700 border border-rose-200'
-                              : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                          }`}
-                        >
-                          {d.statut}
-                        </span>
-                      </div>
+                      {c.statut}
+                    </span>
+                  </div>
 
-                      <div className="mt-2">
-                        <p className="truncate text-xs font-bold text-slate-900 group-hover:text-indigo-950">
-                          {d.nom}
-                        </p>
-                        <div className="mt-0.5 flex items-center justify-between text-[11px] text-slate-500">
-                          <span className="truncate">{d.programmeJour || 'STAND-BY'}</span>
-                          {d.montantBordereau && d.montantBordereau > 0 ? (
-                            <span className="num font-bold text-indigo-600">
-                              {formatMoney(d.montantBordereau)} TND
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                  <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
+                    <span>
+                      Circuit : <strong className="text-slate-900">{c.programmeJour || 'STAND-BY'}</strong>
+                    </span>
+                    {c.montantBordereau && c.montantBordereau > 0 ? (
+                      <span className="num font-bold text-indigo-600">
+                        {formatMoney(c.montantBordereau)} TND
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {c.reclamation && (
+                    <p className="mt-1.5 text-[11px] font-semibold text-rose-700 truncate">
+                      {c.reclamation}
+                    </p>
+                  )}
+
+                  <div className="mt-2.5 flex items-center justify-between border-t border-slate-200/70 pt-2">
+                    <span className="text-[11px] font-semibold text-indigo-700">
+                      {isSelected
+                        ? isUnpaid
+                          ? '✓ Caisse active au guichet'
+                          : 'Cliquez pour passer en NON PAYÉ'
+                        : 'Cliquez pour travailler sur cette caisse'}
+                    </span>
+                    {!isUnpaid && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePickDriver(c.id, true);
+                        }}
+                        className="rounded-lg bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-rose-500"
+                      >
+                        Mettre Non Payé
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Main Terminal Grid */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
