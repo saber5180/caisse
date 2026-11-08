@@ -38,17 +38,31 @@ const ICON_COLORS: Record<NavItem['icon'], string> = {
 };
 
 const SECTIONS = [
-  { id: 'workspace', title: 'Trésorerie & Guichet' },
+  { id: 'workspace', title: 'Trésorerie & Pilotage' },
   { id: 'operations', title: 'Opérations Flotte' },
-  { id: 'reports', title: 'Audit & Intégration' },
+  { id: 'reports', title: 'Journal & Audit' },
 ] as const;
+
+// Pages masquées pour le profil Superviseur (Spécification 4)
+const SUPERVISEUR_HIDDEN_HREFS = new Set([
+  '/caisse',
+  '/billetterie',
+  '/chauffeurs',
+  '/programme',
+]);
 
 export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const currentUser = useCaisseStore((state) => state.currentUser);
   const drivers = useCaisseStore((state) => state.drivers);
   const transactions = useCaisseStore((state) => state.transactions);
 
+  const isSuperviseur = currentUser?.role === 'superviseur';
   const nonPayeCount = drivers.filter((d) => d.statut === 'NON PAYE').length;
+
+  const visibleNavItems = isSuperviseur
+    ? NAV_ITEMS.filter((item) => !SUPERVISEUR_HIDDEN_HREFS.has(item.href))
+    : NAV_ITEMS;
 
   const renderLink = (item: NavItem) => {
     const Icon = ICONS[item.icon];
@@ -65,6 +79,15 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
       badgeText = String(transactions.length);
       badgeClass = 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25 font-bold';
     }
+
+    const displayLabel =
+      isSuperviseur && item.href === '/'
+        ? 'Pilotage Superviseur'
+        : isSuperviseur && item.href === '/journal'
+        ? 'Journal des Transactions Avancé'
+        : isSuperviseur && item.href === '/billetterie/historique'
+        ? 'Historique de Clôture'
+        : item.label;
 
     return (
       <li key={item.href}>
@@ -85,7 +108,7 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           >
             <Icon className="h-[16px] w-[16px]" />
           </span>
-          <span className="flex-1 truncate">{item.label}</span>
+          <span className="flex-1 truncate">{displayLabel}</span>
           {badgeText && (
             <span className={`rounded-full px-2 py-0.5 font-mono text-[10px] tabular-nums ${badgeClass}`}>
               {badgeText}
@@ -98,14 +121,16 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <nav className="flex-1 overflow-y-auto px-3 pb-4">
-      {SECTIONS.map((section) => (
-        <div key={section.id}>
-          <p className="nav-section-dark">{section.title}</p>
-          <ul className="space-y-1">
-            {NAV_ITEMS.filter((item) => item.group === section.id).map(renderLink)}
-          </ul>
-        </div>
-      ))}
+      {SECTIONS.map((section) => {
+        const itemsInSection = visibleNavItems.filter((item) => item.group === section.id);
+        if (itemsInSection.length === 0) return null;
+        return (
+          <div key={section.id}>
+            <p className="nav-section-dark">{section.title}</p>
+            <ul className="space-y-1">{itemsInSection.map(renderLink)}</ul>
+          </div>
+        );
+      })}
     </nav>
   );
 }

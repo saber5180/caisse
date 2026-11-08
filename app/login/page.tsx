@@ -1,13 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCaisseStore } from '@/lib/store';
 import {
   IconAlert,
   IconArrowRight,
   IconBuilding,
-  IconCheck,
   IconCoins,
   IconDatabase,
   IconPrinter,
@@ -21,15 +20,26 @@ export default function LoginPage() {
   const resetStoreForAccount = useCaisseStore((state) => state.resetStoreForAccount);
   const fetchAccountData = useCaisseStore((state) => state.fetchAccountData);
 
-  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [customDbUrl, setCustomDbUrl] = useState('');
-  const [showDbUrl, setShowDbUrl] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const reason = params.get('reason');
+      if (reason === 'blocked') {
+        setError(
+          'Votre caisse a été temporairement bloquée à distance par le Superviseur. Veuillez contacter la supervision.'
+        );
+      } else if (reason === 'force_logout') {
+        setError(
+          'Votre session a été déconnectée à distance par le Superviseur.'
+        );
+      }
+    }
+  }, []);
 
   const handleLogin = async (e?: React.FormEvent, customUser?: string, customPass?: string) => {
     if (e) e.preventDefault();
@@ -62,43 +72,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username,
-          password,
-          displayName,
-          customDbUrl: customDbUrl.trim() || undefined,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Erreur lors de la création du compte');
-      }
-
-      setSuccess('Espace caisse initialisé avec succès ! Redirection...');
-      resetStoreForAccount();
-      setCurrentUser(data.user);
-      await fetchAccountData();
-      setTimeout(() => {
-        router.push('/');
-      }, 700);
-    } catch (err: any) {
-      setError(err.message || 'Erreur lors de la création');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="flex min-h-screen bg-[#090D16] text-white">
       {/* Left Enterprise Showcase Panel (Desktop) */}
@@ -115,7 +88,7 @@ export default function LoginPage() {
                 Enterprise
               </span>
             </div>
-            <p className="text-xs text-slate-400">Système de Trésorerie & Flotte Multi-Caisses</p>
+            <p className="text-xs text-slate-400">Pilotage Centralisé CRNU · CRSF · CRTN</p>
           </div>
         </div>
 
@@ -123,14 +96,14 @@ export default function LoginPage() {
         <div className="my-auto max-w-lg py-10">
           <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/25 bg-indigo-500/10 px-3.5 py-1 text-xs font-bold text-indigo-300">
             <IconShield className="h-3.5 w-3.5" />
-            Architecture Multi-Comptes Isolée sur PostgreSQL
+            5 Comptes Officiels Synchronisés en Temps Réel
           </div>
 
           <h1 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight text-white xl:text-4xl">
-            Gérez vos encaissements chauffeurs avec une précision bancaire.
+            Supervision en direct & liaison automatique des caisses.
           </h1>
           <p className="mt-4 text-sm leading-relaxed text-slate-400">
-            Chaque agence ou caissier dispose de sa propre base de données étanche : flotte chauffeurs, terminal POS par coupure, comptage billetterie et édition de factures officielles Haute Définition.
+            Synchronisation instantanée entre le Programme Chauffeur, le Mouvement Chauffeur et les 3 caisses régionales (<strong>CRNU</strong>, <strong>CRSF</strong>, <strong>CRTN</strong>) sous le contrôle en temps réel du profil <strong>Superviseur</strong> et <strong>Admin</strong>.
           </p>
 
           {/* Feature Pillars */}
@@ -141,10 +114,10 @@ export default function LoginPage() {
               </div>
               <div>
                 <p className="text-xs font-extrabold text-white">
-                  Base de Données Propre par Compte
+                  Liaison Automatique Inter-Modules
                 </p>
                 <p className="mt-0.5 text-xs text-slate-400">
-                  Isolation complète des chauffeurs et transactions sur Neon PostgreSQL ou URL dédiée.
+                  Dès qu&apos;un chauffeur règle sa recette dans l&apos;une des caisses (CRNU, CRSF ou CRTN), son statut bascule instantanément sur « Chauffeur Payé » sur tous les écrans.
                 </p>
               </div>
             </div>
@@ -155,10 +128,10 @@ export default function LoginPage() {
               </div>
               <div>
                 <p className="text-xs font-extrabold text-white">
-                  Facturation & Décharges Haute Définition
+                  Supervision & Contrôle à Distance
                 </p>
                 <p className="mt-0.5 text-xs text-slate-400">
-                  Impression vectorielle nette au format A4 officiel signé ou Ticket Thermique 80mm.
+                  Suivi en direct du MT Espèce et des Versements par caisse, journal consolidé, archives de clôture et blocage / déconnexion à distance.
                 </p>
               </div>
             </div>
@@ -167,8 +140,8 @@ export default function LoginPage() {
 
         {/* Footer */}
         <div className="flex items-center justify-between text-xs text-slate-500">
-          <span>CaissePro Financial Suite</span>
-          <span className="font-mono">PostgreSQL · SSL Chiffré</span>
+          <span>CaissePro Financial Suite · 5 Comptes Officiels</span>
+          <span className="font-mono">CRNU · CRSF · CRTN</span>
         </div>
       </div>
 
@@ -184,224 +157,145 @@ export default function LoginPage() {
               CaissePro
             </h1>
             <p className="text-xs text-slate-500">
-              Trésorerie, Encaissement & Billetterie Multi-Comptes
+              Supervision & Trésorerie · CRNU · CRSF · CRTN
             </p>
           </div>
 
           <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-pro-lg sm:p-8">
-            <div className="mb-6">
-              <h2 className="text-xl font-extrabold tracking-tight text-slate-900">
-                {mode === 'login' ? 'Connexion à votre Caisse' : 'Créer un Espace Caisse'}
+            <div className="mb-5">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 ring-1 ring-indigo-200/60">
+                <IconShield className="h-3 w-3" />
+                Accès Restreint · 5 Comptes Officiels
+              </div>
+              <h2 className="mt-2.5 text-xl font-extrabold tracking-tight text-slate-900">
+                Connexion au Système
               </h2>
               <p className="mt-1 text-xs font-medium text-slate-500">
-                {mode === 'login'
-                  ? 'Accédez à votre environnement sécurisé et vos données dédiées.'
-                  : 'Déployez une nouvelle caisse vierge avec sa propre base isolée.'}
+                Sélectionnez votre profil officiel ou saisissez vos identifiants.
               </p>
-            </div>
-
-            {/* Segmented Mode Switcher */}
-            <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('login');
-                  setError(null);
-                }}
-                className={`rounded-lg py-2.5 transition-all ${
-                  mode === 'login'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                Se Connecter
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('register');
-                  setError(null);
-                }}
-                className={`rounded-lg py-2.5 transition-all ${
-                  mode === 'register'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                Créer un Compte
-              </button>
             </div>
 
             {/* Alerts */}
             {error && (
-              <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">
+              <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">
                 <IconAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
                 <span>{error}</span>
               </div>
             )}
 
-            {success && (
-              <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">
-                <IconCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                <span>{success}</span>
+            <form onSubmit={(e) => handleLogin(e)} className="space-y-4">
+              <div>
+                <label className="label">Identifiant Officiel</label>
+                <div className="relative">
+                  <IconUser className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="superviseur, admin, crnu, crsf ou crtn"
+                    className="input !pl-10"
+                  />
+                </div>
               </div>
-            )}
 
-            {mode === 'login' ? (
-              <form onSubmit={(e) => handleLogin(e)} className="mt-5 space-y-4">
-                <div>
-                  <label className="label">Identifiant Caisse / Utilisateur</label>
-                  <div className="relative">
-                    <IconUser className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="Ex: admin, sfax, tunis..."
-                      className="input !pl-10"
-                    />
-                  </div>
+              <div>
+                <label className="label">Mot de passe</label>
+                <div className="relative">
+                  <IconShield className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="input !pl-10"
+                  />
                 </div>
+              </div>
 
-                <div>
-                  <label className="label">Mot de passe</label>
-                  <div className="relative">
-                    <IconShield className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="password"
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="input !pl-10"
-                    />
-                  </div>
-                </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary mt-2 w-full !py-3 !text-sm"
+              >
+                <span>{loading ? 'Authentification...' : 'Se Connecter'}</span>
+                {!loading && <IconArrowRight className="h-4 w-4" />}
+              </button>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn-primary mt-2 w-full !py-3 !text-sm"
-                >
-                  <span>{loading ? 'Authentification...' : 'Accéder à ma Caisse'}</span>
-                  {!loading && <IconArrowRight className="h-4 w-4" />}
-                </button>
+              {/* 5 Official Accounts Selector */}
+              <div className="border-t border-slate-100 pt-5">
+                <p className="mb-3 text-center text-[10.5px] font-extrabold uppercase tracking-wider text-slate-400">
+                  Les 5 Comptes Officiels Configurés
+                </p>
 
-                {/* Quick 1-Click Demo Workspaces */}
-                <div className="border-t border-slate-100 pt-5">
-                  <p className="mb-2.5 text-center text-[10.5px] font-extrabold uppercase tracking-wider text-slate-400">
-                    Accès Rapide Espaces Démo (Bases Isolées)
-                  </p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { user: 'admin', pass: 'admin123', label: 'Admin', sub: '70 Chauff.' },
-                      { user: 'sfax', pass: 'sfax123', label: 'Agence Sfax', sub: 'Base dédiée' },
-                      { user: 'tunis', pass: 'tunis123', label: 'Agence Tunis', sub: 'Base dédiée' },
-                    ].map((acc) => (
-                      <button
-                        key={acc.user}
-                        type="button"
-                        disabled={loading}
-                        onClick={() => handleLogin(undefined, acc.user, acc.pass)}
-                        className="flex flex-col items-center rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-center transition-all hover:border-indigo-300 hover:bg-indigo-50/50"
-                      >
-                        <IconBuilding className="h-4 w-4 text-indigo-600" />
-                        <span className="mt-1 text-xs font-extrabold text-slate-800">
-                          {acc.label}
-                        </span>
-                        <span className="text-[10px] text-slate-400">{acc.sub}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleRegister} className="mt-5 space-y-4">
-                <div>
-                  <label className="label">Nom de l&apos;Agence ou Caisse</label>
-                  <div className="relative">
-                    <IconBuilding className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="Ex: Caisse Régionale Djerba"
-                      className="input !pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="label">Identifiant de Connexion</label>
-                  <div className="relative">
-                    <IconUser className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="Ex: djerba"
-                      className="input !pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="label">Mot de passe</label>
-                  <div className="relative">
-                    <IconShield className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="password"
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Minimum 4 caractères"
-                      className="input !pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div>
+                {/* Row 1: Superviseur & Admin */}
+                <div className="grid grid-cols-2 gap-2.5 mb-2.5">
                   <button
                     type="button"
-                    onClick={() => setShowDbUrl(!showDbUrl)}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700"
+                    disabled={loading}
+                    onClick={() => handleLogin(undefined, 'superviseur', 'sup123')}
+                    className="flex flex-col items-start rounded-2xl border border-violet-200 bg-violet-50/60 p-3 text-left transition-all hover:border-violet-400 hover:bg-violet-50"
                   >
-                    <IconDatabase className="h-3.5 w-3.5" />
-                    {showDbUrl
-                      ? 'Masquer la configuration PostgreSQL externe'
-                      : 'Connecter une URL PostgreSQL / Neon externe (Optionnel)'}
+                    <div className="flex w-full items-center justify-between">
+                      <span className="rounded-md bg-violet-600 px-1.5 py-0.5 text-[9px] font-black uppercase text-white">
+                        Superviseur
+                      </span>
+                      <IconShield className="h-4 w-4 text-violet-600" />
+                    </div>
+                    <span className="mt-1.5 text-xs font-extrabold text-slate-900">
+                      Compte Superviseur
+                    </span>
+                    <span className="text-[10px] font-medium text-slate-500">
+                      Consultation & Contrôle
+                    </span>
                   </button>
 
-                  {showDbUrl && (
-                    <div className="mt-2.5 rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
-                      <label className="label !text-[10px]">URL PostgreSQL Dédiée</label>
-                      <input
-                        type="text"
-                        value={customDbUrl}
-                        onChange={(e) => setCustomDbUrl(e.target.value)}
-                        placeholder="postgresql://user:pass@ep-xyz.neon.tech/neondb"
-                        className="input font-mono !text-xs"
-                      />
-                      <p className="mt-1.5 text-[10.5px] leading-relaxed text-slate-500">
-                        Si laissé vide, une base partitionnée vierge et isolée est créée automatiquement.
-                      </p>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleLogin(undefined, 'admin', 'admin123')}
+                    className="flex flex-col items-start rounded-2xl border border-indigo-200 bg-indigo-50/60 p-3 text-left transition-all hover:border-indigo-400 hover:bg-indigo-50"
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <span className="rounded-md bg-indigo-600 px-1.5 py-0.5 text-[9px] font-black uppercase text-white">
+                        Admin
+                      </span>
+                      <IconUser className="h-4 w-4 text-indigo-600" />
                     </div>
-                  )}
+                    <span className="mt-1.5 text-xs font-extrabold text-slate-900">
+                      Compte Admin
+                    </span>
+                    <span className="text-[10px] font-medium text-slate-500">
+                      Accès Complet Système
+                    </span>
+                  </button>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn-primary mt-2 w-full !py-3 !text-sm"
-                >
-                  <span>{loading ? 'Initialisation...' : 'Créer ma Caisse & Démarrer'}</span>
-                  {!loading && <IconArrowRight className="h-4 w-4" />}
-                </button>
-              </form>
-            )}
+                {/* Row 2: The 3 Normal Caisses CRNU, CRSF, CRTN */}
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { user: 'crnu', pass: 'crnu123', code: 'CRNU', sub: 'Caisse Normale' },
+                    { user: 'crsf', pass: 'crsf123', code: 'CRSF', sub: 'Caisse Normale' },
+                    { user: 'crtn', pass: 'crtn123', code: 'CRTN', sub: 'Caisse Normale' },
+                  ].map((acc) => (
+                    <button
+                      key={acc.user}
+                      type="button"
+                      disabled={loading}
+                      onClick={() => handleLogin(undefined, acc.user, acc.pass)}
+                      className="flex flex-col items-center rounded-xl border border-slate-200 bg-slate-50/80 p-2.5 text-center transition-all hover:border-emerald-400 hover:bg-emerald-50/50"
+                    >
+                      <IconBuilding className="h-4 w-4 text-emerald-600" />
+                      <span className="mt-1 font-mono text-xs font-black text-slate-900">
+                        {acc.code}
+                      </span>
+                      <span className="text-[10px] text-slate-400">{acc.sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       </div>

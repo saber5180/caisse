@@ -55,11 +55,15 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
     async function checkAuth() {
       try {
         const res = await fetch('/api/auth/me', { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          router.push('/login');
+          if (data.reason === 'blocked' || data.reason === 'force_logout') {
+            router.push(`/login?reason=${data.reason}`);
+          } else {
+            router.push('/login');
+          }
           return;
         }
-        const data = await res.json();
         if (data.authenticated && data.user) {
           if (isMounted) {
             const alreadyLoaded =
@@ -92,6 +96,24 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
       setCustomDbUrlInput(currentUser.customDbUrl || '');
     }
   }, [currentUser]);
+
+  // Route guard for Superviseur restricted pages (Spécification 4)
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'superviseur') return;
+    const restrictedPaths = ['/caisse', '/billetterie', '/chauffeurs', '/programme'];
+    if (restrictedPaths.includes(pathname)) {
+      router.replace('/');
+    }
+  }, [currentUser, pathname, router]);
+
+  // Real-time synchronization polling (every 4 seconds) across all accounts and windows
+  useEffect(() => {
+    if (pathname === '/login' || !currentUser) return;
+    const interval = setInterval(() => {
+      void fetchAccountData();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [pathname, currentUser, fetchAccountData]);
 
   // Auto-refresh alarms every minute
   useEffect(() => {

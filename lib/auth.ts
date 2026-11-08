@@ -11,9 +11,58 @@ export interface UserAccount {
   id: string;
   username: string;
   displayName: string;
-  role: string;
+  role: string; // 'superviseur' | 'admin' | 'cashier'
+  caisseCode?: string; // 'CRNU' | 'CRSF' | 'CRTN' | 'SUP' | 'ADMIN'
+  isBlocked?: boolean;
   customDbUrl?: string | null;
+  loginAt?: number;
+  iat?: number;
 }
+
+export const GLOBAL_FLEET_ACCOUNT_ID = 'acc-admin';
+
+export const OFFICIAL_ACCOUNTS = [
+  {
+    id: 'acc-superviseur',
+    username: 'superviseur',
+    password: 'sup123',
+    displayName: 'Superviseur Général',
+    role: 'superviseur',
+    caisseCode: 'SUP',
+  },
+  {
+    id: 'acc-admin',
+    username: 'admin',
+    password: 'admin123',
+    displayName: 'Administration Générale',
+    role: 'admin',
+    caisseCode: 'ADMIN',
+  },
+  {
+    id: 'acc-crnu',
+    username: 'crnu',
+    password: 'crnu123',
+    displayName: 'Caisse CRNU',
+    role: 'cashier',
+    caisseCode: 'CRNU',
+  },
+  {
+    id: 'acc-crsf',
+    username: 'crsf',
+    password: 'crsf123',
+    displayName: 'Caisse CRSF',
+    role: 'cashier',
+    caisseCode: 'CRSF',
+  },
+  {
+    id: 'acc-crtn',
+    username: 'crtn',
+    password: 'crtn123',
+    displayName: 'Caisse CRTN',
+    role: 'cashier',
+    caisseCode: 'CRTN',
+  },
+] as const;
 
 export function signToken(user: UserAccount): string {
   return jwt.sign(
@@ -22,7 +71,9 @@ export function signToken(user: UserAccount): string {
       username: user.username,
       displayName: user.displayName,
       role: user.role,
+      caisseCode: user.caisseCode || '',
       customDbUrl: user.customDbUrl || null,
+      loginAt: Date.now(),
     },
     JWT_SECRET,
     { expiresIn: '30d' }
@@ -45,71 +96,71 @@ export async function getSessionUser(): Promise<UserAccount | null> {
   return verifyToken(token);
 }
 
+let accountsInitialized = false;
+
 export async function ensureDefaultAccountsAndSeed() {
   await initDatabaseSchema();
+  if (accountsInitialized) return;
+
   const pool = getPool();
 
-  const countRes = await pool.query('SELECT COUNT(*) FROM caisse_accounts');
-  const count = parseInt(countRes.rows[0].count, 10);
+  for (const acc of OFFICIAL_ACCOUNTS) {
+    const existing = await pool.query(
+      'SELECT id, role, caisse_code FROM caisse_accounts WHERE username = $1',
+      [acc.username]
+    );
 
-  if (count === 0) {
-    // Seed default accounts
-    const defaultAccounts = [
-      {
-        id: 'acc-admin',
-        username: 'admin',
-        password: 'admin123',
-        displayName: 'Caisse Principale (Admin)',
-        role: 'admin',
-      },
-      {
-        id: 'acc-sfax',
-        username: 'sfax',
-        password: 'sfax123',
-        displayName: 'Caisse Régionale Sfax',
-        role: 'cashier',
-      },
-      {
-        id: 'acc-tunis',
-        username: 'tunis',
-        password: 'tunis123',
-        displayName: 'Caisse Régionale Tunis',
-        role: 'cashier',
-      },
-    ];
-
-    for (const acc of defaultAccounts) {
+    if (existing.rows.length === 0) {
       const hash = await bcrypt.hash(acc.password, 10);
       await pool.query(
-        `INSERT INTO caisse_accounts (id, username, password_hash, display_name, role)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (username) DO NOTHING`,
-        [acc.id, acc.username, hash, acc.displayName, acc.role]
+        `INSERT INTO caisse_accounts (id, username, password_hash, display_name, role, caisse_code, is_blocked)
+         VALUES ($1, $2, $3, $4, $5, $6, FALSE)
+         ON CONFLICT (id) DO UPDATE SET
+           username = EXCLUDED.username,
+           display_name = EXCLUDED.display_name,
+           role = EXCLUDED.role,
+           caisse_code = EXCLUDED.caisse_code`,
+        [acc.id, acc.username, hash, acc.displayName, acc.role, acc.caisseCode]
       );
-
-      // Seed initial drivers ONLY for the admin demo account
-      if (acc.id === 'acc-admin') {
-        for (const d of INITIAL_DRIVERS) {
-          await pool.query(
-            `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-             ON CONFLICT (account_id, id) DO NOTHING`,
-            [
-              d.id,
-              acc.id,
-              d.nom,
-              d.tr,
-              d.statut,
-              d.dateDerniere || new Date().toISOString(),
-              d.reclamation || '',
-              d.caissesDues || 0,
-              d.programmeJour || '',
-              d.circuitActuel || '',
-            ]
-          );
-        }
-      }
+    } else {
+      await pool.query(
+        `UPDATE caisse_accounts
+         SET display_name = $1, role = $2, caisse_code = $3
+         WHERE username = $4`,
+        [acc.displayName, acc.role, acc.caisseCode, acc.username]
+      );
     }
   }
+
+  // Ensure the shared global fleet (stored under GLOBAL_FLEET_ACCOUNT_ID = 'acc-admin') is seeded
+  const drvCountRes = await pool.query(
+    'SELECT COUNT(*) FROM caisse_drivers WHERE account_id = $1',
+    [GLOBAL_FLEET_ACCOUNT_ID]
+  );
+  const drvCount = parseInt(drvCountRes.rows[0].count, 10);
+
+  if (drvCount === 0) {
+    for (const d of INITIAL_DRIVERS) {
+      await pool.query(
+        `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (account_id, id) DO NOTHING`,
+        [
+          d.id,
+          GLOBAL_FLEET_ACCOUNT_ID,
+          d.nom,
+          d.tr,
+          d.statut,
+          d.dateDerniere || new Date().toISOString(),
+          d.reclamation || '',
+          d.caissesDues || 0,
+          d.programmeJour || '',
+          d.circuitActuel || '',
+        ]
+      );
+    }
+  }
+
+  accountsInitialized = true;
 }
 

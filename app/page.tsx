@@ -7,21 +7,26 @@ import { formatDateTime, formatMoney, getStatusBadge, cleanScannerTr } from '@/l
 import StatCard from '@/components/StatCard';
 import EmptyState from '@/components/EmptyState';
 import PrintReceiptModal, { ReceiptData } from '@/components/PrintReceiptModal';
-import { CashTransaction, Driver, DriverStatus } from '@/types/caisse';
+import { CashTransaction, Driver } from '@/types/caisse';
 import {
   IconAlert,
   IconArrowRight,
   IconBolt,
+  IconBuilding,
   IconCalculator,
   IconCheck,
   IconClose,
   IconCoins,
   IconEdit,
+  IconHistory,
+  IconLogout,
   IconPlus,
   IconPrinter,
   IconReceipt,
   IconSearch,
   IconSheet,
+  IconShield,
+  IconSync,
   IconTruck,
 } from '@/components/Icons';
 
@@ -29,14 +34,23 @@ export default function DashboardPage() {
   const currentUser = useCaisseStore((state) => state.currentUser);
   const drivers = useCaisseStore((state) => state.drivers);
   const transactions = useCaisseStore((state) => state.transactions);
+  const allTransactions = useCaisseStore((state) => state.allTransactions);
+  const caissesSummary = useCaisseStore((state) => state.caissesSummary);
   const updateDriver = useCaisseStore((state) => state.updateDriver);
   const executeBascule1230 = useCaisseStore((state) => state.executeBascule1230);
+  const controlCaisse = useCaisseStore((state) => state.controlCaisse);
+  const fetchAccountData = useCaisseStore((state) => state.fetchAccountData);
+  const isSyncing = useCaisseStore((state) => state.isSyncing);
+
+  const isSuperviseur = currentUser?.role === 'superviseur';
+  const isAdmin = currentUser?.role === 'admin';
+  const isSupervisorOrAdmin = isSuperviseur || isAdmin;
 
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
-  // Modals de navigation rapide par catégorie
+  // Modals de navigation rapide par catégorie (4 statuts chauffeurs + opérations)
   const [activeCategoryModal, setActiveCategoryModal] = useState<
-    'NON_PAYES' | 'PAYES' | 'PAS_DE_CAISSE' | 'VALIDES' | null
+    'NON_PAYES' | 'STANDBY_NON_PAYES' | 'PAYES' | 'PAS_DE_CAISSE' | 'VALIDES' | null
   >(null);
 
   // Modal d'inspection détaillée d'un chauffeur au clic sur la ligne
@@ -48,43 +62,68 @@ export default function DashboardPage() {
   const [editSousSerie, setEditSousSerie] = useState('');
   const [editMontantBordereau, setEditMontantBordereau] = useState<number>(0);
 
-  // Filtres du tableau de bord
-  const [tableFilter, setTableFilter] = useState<'ALL' | DriverStatus>('ALL');
+  // Filtres du tableau de bord chauffeurs
+  const [tableFilter, setTableFilter] = useState<
+    'ALL' | 'NON_PAYE_ACTIF' | 'STANDBY_NON_PAYE' | 'PAYE' | 'PAS DE CAISSE'
+  >('ALL');
   const [tableSearch, setTableSearch] = useState('');
 
-  const nonPayes = drivers.filter((d) => d.statut === 'NON PAYE');
+  // Filtres du journal temps réel sur le tableau de bord
+  const [journalCaisseFilter, setJournalCaisseFilter] = useState<'ALL' | 'CRNU' | 'CRSF' | 'CRTN'>(
+    'ALL'
+  );
+  const [journalSearch, setJournalSearch] = useState('');
+
+  // Classification des chauffeurs selon les 4 statuts exigés (Spécification 2) :
+  // 1. Chauffeur Non Payé (Circuit actif hors Stand-by)
+  // 2. Chauffeur Stand-by / Non Payé
+  // 3. Chauffeur Payé
+  // 4. Chauffeur Sans Caisse
+  const isStandbyCircuit = (prog?: string) => {
+    const p = (prog || '').trim().toUpperCase();
+    return !p || p === 'STAND-BY' || p === 'STANDBY';
+  };
+
+  const allNonPayes = drivers.filter((d) => d.statut === 'NON PAYE');
+  const nonPayesActifs = allNonPayes.filter((d) => !isStandbyCircuit(d.programmeJour));
+  const standbyNonPayes = allNonPayes.filter((d) => isStandbyCircuit(d.programmeJour));
   const payes = drivers.filter((d) => d.statut === 'PAYE');
   const pasDeCaisse = drivers.filter((d) => d.statut === 'PAS DE CAISSE');
 
   const totalDrivers = drivers.length;
-  const activeTours = nonPayes.length + payes.length;
+  const activeTours = allNonPayes.length + payes.length;
   const settlementPct =
     activeTours > 0 ? Math.round((payes.length / activeTours) * 100) : totalDrivers > 0 ? 100 : 0;
+
+  // Calcul des totaux globaux des 3 caisses (CRNU + CRSF + CRTN) (Spécification 1 & 5)
+  const globalMontantActuel = caissesSummary.reduce((sum, c) => sum + c.montantActuel, 0);
+  const globalMtEspece = caissesSummary.reduce((sum, c) => sum + c.mtEspece, 0);
+  const globalVersement = caissesSummary.reduce((sum, c) => sum + c.versement, 0);
+  const globalTotalCloture = caissesSummary.reduce((sum, c) => sum + c.totalCloture, 0);
 
   const totalEncaisse = transactions.reduce((sum, t) => sum + t.tPayer, 0);
   const totalAttendu = transactions.reduce((sum, t) => sum + t.recette, 0);
   const ecartGlobal = totalEncaisse - totalAttendu;
 
+  // Source globale de transactions pour calculer le mouvement de caisse inter-modules
+  const globalTxnsSource = allTransactions.length > 0 ? allTransactions : transactions;
+
   // Calcul dynamique des métriques enrichies par chauffeur (Bordereaux, Mouvements, Écarts)
   const enrichedDrivers = useMemo(() => {
     return drivers.map((d) => {
-      // Retrouve toutes les transactions enregistrées pour ce chauffeur (normalisé)
       const dTrClean = cleanScannerTr(d.tr);
-      const driverTxns = transactions.filter(
+      const driverTxns = globalTxnsSource.filter(
         (t) => cleanScannerTr(t.codeChauffeur) === dTrClean
       );
 
-      // État de mouvement de caisse (total réel encaissé)
       const mvtCaisse = driverTxns.reduce((sum, t) => sum + t.tPayer, 0);
-
-      // Montant du bordereau : valeur enregistrée ou somme théorique attendue des transactions
       const mtBordereau =
         typeof d.montantBordereau === 'number' && d.montantBordereau > 0
           ? d.montantBordereau
           : driverTxns.reduce((sum, t) => sum + t.recette, 0);
 
-      // Calcul automatique de l'écart : Différence entre le montant du bordereau et l'état de mouvement
       const ecart = Math.round((mtBordereau - mvtCaisse) * 1000) / 1000;
+      const lastPaidCaisse = driverTxns.find((t) => t.status === 'PAYE')?.caisseCode;
 
       return {
         ...d,
@@ -93,14 +132,25 @@ export default function DashboardPage() {
         montantBordereau: mtBordereau,
         mouvementCaisse: mvtCaisse,
         ecartBordereau: ecart,
+        paidCaisseCode: lastPaidCaisse,
       };
     });
-  }, [drivers, transactions]);
+  }, [drivers, globalTxnsSource]);
 
   // Filtrage combiné (Statut + Recherche)
   const filteredDrivers = useMemo(() => {
     return enrichedDrivers.filter((d) => {
-      const matchStatus = tableFilter === 'ALL' ? true : d.statut === tableFilter;
+      let matchStatus = true;
+      if (tableFilter === 'NON_PAYE_ACTIF') {
+        matchStatus = d.statut === 'NON PAYE' && !isStandbyCircuit(d.programmeJour);
+      } else if (tableFilter === 'STANDBY_NON_PAYE') {
+        matchStatus = d.statut === 'NON PAYE' && isStandbyCircuit(d.programmeJour);
+      } else if (tableFilter === 'PAYE') {
+        matchStatus = d.statut === 'PAYE';
+      } else if (tableFilter === 'PAS DE CAISSE') {
+        matchStatus = d.statut === 'PAS DE CAISSE';
+      }
+
       const q = tableSearch.toLowerCase().trim();
       const matchSearch = q
         ? d.nom.toLowerCase().includes(q) ||
@@ -113,12 +163,28 @@ export default function DashboardPage() {
     });
   }, [enrichedDrivers, tableFilter, tableSearch]);
 
-  // Cumuls financiers des bordereaux et mouvements
+  // Filtrage du Journal Temps Réel des 3 Caisses (CRNU, CRSF, CRTN)
+  const filteredJournalTransactions = useMemo(() => {
+    const source = isSupervisorOrAdmin ? globalTxnsSource : transactions;
+    return source.filter((t) => {
+      const matchCaisse =
+        journalCaisseFilter === 'ALL'
+          ? true
+          : (t.caisseCode || '').toUpperCase() === journalCaisseFilter;
+      const q = journalSearch.toLowerCase().trim();
+      const matchSearch = q
+        ? (t.nomChauffeur || '').toLowerCase().includes(q) ||
+          (t.codeChauffeur || '').toLowerCase().includes(q) ||
+          (t.caisseCode || '').toLowerCase().includes(q) ||
+          (t.id || '').toLowerCase().includes(q)
+        : true;
+      return matchCaisse && matchSearch;
+    });
+  }, [isSupervisorOrAdmin, globalTxnsSource, transactions, journalCaisseFilter, journalSearch]);
+
   const cumulBordereaux = enrichedDrivers.reduce((sum, d) => sum + (d.montantBordereau || 0), 0);
   const cumulMouvements = enrichedDrivers.reduce((sum, d) => sum + (d.mouvementCaisse || 0), 0);
   const cumulEcart = Math.round((cumulBordereaux - cumulMouvements) * 1000) / 1000;
-
-  const recentTransactions = transactions.slice(0, 6);
 
   const openTransactionReceipt = (t: CashTransaction) => {
     setReceiptData({
@@ -132,13 +198,14 @@ export default function DashboardPage() {
       versement: t.versement,
       rows: t.rawData?.rows || [],
       date: formatDateTime(t.date),
-      caisseName: currentUser?.displayName,
-      cashierName: currentUser?.username,
+      caisseName: t.caisseName || currentUser?.displayName,
+      cashierName: t.caisseCode || currentUser?.username,
     });
   };
 
   const startEditDriver = (e: React.MouseEvent, d: Driver) => {
     e.stopPropagation();
+    if (isSuperviseur) return;
     setEditingDriver(d);
     setEditSerie(d.serie && d.serie !== '—' ? d.serie : '');
     setEditSousSerie(d.sousSerie && d.sousSerie !== '—' ? d.sousSerie : '');
@@ -147,7 +214,7 @@ export default function DashboardPage() {
 
   const handleSaveDriverEdit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingDriver) {
+    if (editingDriver && !isSuperviseur) {
       updateDriver(editingDriver.id, {
         serie: editSerie.trim(),
         sousSerie: editSousSerie.trim(),
@@ -172,46 +239,76 @@ export default function DashboardPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[11px] font-bold text-indigo-300 backdrop-blur-sm">
               <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
               <span>
-                {currentUser?.displayName || 'Trésorerie Centrale'} · Base Isolée Active
+                {currentUser?.displayName || 'Trésorerie Centrale'} · Synchronisation Temps Réel Active
               </span>
             </div>
 
             <h1 className="mt-3 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-              Centre de Pilotage Trésorerie & Flotte
+              {isSuperviseur
+                ? 'Tableau de Bord Superviseur — Pilotage Temps Réel'
+                : 'Centre de Pilotage Trésorerie & Flotte'}
             </h1>
             <p className="mt-1 max-w-xl text-xs text-slate-400 sm:text-sm">
-              Suivi en temps réel des bordereaux, états de mouvement de caisse, décompte des coupures et alertes de recouvrement.
+              {isSuperviseur
+                ? 'Suivi en direct des recettes des caisses CRNU, CRSF et CRTN (MT Espèce & Versement), statut des chauffeurs, journal consolidé et contrôle à distance des caissiers.'
+                : 'Suivi en temps réel des bordereaux, états de mouvement de caisse, décompte des coupures et liaison automatique inter-modules.'}
             </p>
 
-            {/* Actions Rapides */}
+            {/* Actions Rapides (adaptées selon les restrictions Superviseur) */}
             <div className="mt-5 flex flex-wrap items-center gap-2.5">
-              <Link href="/caisse" className="btn-primary !px-4 !py-2.5 !text-xs sm:!text-sm">
-                <IconCalculator className="h-4 w-4" />
-                Ouvrir le Guichet Caisse
-              </Link>
-              <Link
-                href="/chauffeurs"
-                className="btn border border-white/15 bg-white/10 !px-4 !py-2.5 !text-xs font-bold text-white backdrop-blur-sm hover:bg-white/15 sm:!text-sm"
-              >
-                <IconPlus className="h-4 w-4" />
-                Gérer les Chauffeurs ({totalDrivers})
-              </Link>
-              <button
-                type="button"
-                onClick={() => {
-                  if (
-                    confirm(
-                      'Exécuter la Bascule de 12:30 ? Les tournées actives non réglées passeront en dette formelle.'
-                    )
-                  ) {
-                    executeBascule1230();
-                  }
-                }}
-                className="btn-amber !px-3.5 !py-2.5 !text-xs"
-              >
-                <IconBolt className="h-4 w-4" />
-                Bascule 12:30
-              </button>
+              {!isSuperviseur ? (
+                <>
+                  <Link href="/caisse" className="btn-primary !px-4 !py-2.5 !text-xs sm:!text-sm">
+                    <IconCalculator className="h-4 w-4" />
+                    Ouvrir le Guichet Caisse
+                  </Link>
+                  <Link
+                    href="/chauffeurs"
+                    className="btn border border-white/15 bg-white/10 !px-4 !py-2.5 !text-xs font-bold text-white backdrop-blur-sm hover:bg-white/15 sm:!text-sm"
+                  >
+                    <IconPlus className="h-4 w-4" />
+                    Gérer les Chauffeurs ({totalDrivers})
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        confirm(
+                          'Exécuter la Bascule de 12:30 ? Les tournées actives non réglées passeront en dette formelle.'
+                        )
+                      ) {
+                        executeBascule1230();
+                      }
+                    }}
+                    className="btn-amber !px-3.5 !py-2.5 !text-xs"
+                  >
+                    <IconBolt className="h-4 w-4" />
+                    Bascule 12:30
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link href="/journal" className="btn-primary !px-4 !py-2.5 !text-xs sm:!text-sm">
+                    <IconReceipt className="h-4 w-4" />
+                    Journal des Transactions Avancé
+                  </Link>
+                  <Link
+                    href="/billetterie/historique"
+                    className="btn border border-white/15 bg-white/10 !px-4 !py-2.5 !text-xs font-bold text-white backdrop-blur-sm hover:bg-white/15 sm:!text-sm"
+                  >
+                    <IconHistory className="h-4 w-4" />
+                    Historique des Clôtures (CRNU · CRSF · CRTN)
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => fetchAccountData()}
+                    className="btn border border-emerald-400/30 bg-emerald-500/20 !px-3.5 !py-2.5 !text-xs font-bold text-emerald-300 hover:bg-emerald-500/30"
+                  >
+                    <IconSync className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                    Actualiser en Direct
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -219,7 +316,9 @@ export default function DashboardPage() {
           <div className="w-full rounded-2xl border border-white/10 bg-white/[0.05] p-5 backdrop-blur-md xl:w-96">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-                Total Encaissé (Journal)
+                {isSupervisorOrAdmin
+                  ? 'Total Global des Caisses (CRNU+CRSF+CRTN)'
+                  : `Total Encaissé (${currentUser?.caisseCode || 'Journal'})`}
               </span>
               <span
                 className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold ${
@@ -228,21 +327,41 @@ export default function DashboardPage() {
                     : 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-400/30'
                 }`}
               >
-                Écart {ecartGlobal > 0 ? '+' : ''}
-                {formatMoney(ecartGlobal)} TND
+                En Direct
               </span>
             </div>
 
             <div className="mt-2 flex items-baseline gap-2">
               <span className="font-mono text-3xl font-extrabold tracking-tight text-white tabular-nums">
-                {formatMoney(totalEncaisse)}
+                {formatMoney(isSupervisorOrAdmin ? globalMontantActuel : totalEncaisse)}
               </span>
               <span className="font-mono text-xs font-bold text-indigo-300">TND</span>
             </div>
 
+            {isSupervisorOrAdmin && (
+              <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-white/[0.06] p-2.5 text-xs">
+                <div>
+                  <span className="block text-[10px] font-bold uppercase text-slate-400">
+                    Total MT Espèce
+                  </span>
+                  <strong className="font-mono text-emerald-300">
+                    {formatMoney(globalMtEspece)} TND
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold uppercase text-slate-400">
+                    Total Versement
+                  </span>
+                  <strong className="font-mono text-sky-300">
+                    {formatMoney(globalVersement)} TND
+                  </strong>
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 border-t border-white/10 pt-3.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-medium text-slate-300">Progression des règlements</span>
+                <span className="font-medium text-slate-300">Progression Flotte Globale</span>
                 <span className="font-mono font-bold text-emerald-400">{settlementPct}%</span>
               </div>
               <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10">
@@ -253,7 +372,7 @@ export default function DashboardPage() {
               </div>
               <div className="mt-2 flex justify-between text-[11px] text-slate-400">
                 <span>{payes.length} payé(s)</span>
-                <span>{nonPayes.length} en attente</span>
+                <span>{allNonPayes.length} non payé(s)</span>
               </div>
             </div>
           </div>
@@ -261,81 +380,308 @@ export default function DashboardPage() {
       </div>
 
       {/* =========================================================================
-          4 KPI STATCARDS CLIQUABLES POUR NAVIGATION DIRECTE
+          SPÉCIFICATION 1 & CONTRÔLE : SUIVI EN TEMPS RÉEL DES CAISSES CRNU, CRSF, CRTN
+          + GESTION DES DROITS ET DES CAISSIERS (BLOCAGE / DÉBLOCAGE / DÉCONNEXION)
       ========================================================================= */}
+      {caissesSummary.length > 0 && (
+        <div className="mb-6">
+          <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
+                <IconCoins className="h-4 w-4" />
+              </span>
+              <div>
+                <h2 className="text-sm font-extrabold tracking-tight text-slate-900 sm:text-base">
+                  1. Suivi des Recettes des Caisses en Temps Réel (CRNU · CRSF · CRTN)
+                </h2>
+                <p className="text-[11px] font-medium text-slate-500">
+                  Affichage dynamique en direct du Montant Actuel, MT Espèce, Versement, Total Clôture{isSupervisorOrAdmin ? ' et Contrôle à distance des caissiers' : ''}
+                </p>
+              </div>
+            </div>
+
+            {/* Cumul Global des 3 Caisses */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 px-3 py-1.5 text-xs">
+                <span className="font-bold text-indigo-950">Total Global Caisses : </span>
+                <strong className="font-mono font-black text-indigo-700">
+                  {formatMoney(globalMontantActuel)} TND
+                </strong>
+              </div>
+              <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-1.5 text-xs">
+                <span className="font-bold text-amber-950">Cumul Clôtures : </span>
+                <strong className="font-mono font-black text-amber-700">
+                  {formatMoney(globalTotalCloture)} TND
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            {caissesSummary.map((caisse) => (
+              <div
+                key={caisse.accountId}
+                className={`card relative overflow-hidden p-5 transition-all ${
+                  caisse.isBlocked
+                    ? 'border-2 border-rose-300 bg-rose-50/20'
+                    : 'border border-slate-200/90 bg-white'
+                }`}
+              >
+                {/* Top Header */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-2xl font-mono text-xs font-black text-white shadow-sm ${
+                        caisse.isBlocked
+                          ? 'bg-rose-600'
+                          : caisse.caisseCode === 'CRNU'
+                          ? 'bg-indigo-600'
+                          : caisse.caisseCode === 'CRSF'
+                          ? 'bg-emerald-600'
+                          : 'bg-sky-600'
+                      }`}
+                    >
+                      {caisse.caisseCode}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-sm font-extrabold text-slate-900">
+                          {caisse.displayName}
+                        </h3>
+                        <span className="font-mono text-[10px] font-bold text-slate-400">
+                          @{caisse.username}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-medium text-slate-500">
+                        {caisse.nbTransactions} opération{caisse.nbTransactions > 1 ? 's' : ''} en cours aujourd&apos;hui
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Live Status Pill */}
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider ${
+                      caisse.isBlocked
+                        ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-300'
+                        : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                    }`}
+                  >
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        caisse.isBlocked ? 'bg-rose-500' : 'animate-pulse bg-emerald-500'
+                      }`}
+                    />
+                    {caisse.isBlocked ? 'Bloquée' : 'En Direct'}
+                  </span>
+                </div>
+
+                {/* Montant Actuel en Temps Réel */}
+                <div className="mt-4 rounded-2xl bg-slate-900 p-4 text-white">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <span>Montant Actuel Temps Réel</span>
+                    <span className="font-mono text-emerald-400">{caisse.caisseCode}</span>
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-1.5">
+                    <span className="font-mono text-2xl font-black tracking-tight text-white tabular-nums">
+                      {formatMoney(caisse.montantActuel)}
+                    </span>
+                    <span className="font-mono text-xs font-bold text-slate-400">TND</span>
+                  </div>
+                </div>
+
+                {/* Détails Spécifiques par Caisse : MT Espèce & Versement */}
+                <div className="mt-3 grid grid-cols-2 gap-2.5">
+                  <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3">
+                    <span className="block text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">
+                      MT Espèce
+                    </span>
+                    <strong className="num mt-0.5 block text-sm font-black text-emerald-900">
+                      {formatMoney(caisse.mtEspece)} TND
+                    </strong>
+                  </div>
+
+                  <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/50 p-3">
+                    <span className="block text-[10px] font-extrabold uppercase tracking-wider text-indigo-700">
+                      Versement
+                    </span>
+                    <strong className="num mt-0.5 block text-sm font-black text-indigo-900">
+                      {formatMoney(caisse.versement)} TND
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Total de Clôture Individuel de la Caisse (Spécification 5) */}
+                <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2 text-xs">
+                  <span className="font-semibold text-slate-600">
+                    Total Clôtures ({caisse.nbClotures}) :
+                  </span>
+                  <Link
+                    href={`/billetterie/historique?caisse=${caisse.caisseCode}`}
+                    className="font-mono font-extrabold text-slate-900 hover:text-indigo-600 hover:underline"
+                  >
+                    {formatMoney(caisse.totalCloture)} TND →
+                  </Link>
+                </div>
+
+                {/* Gestion des Droits et des Caissiers (Contrôle à distance) - Réservé Superviseur & Admin */}
+                {isSupervisorOrAdmin && (
+                  <div className="mt-3.5 border-t border-slate-100 pt-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                        <IconShield className="h-3 w-3 text-violet-600" />
+                        Contrôle à distance Caissier
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {caisse.isBlocked ? (
+                        <button
+                          type="button"
+                          onClick={() => controlCaisse(caisse.accountId, 'unblock')}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-emerald-700"
+                        >
+                          <IconCheck className="h-3.5 w-3.5" />
+                          Débloquer {caisse.caisseCode}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `Bloquer temporairement la caisse ${caisse.caisseCode} à distance ? Le caissier sera immédiatement déconnecté et ne pourra plus saisir.`
+                              )
+                            ) {
+                              controlCaisse(caisse.accountId, 'block');
+                            }
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100"
+                        >
+                          <IconAlert className="h-3.5 w-3.5" />
+                          Bloquer Caisse
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (
+                            confirm(
+                              `Forcer la déconnexion immédiate de l'utilisateur de la caisse ${caisse.caisseCode} ?`
+                            )
+                          ) {
+                            controlCaisse(caisse.accountId, 'force_logout');
+                          }
+                        }}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200"
+                      >
+                        <IconLogout className="h-3.5 w-3.5" />
+                        Déconnecter
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          SPÉCIFICATION 2 : SUIVI DU STATUT DES CHAUFFEURS (4 STATUTS VISUELS CLIQUABLES)
+          1. Chauffeur Non Payé
+          2. Chauffeur Stand-by / Non Payé
+          3. Chauffeur Payé
+          4. Chauffeur Sans Caisse
+      ========================================================================= */}
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-sm font-extrabold tracking-tight text-slate-900 sm:text-base">
+          2. Suivi du Statut des Chauffeurs (Synchronisation Temps Réel)
+        </h2>
+        <span className="text-xs font-semibold text-slate-500">
+          Total Flotte : <strong>{totalDrivers}</strong> chauffeurs
+        </span>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Chauffeurs Non Payés"
-          value={nonPayes.length}
+          label="Chauffeur Non Payé"
+          value={nonPayesActifs.length}
           icon={<IconAlert className="h-5 w-5" />}
           accent="rose"
-          progress={totalDrivers > 0 ? (nonPayes.length / totalDrivers) * 100 : 0}
-          hint="👉 Cliquez pour ouvrir la liste des impayés"
+          progress={totalDrivers > 0 ? (nonPayesActifs.length / totalDrivers) * 100 : 0}
+          hint="👉 Tournées actives non réglées (Cliquer)"
           onClick={() => setActiveCategoryModal('NON_PAYES')}
         />
         <StatCard
-          label="Chauffeurs Payés"
+          label="Chauffeur Stand-by / Non Payé"
+          value={standbyNonPayes.length}
+          icon={<IconBolt className="h-5 w-5" />}
+          accent="amber"
+          progress={totalDrivers > 0 ? (standbyNonPayes.length / totalDrivers) * 100 : 0}
+          hint="👉 En Stand-by avec caisse non payée (Cliquer)"
+          onClick={() => setActiveCategoryModal('STANDBY_NON_PAYES')}
+        />
+        <StatCard
+          label="Chauffeur Payé"
           value={payes.length}
           icon={<IconCheck className="h-5 w-5" />}
           accent="emerald"
           progress={totalDrivers > 0 ? (payes.length / totalDrivers) * 100 : 0}
-          hint="👉 Cliquez pour voir les caisses acquittées"
+          hint="👉 Recette validée en caisse (Cliquer)"
           onClick={() => setActiveCategoryModal('PAYES')}
         />
         <StatCard
-          label="Sans Caisse / Repos"
+          label="Chauffeur Sans Caisse"
           value={pasDeCaisse.length}
           icon={<IconTruck className="h-5 w-5" />}
-          accent="amber"
-          progress={totalDrivers > 0 ? (pasDeCaisse.length / totalDrivers) * 100 : 0}
-          hint="👉 Cliquez pour afficher les chauffeurs au repos"
-          onClick={() => setActiveCategoryModal('PAS_DE_CAISSE')}
-        />
-        <StatCard
-          label="Opérations Validées"
-          value={transactions.length}
-          unit="reçus"
-          icon={<IconReceipt className="h-5 w-5" />}
           accent="indigo"
-          progress={transactions.length > 0 ? 100 : 0}
-          hint="👉 Cliquez pour afficher les reçus validés"
-          onClick={() => setActiveCategoryModal('VALIDES')}
+          progress={totalDrivers > 0 ? (pasDeCaisse.length / totalDrivers) * 100 : 0}
+          hint="👉 Chauffeurs sans caisse / repos (Cliquer)"
+          onClick={() => setActiveCategoryModal('PAS_DE_CAISSE')}
         />
       </div>
 
       {/* =========================================================================
-          BARRE DE REPARTITION DE LA FLOTTE AVEC SEGMENTS CLIQUABLES
+          BARRE DE REPARTITION DE LA FLOTTE AVEC LES 4 SEGMENTS CLIQUABLES
       ========================================================================= */}
       {totalDrivers > 0 && (
         <div className="card mt-5 p-4 sm:px-6">
           <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
             <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
-              Répartition Flotte en Temps Réel ({totalDrivers} Chauffeurs)
+              Indicateur Visuel des 4 Statuts Chauffeurs ({totalDrivers} Chauffeurs)
             </span>
             <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setActiveCategoryModal('PAYES')}
-                className="flex items-center gap-1.5 text-emerald-700 hover:underline"
-              >
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                Payés ({payes.length})
-              </button>
               <button
                 type="button"
                 onClick={() => setActiveCategoryModal('NON_PAYES')}
                 className="flex items-center gap-1.5 text-rose-700 hover:underline"
               >
                 <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-                Non Payés ({nonPayes.length})
+                Chauffeur Non Payé ({nonPayesActifs.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveCategoryModal('STANDBY_NON_PAYES')}
+                className="flex items-center gap-1.5 text-amber-700 hover:underline"
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                Stand-by / Non Payé ({standbyNonPayes.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveCategoryModal('PAYES')}
+                className="flex items-center gap-1.5 text-emerald-700 hover:underline"
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                Chauffeur Payé ({payes.length})
               </button>
               <button
                 type="button"
                 onClick={() => setActiveCategoryModal('PAS_DE_CAISSE')}
-                className="flex items-center gap-1.5 text-amber-700 hover:underline"
+                className="flex items-center gap-1.5 text-indigo-700 hover:underline"
               >
-                <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-                Sans Caisse / Repos ({pasDeCaisse.length})
+                <span className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                Chauffeur Sans Caisse ({pasDeCaisse.length})
               </button>
             </div>
           </div>
@@ -346,23 +692,31 @@ export default function DashboardPage() {
                 className="bg-emerald-500 transition-all duration-500 cursor-pointer"
                 style={{ width: `${(payes.length / totalDrivers) * 100}%` }}
                 onClick={() => setActiveCategoryModal('PAYES')}
-                title="Afficher les Chauffeurs Payés"
+                title="Chauffeur Payé"
               />
             )}
-            {nonPayes.length > 0 && (
+            {nonPayesActifs.length > 0 && (
               <div
                 className="bg-rose-500 transition-all duration-500 cursor-pointer"
-                style={{ width: `${(nonPayes.length / totalDrivers) * 100}%` }}
+                style={{ width: `${(nonPayesActifs.length / totalDrivers) * 100}%` }}
                 onClick={() => setActiveCategoryModal('NON_PAYES')}
-                title="Afficher les Chauffeurs Non Payés"
+                title="Chauffeur Non Payé"
+              />
+            )}
+            {standbyNonPayes.length > 0 && (
+              <div
+                className="bg-amber-500 transition-all duration-500 cursor-pointer"
+                style={{ width: `${(standbyNonPayes.length / totalDrivers) * 100}%` }}
+                onClick={() => setActiveCategoryModal('STANDBY_NON_PAYES')}
+                title="Chauffeur Stand-by / Non Payé"
               />
             )}
             {pasDeCaisse.length > 0 && (
               <div
-                className="bg-amber-400 transition-all duration-500 cursor-pointer"
+                className="bg-indigo-400 transition-all duration-500 cursor-pointer"
                 style={{ width: `${(pasDeCaisse.length / totalDrivers) * 100}%` }}
                 onClick={() => setActiveCategoryModal('PAS_DE_CAISSE')}
-                title="Afficher Sans Caisse / Repos"
+                title="Chauffeur Sans Caisse"
               />
             )}
           </div>
@@ -370,26 +724,27 @@ export default function DashboardPage() {
       )}
 
       {/* =========================================================================
-          TABLEAU DE BORD : BORDEREAUX, SÉRIE, SOUS-SÉRIE & MOUVEMENTS DE CAISSE
+          TABLEAU DE BORD : BORDEREAUX, SÉRIE, SOUS-SÉRIE & JOURNAL DES CAISSES
       ========================================================================= */}
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
-        {/* Colonnes 1 & 2 : Tableau Consolidé avec Lignes Cliquables */}
+        {/* Colonnes 1 & 2 : Tableau Consolidé des Chauffeurs avec Lignes Cliquables */}
         <div className="card overflow-hidden xl:col-span-2">
-          {/* Card Header & Filter Tabs */}
           <div className="card-header flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
                 <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 font-bold text-xs ring-1 ring-indigo-200/70">
                   <IconSheet className="h-4 w-4" />
                 </span>
-                <h2 className="card-title text-sm">Tableau de Bord & Mouvements de Caisse</h2>
+                <h2 className="card-title text-sm">
+                  Suivi Global des Chauffeurs & Liaison Inter-Modules
+                </h2>
               </div>
               <p className="text-[11px] font-medium text-slate-400 mt-0.5">
-                Suivi des séries, bordereaux saisis, encaissements et calcul automatique des écarts
+                Synchronisation automatique en temps réel entre Programme, Mouvement et Caisses (CRNU, CRSF, CRTN)
               </p>
             </div>
 
-            {/* Onglets Filtre Rapide */}
+            {/* Onglets Filtre Rapide selon les 4 Statuts */}
             <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
               <button
                 type="button"
@@ -404,14 +759,25 @@ export default function DashboardPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setTableFilter('NON PAYE')}
+                onClick={() => setTableFilter('NON_PAYE_ACTIF')}
                 className={`rounded-xl px-2.5 py-1 text-xs font-bold transition-all ${
-                  tableFilter === 'NON PAYE'
+                  tableFilter === 'NON_PAYE_ACTIF'
                     ? 'bg-rose-600 text-white shadow-sm'
                     : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
                 }`}
               >
-                Non Payés ({nonPayes.length})
+                Non Payé ({nonPayesActifs.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTableFilter('STANDBY_NON_PAYE')}
+                className={`rounded-xl px-2.5 py-1 text-xs font-bold transition-all ${
+                  tableFilter === 'STANDBY_NON_PAYE'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                }`}
+              >
+                Stand-by / Non Payé ({standbyNonPayes.length})
               </button>
               <button
                 type="button"
@@ -422,18 +788,18 @@ export default function DashboardPage() {
                     : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                 }`}
               >
-                Payés ({payes.length})
+                Payé ({payes.length})
               </button>
               <button
                 type="button"
                 onClick={() => setTableFilter('PAS DE CAISSE')}
                 className={`rounded-xl px-2.5 py-1 text-xs font-bold transition-all ${
                   tableFilter === 'PAS DE CAISSE'
-                    ? 'bg-amber-500 text-white shadow-sm'
-                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
                 }`}
               >
-                Repos ({pasDeCaisse.length})
+                Sans Caisse ({pasDeCaisse.length})
               </button>
             </div>
           </div>
@@ -446,12 +812,11 @@ export default function DashboardPage() {
                 type="text"
                 value={tableSearch}
                 onChange={(e) => setTableSearch(e.target.value)}
-                placeholder="Rechercher par chauffeur, TR, série, sous-série..."
+                placeholder="Rechercher par chauffeur, TR, série, sous-série, circuit..."
                 className="input !pl-8 !py-1.5 text-xs font-medium w-full"
               />
             </div>
 
-            {/* Quick Metrics Pills */}
             <div className="flex items-center gap-2 text-xs flex-wrap">
               <span className="badge-slate font-mono text-[11px]">
                 Bordereaux: <strong>{formatMoney(cumulBordereaux)}</strong> TND
@@ -550,22 +915,24 @@ export default function DashboardPage() {
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={(e) => startEditDriver(e, d)}
-                          className="btn-ghost !py-1 !px-2 text-xs font-semibold"
-                          title="Modifier Série / Bordereau"
-                        >
-                          <IconEdit className="h-3.5 w-3.5" />
-                        </button>
-                        <Link
-                          href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                          className="btn-primary !py-1 !px-2.5 text-xs font-bold"
-                        >
-                          Encaisser
-                        </Link>
-                      </div>
+                      {!isSuperviseur && (
+                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={(e) => startEditDriver(e, d)}
+                            className="btn-ghost !py-1 !px-2 text-xs font-semibold"
+                            title="Modifier Série / Bordereau"
+                          >
+                            <IconEdit className="h-3.5 w-3.5" />
+                          </button>
+                          <Link
+                            href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
+                            className="btn-primary !py-1 !px-2.5 text-xs font-bold"
+                          >
+                            Encaisser
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -584,8 +951,8 @@ export default function DashboardPage() {
                       <th className="!text-right w-28">Mvt Caisse (TND)</th>
                       <th className="!text-right w-28">Écart (TND)</th>
                       <th className="w-28">Circuit</th>
-                      <th className="w-24">Statut</th>
-                      <th className="!text-center w-28">Actions</th>
+                      <th className="w-28">Statut</th>
+                      {!isSuperviseur && <th className="!text-center w-28">Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -596,45 +963,32 @@ export default function DashboardPage() {
                         className="cursor-pointer hover:bg-slate-50/80 transition-colors group"
                         title="Cliquez pour afficher la fiche détaillée du chauffeur"
                       >
-                        {/* TR */}
                         <td>
                           <span className="inline-flex rounded-lg bg-slate-900 px-2 py-0.5 font-mono text-xs font-extrabold text-white">
                             #{d.tr}
                           </span>
                         </td>
-
-                        {/* Nom */}
                         <td>
                           <p className="max-w-[150px] truncate font-bold text-slate-900" title={d.nom}>
                             {d.nom}
                           </p>
                         </td>
-
-                        {/* Série */}
                         <td>
                           <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
                             {d.serie}
                           </span>
                         </td>
-
-                        {/* Sous-série */}
                         <td>
                           <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
                             {d.sousSerie}
                           </span>
                         </td>
-
-                        {/* Calcul des Bordereaux */}
                         <td className="text-right num font-black text-xs text-slate-900">
                           {formatMoney(d.montantBordereau)}
                         </td>
-
-                        {/* Mouvements de Caisse */}
                         <td className="text-right num font-black text-xs text-emerald-700">
                           {formatMoney(d.mouvementCaisse)}
                         </td>
-
-                        {/* Calcul des Écarts (Différence Bordereau - Mouvement) */}
                         <td className="text-right">
                           <span
                             className={`inline-block px-2 py-0.5 rounded-full font-mono text-xs font-black ${
@@ -648,39 +1002,48 @@ export default function DashboardPage() {
                             {d.ecartBordereau > 0 ? '+' : ''}{formatMoney(d.ecartBordereau)}
                           </span>
                         </td>
-
-                        {/* Circuit */}
                         <td>
                           <span className="badge-slate max-w-[110px] truncate" title={d.programmeJour}>
                             {d.programmeJour || 'STAND-BY'}
                           </span>
                         </td>
-
-                        {/* Statut */}
                         <td>
-                          <span className={getStatusBadge(d.statut)}>{d.statut}</span>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={(e) => startEditDriver(e, d)}
-                              className="btn-ghost !p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
-                              title="Modifier Série / Sous-série / Bordereau"
-                            >
-                              <IconEdit className="h-3.5 w-3.5" />
-                            </button>
-                            <Link
-                              href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                              className="btn-primary !px-2.5 !py-1 !text-xs font-bold"
-                              title="Ouvrir au Guichet POS Caisse"
-                            >
-                              Encaisser
-                            </Link>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span className={getStatusBadge(d.statut)}>
+                              {d.statut === 'NON PAYE' && isStandbyCircuit(d.programmeJour)
+                                ? 'STAND-BY / NON PAYÉ'
+                                : d.statut === 'PAS DE CAISSE'
+                                ? 'SANS CAISSE'
+                                : d.statut}
+                            </span>
+                            {d.paidCaisseCode && d.statut === 'PAYE' && (
+                              <span className="font-mono text-[9px] font-bold text-emerald-700">
+                                Réglé : {d.paidCaisseCode}
+                              </span>
+                            )}
                           </div>
                         </td>
+                        {!isSuperviseur && (
+                          <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={(e) => startEditDriver(e, d)}
+                                className="btn-ghost !p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                                title="Modifier Série / Sous-série / Bordereau"
+                              >
+                                <IconEdit className="h-3.5 w-3.5" />
+                              </button>
+                              <Link
+                                href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
+                                className="btn-primary !px-2.5 !py-1 !text-xs font-bold"
+                                title="Ouvrir au Guichet POS Caisse"
+                              >
+                                Encaisser
+                              </Link>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -690,111 +1053,164 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Colonne 3 : Modules & Derniers Reçus Validés */}
+        {/* Colonne 3 : Historique & Journal des Caisses (CRNU, CRSF, CRTN) + Historique Clôtures */}
         <div className="space-y-6 xl:col-span-1">
-          {/* Modules Opérationnels */}
+          {/* Spécification 5 : Résumé Historique de Clôture par Caisse */}
           <div className="card p-5">
-            <h3 className="text-sm font-extrabold tracking-tight text-slate-900">
-              Modules Opérationnels
-            </h3>
-            <div className="mt-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-amber-200/70">
+                  <IconHistory className="h-4 w-4" />
+                </span>
+                <h3 className="text-sm font-extrabold tracking-tight text-slate-900">
+                  Historique de Clôture
+                </h3>
+              </div>
               <Link
-                href="/caisse"
-                className="group flex items-center justify-between rounded-2xl border border-slate-200/90 p-3.5 transition-all hover:border-indigo-300 hover:bg-indigo-50/35"
+                href="/billetterie/historique"
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
               >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200/70 transition-transform group-hover:scale-105">
-                    <IconCalculator className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">Guichet POS Caisse</p>
-                    <p className="text-[11px] text-slate-500">Scanner TR, coupures & factures</p>
-                  </div>
-                </div>
-                <IconArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-600" />
+                Détails →
               </Link>
+            </div>
 
-              <Link
-                href="/billetterie"
-                className="group flex items-center justify-between rounded-2xl border border-slate-200/90 p-3.5 transition-all hover:border-amber-300 hover:bg-amber-50/35"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-amber-200/70 transition-transform group-hover:scale-105">
-                    <IconCoins className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">Comptage Billetterie</p>
-                    <p className="text-[11px] text-slate-500">Inventaire coffre & PV officiel A4</p>
-                  </div>
-                </div>
-                <IconArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-amber-600" />
-              </Link>
+            <div className="mt-3 rounded-2xl bg-slate-900 p-3.5 text-white">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Montant Global de Clôture (CRNU + CRSF + CRTN)
+              </span>
+              <p className="mt-1 font-mono text-xl font-black text-amber-400">
+                {formatMoney(globalTotalCloture)} <span className="text-xs text-slate-300">TND</span>
+              </p>
+            </div>
 
-              <Link
-                href="/excel"
-                className="group flex items-center justify-between rounded-2xl border border-slate-200/90 p-3.5 transition-all hover:border-emerald-300 hover:bg-emerald-50/35"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200/70 transition-transform group-hover:scale-105">
-                    <IconSheet className="h-5 w-5" />
+            <div className="mt-3 space-y-2">
+              {caissesSummary.map((c) => (
+                <Link
+                  key={c.accountId}
+                  href={`/billetterie/historique?caisse=${c.caisseCode}`}
+                  className="flex items-center justify-between rounded-xl border border-slate-200/90 p-2.5 text-xs transition-all hover:border-amber-300 hover:bg-amber-50/30"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-md bg-slate-900 px-2 py-0.5 font-mono text-[10px] font-black text-white">
+                      {c.caisseCode}
+                    </span>
+                    <span className="font-bold text-slate-800">{c.displayName}</span>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">Centre Excel (.xlsx)</p>
-                    <p className="text-[11px] text-slate-500">Importation flotte & exports audit</p>
+                  <div className="text-right">
+                    <span className="font-mono font-extrabold text-slate-900 block">
+                      {formatMoney(c.totalCloture)} TND
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {c.nbClotures} clôture{c.nbClotures > 1 ? 's' : ''}
+                    </span>
                   </div>
-                </div>
-                <IconArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-600" />
-              </Link>
+                </Link>
+              ))}
             </div>
           </div>
 
-          {/* Derniers Reçus Validés avec Impression 1-Clic */}
+          {/* Spécification 3 & 6 : Journal des Transactions en Temps Réel (CRNU, CRSF, CRTN) */}
           <div className="card overflow-hidden">
             <div className="card-header !py-3.5">
-              <h3 className="card-title text-sm">Derniers Reçus Validés</h3>
+              <div>
+                <h3 className="card-title text-sm">
+                  Journal des Caisses (CRNU · CRSF · CRTN)
+                </h3>
+                <p className="text-[10px] text-slate-400">
+                  Mouvements du jour en temps réel
+                </p>
+              </div>
               <Link
                 href="/journal"
                 className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
               >
-                Journal →
+                Fenêtre Dédiée →
               </Link>
             </div>
 
-            {recentTransactions.length === 0 ? (
+            {/* Filtre par Caisse & Recherche Rapide */}
+            <div className="border-b border-slate-100 bg-slate-50/70 p-3 space-y-2">
+              {isSupervisorOrAdmin && (
+                <div className="grid grid-cols-4 gap-1">
+                  {(['ALL', 'CRNU', 'CRSF', 'CRTN'] as const).map((code) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => setJournalCaisseFilter(code)}
+                      className={`rounded-lg py-1 text-[11px] font-extrabold transition-all ${
+                        journalCaisseFilter === code
+                          ? 'bg-slate-900 text-white shadow-sm'
+                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {code === 'ALL' ? 'Toutes' : code}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="relative">
+                <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={journalSearch}
+                  onChange={(e) => setJournalSearch(e.target.value)}
+                  placeholder="Filtrer par chauffeur, TR, caisse..."
+                  className="input !pl-8 !py-1 text-xs"
+                />
+              </div>
+            </div>
+
+            {filteredJournalTransactions.length === 0 ? (
               <div className="p-8 text-center text-xs font-medium text-slate-400">
-                Aucun reçu d&apos;encaissement validé pour le moment.
+                Aucune transaction trouvée pour ce filtre.
               </div>
             ) : (
-              <div className="divide-y divide-slate-100">
-                {recentTransactions.map((t) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center justify-between gap-2 px-4 py-3 text-xs transition-colors hover:bg-slate-50/80"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-bold text-slate-900">{t.nomChauffeur}</p>
-                      <p className="text-[11px] text-slate-400">{formatDateTime(t.date)}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-right">
-                        <p className="font-mono font-extrabold text-emerald-700">
-                          {formatMoney(t.tPayer)} TND
-                        </p>
-                        <p className="font-mono text-[10px] text-slate-400">
-                          Att: {formatMoney(t.recette)}
+              <div className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
+                {filteredJournalTransactions.slice(0, 15).map((t) => {
+                  const mtEspece =
+                    typeof t.mtEspece === 'number'
+                      ? t.mtEspece
+                      : Math.round((t.tPayer - t.versement) * 1000) / 1000;
+                  return (
+                    <div
+                      key={`${t.accountId || ''}-${t.id}`}
+                      className="flex items-center justify-between gap-2 px-4 py-3 text-xs transition-colors hover:bg-slate-50/80"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="rounded bg-indigo-600 px-1.5 py-0.5 font-mono text-[9px] font-black text-white">
+                            {t.caisseCode || 'CAISSE'}
+                          </span>
+                          <p className="truncate font-bold text-slate-900">
+                            {t.nomChauffeur} (TR {t.codeChauffeur})
+                          </p>
+                        </div>
+                        <p className="mt-0.5 text-[10.5px] text-slate-400">
+                          {formatDateTime(t.date)} · Esp: <strong>{formatMoney(mtEspece)}</strong> | Ver: <strong>{formatMoney(t.versement)}</strong>
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => openTransactionReceipt(t)}
-                        className="btn-icon !h-8 !w-8 text-slate-400 hover:!bg-indigo-50 hover:!text-indigo-600"
-                        title="Imprimer Reçu / Facture HD"
-                      >
-                        <IconPrinter className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right">
+                          <p className="font-mono font-extrabold text-emerald-700">
+                            {formatMoney(t.tPayer)} TND
+                          </p>
+                          <p className="font-mono text-[10px] text-slate-400">
+                            Att: {formatMoney(t.recette)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openTransactionReceipt(t)}
+                          className="btn-icon !h-8 !w-8 text-slate-400 hover:!bg-indigo-50 hover:!text-indigo-600"
+                          title="Consulter / Imprimer Reçu"
+                        >
+                          <IconPrinter className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -802,7 +1218,7 @@ export default function DashboardPage() {
       </div>
 
       {/* =========================================================================
-          MODAL 1 : CATEGORIES FLOTTE (NON PAYÉS, PAYÉS, SANS CAISSE, REÇUS)
+          MODAL 1 : LES 4 STATUTS CHAUFFEURS & OPÉRATIONS VALIDÉES
       ========================================================================= */}
       {activeCategoryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-hidden no-print">
@@ -812,17 +1228,22 @@ export default function DashboardPage() {
           />
 
           <div className="relative w-full max-w-3xl rounded-3xl bg-white shadow-2xl z-10 overflow-hidden flex flex-col max-h-[85vh] border border-slate-200">
-            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/90 px-5 py-4">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  {activeCategoryModal === 'NON_PAYES' && '🔴 Chauffeurs Non Payés (Impayés en attente)'}
-                  {activeCategoryModal === 'PAYES' && '🟢 Chauffeurs Payés (Tournées Acquittées)'}
-                  {activeCategoryModal === 'PAS_DE_CAISSE' && '🟡 Chauffeurs Sans Caisse / Au Repos'}
-                  {activeCategoryModal === 'VALIDES' && '📄 Opérations de Caisse Validées'}
+                  {activeCategoryModal === 'NON_PAYES' &&
+                    '🔴 Chauffeur Non Payé (Circuits Actifs)'}
+                  {activeCategoryModal === 'STANDBY_NON_PAYES' &&
+                    '🟠 Chauffeur Stand-by / Non Payé'}
+                  {activeCategoryModal === 'PAYES' &&
+                    '🟢 Chauffeur Payé (Recettes Validées)'}
+                  {activeCategoryModal === 'PAS_DE_CAISSE' &&
+                    '🔵 Chauffeur Sans Caisse'}
+                  {activeCategoryModal === 'VALIDES' &&
+                    '📄 Opérations de Caisse Validées'}
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Fenêtre contextuelle ouverte directement depuis le Tableau de Bord
+                  Synchronisé en temps réel sur l&apos;ensemble des comptes (CRNU, CRSF, CRTN, Superviseur, Admin)
                 </p>
               </div>
               <button
@@ -834,7 +1255,6 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Modal Content List */}
             <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-3">
               {activeCategoryModal === 'VALIDES' ? (
                 transactions.length === 0 ? (
@@ -850,7 +1270,12 @@ export default function DashboardPage() {
                       >
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="badge-slate font-mono font-bold">TR {t.codeChauffeur}</span>
+                            <span className="badge-indigo font-mono font-bold">
+                              {t.caisseCode || 'CAISSE'}
+                            </span>
+                            <span className="badge-slate font-mono font-bold">
+                              TR {t.codeChauffeur}
+                            </span>
                             <span className="font-bold text-slate-900">{t.nomChauffeur}</span>
                           </div>
                           <p className="text-[11px] text-slate-400 mt-0.5">{formatDateTime(t.date)}</p>
@@ -881,7 +1306,9 @@ export default function DashboardPage() {
                 (() => {
                   const targetList =
                     activeCategoryModal === 'NON_PAYES'
-                      ? nonPayes
+                      ? nonPayesActifs
+                      : activeCategoryModal === 'STANDBY_NON_PAYES'
+                      ? standbyNonPayes
                       : activeCategoryModal === 'PAYES'
                       ? payes
                       : pasDeCaisse;
@@ -917,15 +1344,17 @@ export default function DashboardPage() {
                               </p>
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Link
-                              href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                              onClick={() => setActiveCategoryModal(null)}
-                              className="btn-primary !py-1.5 !px-3 text-xs font-bold"
-                            >
-                              Encaisser
-                            </Link>
-                          </div>
+                          {!isSuperviseur && (
+                            <div className="flex items-center gap-2">
+                              <Link
+                                href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
+                                onClick={() => setActiveCategoryModal(null)}
+                                className="btn-primary !py-1.5 !px-3 text-xs font-bold"
+                              >
+                                Encaisser
+                              </Link>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -934,7 +1363,6 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Modal Footer */}
             <div className="flex items-center justify-end border-t border-slate-100 bg-slate-50/90 px-5 py-3">
               <button
                 type="button"
@@ -959,7 +1387,6 @@ export default function DashboardPage() {
           />
 
           <div className="relative w-full max-w-lg rounded-3xl bg-white shadow-2xl z-10 overflow-hidden flex flex-col border border-slate-200">
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/90 px-5 py-4">
               <div className="flex items-center gap-2.5">
                 <span className="rounded-xl bg-slate-900 px-2.5 py-1 font-mono text-sm font-extrabold text-white">
@@ -981,9 +1408,7 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Body */}
             <div className="p-5 space-y-4 text-xs">
-              {/* Financial Box */}
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="rounded-2xl bg-slate-50 p-3 border border-slate-200">
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">
@@ -1018,7 +1443,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Informational Details */}
               <div className="rounded-2xl border border-slate-200 p-3.5 space-y-2 bg-slate-50/50">
                 <div className="flex justify-between">
                   <span className="text-slate-500 font-medium">Circuit Affecté :</span>
@@ -1048,29 +1472,40 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Footer Actions */}
             <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/90 px-5 py-3">
-              <button
-                type="button"
-                onClick={(e) => {
-                  const d = selectedDriverDetails;
-                  setSelectedDriverDetails(null);
-                  startEditDriver(e, d);
-                }}
-                className="btn-ghost !py-2 text-xs font-bold"
-              >
-                <IconEdit className="h-4 w-4" />
-                Modifier Série / Bordereau
-              </button>
+              {!isSuperviseur ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      const d = selectedDriverDetails;
+                      setSelectedDriverDetails(null);
+                      startEditDriver(e, d);
+                    }}
+                    className="btn-ghost !py-2 text-xs font-bold"
+                  >
+                    <IconEdit className="h-4 w-4" />
+                    Modifier Série / Bordereau
+                  </button>
 
-              <Link
-                href={`/caisse?tr=${encodeURIComponent(selectedDriverDetails.tr)}`}
-                onClick={() => setSelectedDriverDetails(null)}
-                className="btn-primary !py-2 text-xs font-bold shadow-md"
-              >
-                <IconCalculator className="h-4 w-4" />
-                Encaisser au Guichet
-              </Link>
+                  <Link
+                    href={`/caisse?tr=${encodeURIComponent(selectedDriverDetails.tr)}`}
+                    onClick={() => setSelectedDriverDetails(null)}
+                    className="btn-primary !py-2 text-xs font-bold shadow-md"
+                  >
+                    <IconCalculator className="h-4 w-4" />
+                    Encaisser au Guichet
+                  </Link>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDriverDetails(null)}
+                  className="btn-primary ml-auto !py-2 text-xs font-bold"
+                >
+                  Fermer
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1079,7 +1514,7 @@ export default function DashboardPage() {
       {/* =========================================================================
           MODAL 3 : ÉDITION RAPIDE SÉRIE, SOUS-SÉRIE ET MONTANT BORDEREAU
       ========================================================================= */}
-      {editingDriver && (
+      {editingDriver && !isSuperviseur && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-hidden no-print">
           <div
             className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"

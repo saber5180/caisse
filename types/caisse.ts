@@ -33,10 +33,14 @@ export interface CashTransaction {
   codeChauffeur?: string;
   nomChauffeur?: string;
   recette: number; // Montant théorique attendu
-  tPayer: number; // Montant réel encaissé
+  tPayer: number; // Montant réel encaissé (Total = MT Espèce + Versement)
+  mtEspece?: number; // Montant Espèces net (tPayer - versement)
   resAPayer: number; // Écart (tPayer - recette)
   versement: number; // Versement bancaire / coffre
   status: string;
+  caisseCode?: string; // 'CRNU' | 'CRSF' | 'CRTN' | 'ADMIN'
+  caisseName?: string;
+  accountId?: string;
   rows?: CashDeskRow[];
   rawData?: any;
 }
@@ -62,6 +66,8 @@ export interface BilletterieReport {
 export interface BilletterieHistoryEntry {
   id: string;
   accountId?: string;
+  caisseCode?: string;
+  caisseName?: string;
   dateCloture: string;
   totalCoupures: number;
   srfPieces: number;
@@ -75,4 +81,26 @@ export interface BilletterieHistoryEntry {
   caissierNom?: string;
   notes?: string;
   createdAt?: string;
+}
+
+export interface CaisseLiveSummary {
+  accountId: string;
+  caisseCode: 'CRNU' | 'CRSF' | 'CRTN';
+  displayName: string;
+  username: string;
+  isBlocked: boolean;
+  forceLogoutAt?: string | null;
+  updatedAt?: string | null;
+  // Montants actuels en temps réel (Journal du jour)
+  montantActuel: number; // Total encaissé (MT Espèce + Versement)
+  mtEspece: number; // Montant Espèces (MT Espèce)
+  versement: number; // Montant Versements
+  recetteAttendue: number;
+  ecart: number;
+  nbTransactions: number;
+  // Historique des clôtures pour cette caisse
+  totalCloture: number;
+  totalClotureEspece: number;
+  totalClotureVersement: number;
+  nbClotures: number;
 }

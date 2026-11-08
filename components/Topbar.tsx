@@ -23,13 +23,18 @@ export default function Topbar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const title = PAGE_TITLES[pathname] ?? 'CaissePro';
   const currentUser = useCaisseStore((state) => state.currentUser);
   const setCurrentUser = useCaisseStore((state) => state.setCurrentUser);
   const resetStoreForAccount = useCaisseStore((state) => state.resetStoreForAccount);
   const isSyncing = useCaisseStore((state) => state.isSyncing);
   const drivers = useCaisseStore((state) => state.drivers);
   const transactions = useCaisseStore((state) => state.transactions);
+
+  const isSuperviseur = currentUser?.role === 'superviseur';
+  const title =
+    isSuperviseur && pathname === '/'
+      ? 'Tableau de Pilotage Superviseur (Temps Réel)'
+      : PAGE_TITLES[pathname] ?? 'CaissePro';
 
   const nonPayeCount = drivers.filter((d) => d.statut === 'NON PAYE').length;
   const totalEncaisse = transactions.reduce((sum, t) => sum + t.tPayer, 0);
@@ -73,6 +78,11 @@ export default function Topbar({
             <span className="hidden sm:inline truncate">
               {currentUser?.displayName || 'Espace Trésorerie'}
             </span>
+            {isSuperviseur && (
+              <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-700">
+                CONSULTATION & CONTRÔLE
+              </span>
+            )}
           </div>
           <h1 className="truncate text-sm font-extrabold tracking-tight text-slate-900 sm:text-[15px]">
             {title}
@@ -89,7 +99,7 @@ export default function Topbar({
           title="Total encaissé enregistré dans le journal"
         >
           <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-            Encaissé
+            {isSuperviseur ? 'Global Caisses' : 'Encaissé'}
           </span>
           <span className="font-mono text-xs font-extrabold text-slate-900 tabular-nums">
             {formatMoney(totalEncaisse)} <span className="text-[10px] font-semibold text-slate-400">TND</span>
@@ -98,7 +108,7 @@ export default function Topbar({
 
         {/* Unpaid Alerts Pill */}
         <Link
-          href="/chauffeurs"
+          href={isSuperviseur ? '/' : '/chauffeurs'}
           className={`hidden items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition-all sm:inline-flex ${
             nonPayeCount > 0
               ? 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
@@ -124,8 +134,8 @@ export default function Topbar({
           {today}
         </span>
 
-        {/* Quick Guichet Button if not on /caisse */}
-        {pathname !== '/caisse' && (
+        {/* Quick Guichet Button if not on /caisse and NOT superviseur */}
+        {!isSuperviseur && pathname !== '/caisse' && (
           <Link
             href="/caisse"
             className="btn-primary hidden !px-3 !py-1.5 !text-xs xl:inline-flex"
@@ -142,7 +152,7 @@ export default function Topbar({
               type="button"
               onClick={onOpenDbModal}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200/95 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-800 shadow-sm transition-all hover:border-indigo-300 hover:bg-indigo-50/40"
-              title="Isolation & Base de données du compte"
+              title="Informations du compte & synchronisation"
             >
               <span
                 className={`h-2 w-2 rounded-full ${

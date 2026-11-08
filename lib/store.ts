@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import { Driver, DriverStatus, CashDeskRow, CashTransaction, CoinBreakdownItem } from '@/types/caisse';
+import {
+  Driver,
+  DriverStatus,
+  CashDeskRow,
+  CashTransaction,
+  CoinBreakdownItem,
+  CaisseLiveSummary,
+} from '@/types/caisse';
 import { INITIAL_DRIVERS } from '@/data/initialDrivers';
 import { recalculateReclamation, generateId, cleanScannerTr } from './utils';
 
@@ -43,6 +50,8 @@ export interface CurrentUser {
   username: string;
   displayName: string;
   role: string;
+  caisseCode?: string;
+  isBlocked?: boolean;
   customDbUrl?: string | null;
 }
 
@@ -55,8 +64,13 @@ interface CaisseStore {
   isSyncing: boolean;
   lastSyncTime: string | null;
   fetchAccountData: () => Promise<void>;
-  syncToBackend: () => Promise<void>;
+  syncToBackend: (syncDrivers?: boolean) => Promise<void>;
   resetStoreForAccount: () => void;
+  controlCaisse: (accountId: string, action: 'block' | 'unblock' | 'force_logout') => Promise<void>;
+
+  // Multi-Caisse Real-Time Summary (CRNU, CRSF, CRTN)
+  caissesSummary: CaisseLiveSummary[];
+  allTransactions: CashTransaction[];
 
   // Drivers
   drivers: Driver[];
@@ -121,26 +135,33 @@ interface CaisseStore {
 
 export const useCaisseStore = create<CaisseStore>()((set, get) => {
   let hasPendingSync = false;
+  let hasPendingDriverSync = false;
 
-  const triggerDebouncedSync = () => {
+  const triggerDebouncedSync = (includeDrivers = false) => {
+    if (get().currentUser?.role === 'superviseur') return;
     hasPendingSync = true;
+    if (includeDrivers) hasPendingDriverSync = true;
     if (syncTimeout) clearTimeout(syncTimeout);
     syncTimeout = setTimeout(() => {
-      get().syncToBackend();
+      get().syncToBackend(hasPendingDriverSync);
     }, 500);
   };
 
-  const triggerImmediateSync = () => {
+  const triggerImmediateSync = (includeDrivers = true) => {
+    if (get().currentUser?.role === 'superviseur') return;
     hasPendingSync = true;
+    if (includeDrivers) hasPendingDriverSync = true;
     if (syncTimeout) {
       clearTimeout(syncTimeout);
       syncTimeout = null;
     }
-    void get().syncToBackend();
+    void get().syncToBackend(hasPendingDriverSync);
   };
 
   const blankState = {
     drivers: [] as Driver[],
+    caissesSummary: [] as CaisseLiveSummary[],
+    allTransactions: [] as CashTransaction[],
     selectedDriverId: null,
     searchQuery: '',
     statusFilter: 'ALL' as const,
@@ -165,6 +186,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     setCurrentUser: (user) => {
       if (!user) {
         hasPendingSync = false;
+        hasPendingDriverSync = false;
         set({ currentUser: null, ...blankState });
       } else {
         set({ currentUser: user });
@@ -172,10 +194,50 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     },
     isSyncing: false,
     lastSyncTime: null,
+    caissesSummary: [],
+    allTransactions: [],
 
     resetStoreForAccount: () => {
       hasPendingSync = false;
+      hasPendingDriverSync = false;
       set(blankState);
+    },
+
+    controlCaisse: async (accountId, action) => {
+      try {
+        set({ isSyncing: true });
+        const res = await fetch('/api/superviseur/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accountId, action }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          set({
+            feedbackMessage: {
+              type: 'error',
+              text: json.error || 'Erreur lors du contrôle à distance',
+            },
+          });
+          return;
+        }
+        set({
+          feedbackMessage: {
+            type: 'success',
+            text: json.message || 'Action exécutée avec succès',
+          },
+        });
+        await get().fetchAccountData();
+      } catch (e: any) {
+        set({
+          feedbackMessage: {
+            type: 'error',
+            text: e?.message || 'Erreur réseau',
+          },
+        });
+      } finally {
+        set({ isSyncing: false });
+      }
     },
 
     fetchAccountData: async () => {
@@ -183,10 +245,29 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       try {
         set({ isSyncing: true });
         const res = await fetch('/api/caisse/data', { cache: 'no-store' });
+        if (res.status === 401 || res.status === 403) {
+          const errJson = await res.json().catch(() => ({}));
+          if (errJson.reason === 'blocked' || errJson.reason === 'force_logout') {
+            hasPendingSync = false;
+            hasPendingDriverSync = false;
+            set({ currentUser: null, ...blankState });
+            if (typeof window !== 'undefined') {
+              window.location.href = `/login?reason=${errJson.reason}`;
+            }
+            return;
+          }
+        }
         if (res.ok) {
           const json = await res.json();
           if (json.success && json.data && !hasPendingSync) {
-            const { drivers, transactions, billetterie, deskState } = json.data;
+            const {
+              drivers,
+              transactions,
+              allTransactions,
+              caissesSummary,
+              billetterie,
+              deskState,
+            } = json.data;
             const normalizedDrivers: Driver[] = Array.isArray(drivers)
               ? drivers.map((d: Driver) => {
                   const { reclamation } = recalculateReclamation(d);
@@ -200,6 +281,12 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             set({
               drivers: normalizedDrivers,
               transactions: Array.isArray(transactions) ? transactions : [],
+              allTransactions: Array.isArray(allTransactions)
+                ? allTransactions
+                : Array.isArray(transactions)
+                ? transactions
+                : [],
+              caissesSummary: Array.isArray(caissesSummary) ? caissesSummary : [],
               billetterieItems: rawBilletterie,
               srfMoins: billetterie?.srfMoins ?? 0,
               ver: billetterie?.ver ?? 0,
@@ -220,11 +307,15 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       }
     },
 
-    syncToBackend: async () => {
+    syncToBackend: async (syncDrivers = false) => {
+      if (get().currentUser?.role === 'superviseur') {
+        hasPendingSync = false;
+        hasPendingDriverSync = false;
+        return;
+      }
       try {
         set({ isSyncing: true });
-        const payload = {
-          drivers: get().drivers,
+        const payload: any = {
           transactions: get().transactions,
           billetterie: {
             items: get().billetterieItems,
@@ -241,15 +332,35 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           },
         };
 
+        if (syncDrivers || hasPendingDriverSync) {
+          payload.drivers = get().drivers;
+        }
+
         const res = await fetch('/api/caisse/data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
 
+        if (res.status === 401 || res.status === 403) {
+          const errJson = await res.json().catch(() => ({}));
+          if (errJson.reason === 'blocked' || errJson.reason === 'force_logout') {
+            hasPendingSync = false;
+            hasPendingDriverSync = false;
+            set({ currentUser: null, ...blankState });
+            if (typeof window !== 'undefined') {
+              window.location.href = `/login?reason=${errJson.reason}`;
+            }
+            return;
+          }
+        }
+
         if (res.ok) {
           hasPendingSync = false;
+          hasPendingDriverSync = false;
           set({ lastSyncTime: new Date().toLocaleTimeString('fr-FR') });
+          // Refresh multi-caisse summary & global driver states
+          void get().fetchAccountData();
         } else {
           console.error('Sync failed with status:', res.status);
         }
@@ -387,6 +498,9 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         return null;
       }
 
+      const currentUser = get().currentUser;
+      const mtEspece = Math.round((tPayer - deskVersement) * 1000) / 1000;
+
       const newTransaction: CashTransaction = {
         id: generateId('TRX'),
         date: new Date().toISOString(),
@@ -394,9 +508,13 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         nomChauffeur: driver.nom,
         recette: deskRecette,
         tPayer,
+        mtEspece,
         resAPayer,
         versement: deskVersement,
         status: resAPayer >= 0 ? 'PAYE' : 'NON PAYE',
+        caisseCode: currentUser?.caisseCode || currentUser?.username?.toUpperCase() || 'CAISSE',
+        caisseName: currentUser?.displayName || 'Caisse',
+        accountId: currentUser?.id,
         rawData: {
           rows: deskRows,
           versement: deskVersement,
@@ -489,7 +607,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           text: 'Guichet de caisse réinitialisé.',
         },
       });
-      triggerImmediateSync();
+      triggerImmediateSync(false);
     },
 
     clearFeedback: () => set({ feedbackMessage: null }),
@@ -764,7 +882,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           text: 'Journée clôturée avec succès : les transactions ont été archivées et le journal actif est réinitialisé.',
         },
       });
-      triggerImmediateSync();
+      triggerImmediateSync(false);
     },
   };
 });
