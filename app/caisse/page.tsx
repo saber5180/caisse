@@ -38,26 +38,87 @@ function CaisseContent() {
   const setDeskVersementCoffre = useCaisseStore((state) => state.setDeskVersementCoffre);
   const setDeskTrInput = useCaisseStore((state) => state.setDeskTrInput);
   const selectDriverByTr = useCaisseStore((state) => state.selectDriverByTr);
+  const selectDriverById = useCaisseStore((state) => state.selectDriverById);
   const validateCurrentSale = useCaisseStore((state) => state.validateCurrentSale);
   const resetDesk = useCaisseStore((state) => state.resetDesk);
 
   const scannerInputRef = useRef<HTMLInputElement>(null);
+  const hasAppliedInitialTr = useRef(false);
   const [printModalData, setPrintModalData] = useState<ReceiptData | null>(null);
+  const [showDriverDropdown, setShowDriverDropdown] = useState(false);
+  const [driverListTab, setDriverListTab] = useState<'NON_PAYE' | 'ALL'>('NON_PAYE');
+  const [showUnpaidPanel, setShowUnpaidPanel] = useState(true);
 
   const selectedDriver = drivers.find((d) => d.id === selectedDriverId);
 
-  // Auto-select TR if query param present, or default to Chauffeur Global (TR 0 / TR 1)
-  useEffect(() => {
-    if (initialTr) {
-      setDeskTrInput(initialTr);
-      selectDriverByTr(initialTr);
-    } else if (!selectedDriverId && drivers.length > 0) {
-      const defaultGlobal = drivers.find((d) => d.tr === '0') || drivers.find((d) => d.tr === '1');
-      if (defaultGlobal) {
-        selectDriverByTr(defaultGlobal.tr);
+  // Filtrer les chauffeurs valides (sans chauffeur global "0")
+  const validDrivers = drivers.filter((d) => d.tr !== '0' && d.id !== 'DRV-GLOBAL-0');
+  const unpaidDrivers = validDrivers.filter((d) => d.statut === 'NON PAYE');
+
+  // Recherche en direct selon la saisie dans le champ TR / Nom
+  const searchTerm = deskTrInput.trim().replace(/^tr\s*/i, '').toUpperCase();
+  const normalizedSearchTr = cleanScannerTr(searchTerm).toUpperCase();
+
+  const matchingDrivers = validDrivers
+    .filter((d) => {
+      if (!searchTerm) return d.statut === 'NON PAYE';
+      const dTrClean = cleanScannerTr(d.tr).toUpperCase();
+      const dTrRaw = d.tr.toUpperCase();
+      const dNom = d.nom.toUpperCase();
+      return (
+        dTrClean.includes(normalizedSearchTr) ||
+        dTrRaw.includes(searchTerm) ||
+        dNom.includes(searchTerm)
+      );
+    })
+    .sort((a, b) => {
+      // Prioriser correspondance exacte de TR, puis les NON PAYE
+      const aExact = cleanScannerTr(a.tr).toUpperCase() === normalizedSearchTr ? 0 : 1;
+      const bExact = cleanScannerTr(b.tr).toUpperCase() === normalizedSearchTr ? 0 : 1;
+      if (aExact !== bExact) return aExact - bExact;
+      const aUnpaid = a.statut === 'NON PAYE' ? 0 : 1;
+      const bUnpaid = b.statut === 'NON PAYE' ? 0 : 1;
+      return aUnpaid - bUnpaid;
+    });
+
+  const displayedPanelDrivers = (driverListTab === 'NON_PAYE' ? unpaidDrivers : validDrivers).filter(
+    (d) => {
+      if (!searchTerm || (selectedDriver && selectedDriver.tr.toUpperCase() === searchTerm)) {
+        return true;
       }
+      const dTrClean = cleanScannerTr(d.tr).toUpperCase();
+      return (
+        dTrClean.includes(normalizedSearchTr) ||
+        d.tr.toUpperCase().includes(searchTerm) ||
+        d.nom.toUpperCase().includes(searchTerm)
+      );
     }
-  }, [initialTr, selectedDriverId, drivers, setDeskTrInput, selectDriverByTr]);
+  );
+
+  // Nettoyer tout ancien chauffeur par défaut ("0") au montage, ou appliquer uniquement ?tr=... s'il est dans l'URL
+  useEffect(() => {
+    if (initialTr && initialTr !== '0') {
+      if (!hasAppliedInitialTr.current && validDrivers.length > 0) {
+        hasAppliedInitialTr.current = true;
+        setDeskTrInput(initialTr);
+        selectDriverByTr(initialTr);
+      }
+    } else if (!initialTr && (deskTrInput === '0' || selectedDriverId === 'DRV-GLOBAL-0')) {
+      selectDriverById(null);
+    }
+  }, [initialTr, validDrivers.length, deskTrInput, selectedDriverId, setDeskTrInput, selectDriverByTr, selectDriverById]);
+
+  const handlePickDriver = (driverId: string) => {
+    selectDriverById(driverId);
+    setShowDriverDropdown(false);
+    setTimeout(() => {
+      const recEl = document.getElementById('desk-recette') as HTMLInputElement | null;
+      if (recEl) {
+        recEl.focus();
+        recEl.select();
+      }
+    }, 50);
+  };
 
   // Compute live totals
   const { tPayer, resAPayer } = computeDeskTotals(deskRows, deskVersement, deskRecette);
@@ -93,8 +154,8 @@ function CaisseContent() {
       if (currentId === 'scanner-tr') {
         const clean = cleanScannerTr(deskTrInput);
         if (clean) {
-          setDeskTrInput(clean);
           selectDriverByTr(clean);
+          setShowDriverDropdown(false);
         }
       }
 
@@ -128,8 +189,8 @@ function CaisseContent() {
     if (e) e.preventDefault();
     const clean = cleanScannerTr(deskTrInput);
     if (clean) {
-      setDeskTrInput(clean);
       selectDriverByTr(clean);
+      setShowDriverDropdown(false);
       const recEl = document.getElementById('desk-recette') as HTMLInputElement | null;
       if (recEl) {
         recEl.focus();
@@ -233,9 +294,9 @@ function CaisseContent() {
       {/* FinTech Terminal Topbar: Scanner + Selected Driver */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {/* Scanner Barcode Box */}
-        <div className="card-pro p-4 sm:p-5 md:col-span-1">
+        <div className="card-pro relative p-4 sm:p-5 md:col-span-1">
           <label className="label flex items-center justify-between">
-            <span>Scanner Code Chauffeur (TR)</span>
+            <span>Scanner / Chercher Chauffeur (TR ou Nom)</span>
             <span className="badge-slate font-mono text-[10px]">C1</span>
           </label>
           <form onSubmit={handleScannerSubmit} className="flex gap-2">
@@ -245,29 +306,92 @@ function CaisseContent() {
                 id="scanner-tr"
                 ref={scannerInputRef}
                 type="text"
+                autoComplete="off"
                 value={deskTrInput}
+                onFocus={() => setShowDriverDropdown(true)}
                 onChange={(e) => {
                   const val = e.target.value;
-                  // Si un "0" non unique est tapé/scanné au début (ex: "037", "001"), on le supprime automatiquement
-                  const cleaned = cleanScannerTr(val);
-                  setDeskTrInput(val.startsWith('0') && val.length > 1 ? cleaned : val);
-                }}
-                onBlur={() => {
-                  if (deskTrInput.trim()) {
-                    setDeskTrInput(cleanScannerTr(deskTrInput));
+                  // Supprime automatiquement les "0" en début de code numérique (ex: "037" -> "37")
+                  const cleaned = val.replace(/^0+(?=\d)/, '');
+                  setDeskTrInput(cleaned);
+                  setShowDriverDropdown(true);
+                  if (!cleaned.trim()) {
+                    selectDriverById(null);
                   }
                 }}
+                onBlur={() => {
+                  setTimeout(() => setShowDriverDropdown(false), 180);
+                }}
                 onKeyDown={(e) => handleNavKeyDown(e, 'scanner-tr')}
-                placeholder="Ex: 37, 34, 107..."
-                className="input num !pl-9 uppercase font-bold"
+                placeholder="Tapez TR (ex: 37) ou nom..."
+                className="input num !pl-9 !pr-8 uppercase font-bold"
               />
+              {deskTrInput && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectDriverById(null);
+                    setShowDriverDropdown(true);
+                    scannerInputRef.current?.focus();
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  title="Vider le champ"
+                >
+                  <IconClose className="h-3.5 w-3.5" />
+                </button>
+              )}
+
+              {/* Dropdown de suggestion immédiate lors de la saisie / focus */}
+              {showDriverDropdown && matchingDrivers.length > 0 && (
+                <div className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-64 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                    <span>
+                      {searchTerm
+                        ? `Résultats (${matchingDrivers.length})`
+                        : `Chauffeurs Non Payés (${matchingDrivers.length})`}
+                    </span>
+                    <span>Cliquez pour choisir</span>
+                  </div>
+                  {matchingDrivers.slice(0, 12).map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handlePickDriver(d.id);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-xs transition ${
+                        selectedDriverId === d.id
+                          ? 'bg-indigo-50 text-indigo-950 font-bold'
+                          : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="badge-indigo font-mono text-[11px] font-bold shrink-0">
+                          TR {d.tr}
+                        </span>
+                        <span className="truncate font-semibold text-slate-900">{d.nom}</span>
+                      </div>
+                      <span
+                        className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          d.statut === 'NON PAYE'
+                            ? 'bg-rose-100 text-rose-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
+                        {d.statut}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <button type="submit" className="btn-primary !px-3 font-bold">
               OK
             </button>
           </form>
           <p className="mt-2 text-[11px] text-slate-400">
-            Scannez au lecteur optique ou tapez le code TR puis Entrée.
+            Scannez ou tapez un code TR / nom, ou cliquez sur une caisse non payée ci-dessous.
           </p>
         </div>
 
@@ -287,6 +411,14 @@ function CaisseContent() {
                   <strong className={selectedDriver.statut === 'NON PAYE' ? 'text-rose-600' : 'text-emerald-600'}>
                     {selectedDriver.statut}
                   </strong>
+                  {selectedDriver.montantBordereau ? (
+                    <>
+                      {' '}· Bordereau :{' '}
+                      <strong className="text-indigo-600 num">
+                        {formatMoney(selectedDriver.montantBordereau)} TND
+                      </strong>
+                    </>
+                  ) : null}
                 </p>
                 {selectedDriver.reclamation && (
                   <p className="mt-1 text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-200 inline-block">
@@ -299,14 +431,161 @@ function CaisseContent() {
                 <span className="badge-solid-emerald px-3 py-1 text-xs font-bold shadow-sm">
                   Chauffeur Pointé
                 </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectDriverById(null);
+                    scannerInputRef.current?.focus();
+                  }}
+                  className="btn-ghost !px-2.5 !py-1.5 text-xs text-slate-500 hover:text-rose-600"
+                  title="Désélectionner ce chauffeur"
+                >
+                  <IconClose className="h-3.5 w-3.5" />
+                  <span>Changer</span>
+                </button>
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-full text-slate-400 text-xs sm:text-sm py-4">
-              Scannez ou sélectionnez un chauffeur pour lier l&apos;encaissement.
+            <div className="flex flex-col sm:flex-row items-center justify-between h-full gap-3 py-2 text-slate-500">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 border border-rose-200">
+                  <IconTruck className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs sm:text-sm font-bold text-slate-800">
+                    Aucun chauffeur sélectionné par défaut
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Tapez un code TR ou cliquez directement sur un chauffeur <strong className="text-rose-600">Non Payé</strong> ci-dessous pour travailler sur sa caisse.
+                  </p>
+                </div>
+              </div>
+              <span className="badge-rose shrink-0 font-bold text-xs px-3 py-1">
+                {unpaidDrivers.length} Non Payé{unpaidDrivers.length > 1 ? 's' : ''}
+              </span>
             </div>
           )}
         </div>
+      </div>
+
+      {/* Panneau de Sélection Rapide : Caisses / Chauffeurs Non Payés */}
+      <div className="mt-4 card-pro p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse" />
+            <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800">
+              Caisses Chauffeurs Non Payées — Cliquez pour sélectionner et encaisser
+            </h3>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setDriverListTab('NON_PAYE');
+                setShowUnpaidPanel(true);
+              }}
+              className={`rounded-xl px-3 py-1 text-xs font-bold transition ${
+                driverListTab === 'NON_PAYE'
+                  ? 'bg-rose-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Non Payés ({unpaidDrivers.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDriverListTab('ALL');
+                setShowUnpaidPanel(true);
+              }}
+              className={`rounded-xl px-3 py-1 text-xs font-bold transition ${
+                driverListTab === 'ALL'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Tous ({validDrivers.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowUnpaidPanel((v) => !v)}
+              className="rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200"
+            >
+              {showUnpaidPanel ? 'Masquer' : 'Afficher'}
+            </button>
+          </div>
+        </div>
+
+        {showUnpaidPanel && (
+          <div className="mt-3">
+            {displayedPanelDrivers.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 py-6 text-center text-xs text-slate-400">
+                {driverListTab === 'NON_PAYE'
+                  ? 'Aucun chauffeur non payé correspondant.'
+                  : 'Aucun chauffeur trouvé.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 max-h-56 overflow-y-auto pr-1">
+                {displayedPanelDrivers.map((d) => {
+                  const isSelected = selectedDriverId === d.id;
+                  const isUnpaid = d.statut === 'NON PAYE';
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => handlePickDriver(d.id)}
+                      className={`group flex flex-col justify-between rounded-2xl border p-3 text-left transition-all ${
+                        isSelected
+                          ? 'border-indigo-600 bg-indigo-50/90 ring-2 ring-indigo-500/20 shadow-sm'
+                          : isUnpaid
+                          ? 'border-rose-200/80 bg-rose-50/40 hover:border-rose-400 hover:bg-rose-50/80 hover:shadow-sm'
+                          : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5 w-full">
+                        <span
+                          className={`font-mono text-xs font-black px-2 py-0.5 rounded-lg ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white'
+                              : isUnpaid
+                              ? 'bg-rose-600 text-white'
+                              : 'bg-slate-200 text-slate-800'
+                          }`}
+                        >
+                          TR {d.tr}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            isUnpaid
+                              ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                              : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                          }`}
+                        >
+                          {d.statut}
+                        </span>
+                      </div>
+
+                      <div className="mt-2">
+                        <p className="truncate text-xs font-bold text-slate-900 group-hover:text-indigo-950">
+                          {d.nom}
+                        </p>
+                        <div className="mt-0.5 flex items-center justify-between text-[11px] text-slate-500">
+                          <span className="truncate">{d.programmeJour || 'STAND-BY'}</span>
+                          {d.montantBordereau && d.montantBordereau > 0 ? (
+                            <span className="num font-bold text-indigo-600">
+                              {formatMoney(d.montantBordereau)} TND
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main Terminal Grid */}

@@ -105,6 +105,7 @@ interface CaisseStore {
   setDeskVersementCoffre: (val: number) => void;
   setDeskTrInput: (val: string) => void;
   selectDriverByTr: (tr: string) => Driver | null;
+  selectDriverById: (id: string | null) => Driver | null;
   validateCurrentSale: () => CashTransaction | null;
   resetDesk: () => void;
   clearFeedback: () => void;
@@ -136,6 +137,7 @@ interface CaisseStore {
 export const useCaisseStore = create<CaisseStore>()((set, get) => {
   let hasPendingSync = false;
   let hasPendingDriverSync = false;
+  let hasInitialLoaded = false;
 
   const triggerDebouncedSync = (includeDrivers = false) => {
     if (get().currentUser?.role === 'superviseur') return;
@@ -187,6 +189,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       if (!user) {
         hasPendingSync = false;
         hasPendingDriverSync = false;
+        hasInitialLoaded = false;
         set({ currentUser: null, ...blankState });
       } else {
         set({ currentUser: user });
@@ -200,6 +203,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     resetStoreForAccount: () => {
       hasPendingSync = false;
       hasPendingDriverSync = false;
+      hasInitialLoaded = false;
       set(blankState);
     },
 
@@ -250,6 +254,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           if (errJson.reason === 'blocked' || errJson.reason === 'force_logout') {
             hasPendingSync = false;
             hasPendingDriverSync = false;
+            hasInitialLoaded = false;
             set({ currentUser: null, ...blankState });
             if (typeof window !== 'undefined') {
               window.location.href = `/login?reason=${errJson.reason}`;
@@ -278,7 +283,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             const rawBilletterie = (billetterie?.items || DEFAULT_BILLETTERIE_ITEMS)
               .filter((item: CoinBreakdownItem) => Math.abs(item.valeur - 0.020) > 0.001);
 
-            set({
+            const baseUpdate: Partial<CaisseStore> = {
               drivers: normalizedDrivers,
               transactions: Array.isArray(transactions) ? transactions : [],
               allTransactions: Array.isArray(allTransactions)
@@ -287,17 +292,24 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
                 ? transactions
                 : [],
               caissesSummary: Array.isArray(caissesSummary) ? caissesSummary : [],
-              billetterieItems: rawBilletterie,
-              srfMoins: billetterie?.srfMoins ?? 0,
-              ver: billetterie?.ver ?? 0,
-              recettePhysiqueTheorique: billetterie?.recetteTheorique ?? 0,
-              deskRows: deskState?.deskRows || DEFAULT_DESK_ROWS,
-              deskRecette: deskState?.deskRecette ?? 0,
-              deskVersement: deskState?.deskVersement ?? 0,
-              deskTrInput: deskState?.deskTrInput || '',
-              selectedDriverId: deskState?.selectedDriverId || null,
               lastSyncTime: new Date().toLocaleTimeString('fr-FR'),
-            });
+            };
+
+            if (!hasInitialLoaded) {
+              hasInitialLoaded = true;
+              baseUpdate.billetterieItems = rawBilletterie;
+              baseUpdate.srfMoins = billetterie?.srfMoins ?? 0;
+              baseUpdate.ver = billetterie?.ver ?? 0;
+              baseUpdate.recettePhysiqueTheorique = billetterie?.recetteTheorique ?? 0;
+              baseUpdate.deskRows = deskState?.deskRows || DEFAULT_DESK_ROWS;
+              baseUpdate.deskRecette = deskState?.deskRecette ?? 0;
+              baseUpdate.deskVersement = deskState?.deskVersement ?? 0;
+              // Ne jamais sélectionner de chauffeur par défaut ("0" ou autre) au chargement
+              baseUpdate.deskTrInput = '';
+              baseUpdate.selectedDriverId = null;
+            }
+
+            set(baseUpdate);
           }
         }
       } catch (e) {
@@ -445,17 +457,59 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
 
     setDeskTrInput: (val) => set({ deskTrInput: val }),
 
-    selectDriverByTr: (tr) => {
-      // Normalisation du scan : supprime les "0" superflus au début (ex: "037" -> "37", "001" -> "1")
-      const cleanTr = cleanScannerTr(tr).toUpperCase();
-      const found = get().drivers.find((d) => cleanScannerTr(d.tr).toUpperCase() === cleanTr);
+    selectDriverById: (id) => {
+      if (!id) {
+        set({ selectedDriverId: null, deskTrInput: '' });
+        return null;
+      }
+      const found = get().drivers.find((d) => d.id === id);
       if (found) {
+        const nextRecette =
+          get().deskRecette === 0 && found.montantBordereau && found.montantBordereau > 0
+            ? found.montantBordereau
+            : get().deskRecette;
         set({
           selectedDriverId: found.id,
           deskTrInput: found.tr,
+          deskRecette: nextRecette,
           feedbackMessage: {
             type: 'success',
-            text: `Chauffeur sélectionné : ${found.nom} (${found.tr}) - Circuit: ${found.programmeJour || 'STAND-BY'}`,
+            text: `Chauffeur sélectionné : ${found.nom} (TR ${found.tr}) - Circuit: ${found.programmeJour || 'STAND-BY'}`,
+          },
+        });
+        triggerDebouncedSync();
+        return found;
+      }
+      return null;
+    },
+
+    selectDriverByTr: (tr) => {
+      if (!tr || !tr.trim()) {
+        set({ selectedDriverId: null, deskTrInput: '' });
+        return null;
+      }
+      // Supprime un éventuel préfixe "TR" (ex: "TR 37" -> "37") et les "0" au début ("037" -> "37")
+      const stripped = tr.trim().replace(/^tr\s*/i, '');
+      const cleanTr = cleanScannerTr(stripped).toUpperCase();
+      const allDrivers = get().drivers;
+
+      const found =
+        allDrivers.find((d) => cleanScannerTr(d.tr).toUpperCase() === cleanTr) ||
+        allDrivers.find((d) => d.tr.trim().toUpperCase() === stripped.toUpperCase()) ||
+        allDrivers.find((d) => d.nom.toUpperCase().includes(stripped.toUpperCase()));
+
+      if (found) {
+        const nextRecette =
+          get().deskRecette === 0 && found.montantBordereau && found.montantBordereau > 0
+            ? found.montantBordereau
+            : get().deskRecette;
+        set({
+          selectedDriverId: found.id,
+          deskTrInput: found.tr,
+          deskRecette: nextRecette,
+          feedbackMessage: {
+            type: 'success',
+            text: `Chauffeur sélectionné : ${found.nom} (TR ${found.tr}) - Circuit: ${found.programmeJour || 'STAND-BY'}`,
           },
         });
         triggerDebouncedSync();
@@ -465,7 +519,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           selectedDriverId: null,
           feedbackMessage: {
             type: 'error',
-            text: `Chauffeur introuvable avec le code TR: "${tr}"`,
+            text: `Chauffeur introuvable avec le code ou nom : "${tr}"`,
           },
         });
         return null;

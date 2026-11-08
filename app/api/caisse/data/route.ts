@@ -159,37 +159,7 @@ export async function GET() {
         sousSerie: r.sous_serie || '',
         montantBordereau: parseFloat(r.montant_bordereau) || 0,
       };
-    });
-
-    // Ensure global default drivers TR 0 and TR 1 are always available
-    const hasTr0 = drivers.some((d) => d.tr === '0');
-    const hasTr1 = drivers.some((d) => d.tr === '1');
-    if (!hasTr0) {
-      drivers.unshift({
-        id: 'DRV-GLOBAL-0',
-        nom: 'CHAUFFEUR GLOBAL (TR 0)',
-        tr: '0',
-        statut: 'PAYE',
-        dateDerniere: new Date().toISOString(),
-        reclamation: 'CHAUFFEUR GLOBAL PAR DÉFAUT',
-        caissesDues: 0,
-        programmeJour: 'GLOBAL',
-        circuitActuel: 'GLOBAL',
-      });
-    }
-    if (!hasTr1) {
-      drivers.unshift({
-        id: 'DRV-GLOBAL-1',
-        nom: 'CHAUFFEUR GLOBAL (TR 1)',
-        tr: '1',
-        statut: 'PAYE',
-        dateDerniere: new Date().toISOString(),
-        reclamation: 'CHAUFFEUR GLOBAL PAR DÉFAUT',
-        caissesDues: 0,
-        programmeJour: 'GLOBAL',
-        circuitActuel: 'GLOBAL',
-      });
-    }
+    }).filter((d) => d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1' && d.tr !== '0');
 
     // Transactions for current view:
     // - Supervisor & Admin get all transactions across all caisses
