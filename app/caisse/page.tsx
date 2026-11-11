@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useCaisseStore, computeDeskTotals } from '@/lib/store';
-import { formatMoney, generateId, cleanScannerTr } from '@/lib/utils';
+import { formatMoney, generateId, cleanScannerTr, getUnpaidCaisses, formatDate } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import PrintReceiptModal, { ReceiptData } from '@/components/PrintReceiptModal';
 import {
@@ -83,24 +83,25 @@ function CaisseContent() {
         })
     : [];
 
-  // Caisses appartenant UNIQUEMENT au chauffeur sélectionné (même TR ou même nom de chauffeur)
+  // Caisses appartenant UNIQUEMENT au Code TR du chauffeur sélectionné (regroupement strict par ID TR)
   const selectedDriverCaisses = selectedDriver
     ? validDrivers
         .filter((d) => {
           if (d.id === selectedDriver.id) return true;
-          const sameTr =
+          return (
             cleanScannerTr(d.tr).toUpperCase() ===
-            cleanScannerTr(selectedDriver.tr).toUpperCase();
-          const baseSelected = getDriverBaseName(selectedDriver.nom);
-          const baseCurrent = getDriverBaseName(d.nom);
-          const sameBaseName = baseSelected.length >= 3 && baseSelected === baseCurrent;
-          return sameTr || sameBaseName;
+            cleanScannerTr(selectedDriver.tr).toUpperCase()
+          );
         })
         .sort((a, b) => {
           const aUnpaid = a.statut === 'NON PAYE' ? 0 : 1;
           const bUnpaid = b.statut === 'NON PAYE' ? 0 : 1;
           return aUnpaid - bUnpaid;
         })
+    : [];
+
+  const selectedTrUnpaidCaisses = selectedDriver
+    ? getUnpaidCaisses(selectedDriver, validDrivers)
     : [];
 
   // Nettoyer tout ancien chauffeur par défaut ("0") au montage, ou appliquer uniquement ?tr=... s'il est dans l'URL
@@ -476,7 +477,7 @@ function CaisseContent() {
             <div className="flex items-center gap-2.5">
               <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse" />
               <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800">
-                Caisse(s) du Chauffeur Sélectionné : {getDriverBaseName(selectedDriver.nom)} ({selectedDriverCaisses.length})
+                Caisse(s) du Code TR #{selectedDriver.tr} — {selectedDriver.nom} ({selectedTrUnpaidCaisses.length > 0 ? `${selectedTrUnpaidCaisses.length} non payée(s)` : `${selectedDriverCaisses.length} caisse(s)`})
               </h3>
             </div>
             <span className="text-[11px] font-medium text-slate-500">
@@ -488,6 +489,7 @@ function CaisseContent() {
             {selectedDriverCaisses.map((c) => {
               const isSelected = selectedDriverId === c.id;
               const isUnpaid = c.statut === 'NON PAYE';
+              const unpaidForThisRecord = getUnpaidCaisses(c);
               return (
                 <div
                   key={c.id}
@@ -528,7 +530,8 @@ function CaisseContent() {
 
                   <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
                     <span>
-                      Circuit : <strong className="text-slate-900">{c.programmeJour || 'STAND-BY'}</strong>
+                      Programme du jour :{' '}
+                      <strong className="text-slate-900">{c.programmeJour || 'STAND-BY'}</strong>
                     </span>
                     {c.montantBordereau && c.montantBordereau > 0 ? (
                       <span className="num font-bold text-indigo-600">
@@ -537,10 +540,20 @@ function CaisseContent() {
                     ) : null}
                   </div>
 
-                  {c.reclamation && (
-                    <p className="mt-1.5 text-[11px] font-semibold text-rose-700 truncate">
-                      {c.reclamation}
-                    </p>
+                  {unpaidForThisRecord.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {unpaidForThisRecord.map((u, idx) => (
+                        <div
+                          key={`${c.id}-unpaid-${idx}`}
+                          className="flex items-center justify-between rounded-lg bg-rose-100/80 border border-rose-200 px-2 py-1 text-[11px] font-bold text-rose-800"
+                        >
+                          <span className="truncate">
+                            {idx + 1}. {u.circuit} {u.date ? `(${formatDate(u.date)})` : ''}
+                          </span>
+                          <span className="ml-2 shrink-0 text-[10px]">{u.retardText}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
 
                   <div className="mt-2.5 flex items-center justify-between border-t border-slate-200/70 pt-2">

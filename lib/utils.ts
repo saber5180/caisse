@@ -304,12 +304,12 @@ export function getUnpaidCaisses(driver: Driver, allDrivers?: Driver[]): UnpaidC
 
   pushDriverUnpaid(driver, true);
 
-  // 3. Inclure les autres caisses non payées du même chauffeur (ex: SAMI IBRAHIM BIZERT 1, 2, 3 ou CHELBI TRICHILI 2)
+  // 3. Inclure uniquement les autres caisses non payées ayant le MÊME Code TR (jamais par nom)
   if (Array.isArray(allDrivers) && allDrivers.length > 0) {
-    const baseName = getDriverBaseName(driver.nom);
-    if (baseName.length >= 3) {
+    const targetTr = cleanScannerTr(driver.tr).toUpperCase();
+    if (targetTr) {
       for (const other of allDrivers) {
-        if (other.id !== driver.id && getDriverBaseName(other.nom) === baseName) {
+        if (other.id !== driver.id && cleanScannerTr(other.tr).toUpperCase() === targetTr) {
           pushDriverUnpaid(other, false);
         }
       }
