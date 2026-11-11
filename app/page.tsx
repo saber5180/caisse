@@ -3,7 +3,14 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useCaisseStore } from '@/lib/store';
-import { formatDateTime, formatMoney, getStatusBadge, cleanScannerTr, getUnpaidCaisses } from '@/lib/utils';
+import {
+  formatDateTime,
+  formatMoney,
+  getStatusBadge,
+  cleanScannerTr,
+  getUnpaidCaisses,
+  calculateRetardFrom1230,
+} from '@/lib/utils';
 import StatCard from '@/components/StatCard';
 import EmptyState from '@/components/EmptyState';
 import PrintReceiptModal, { ReceiptData } from '@/components/PrintReceiptModal';
@@ -29,24 +36,43 @@ import {
   IconTruck,
 } from '@/components/Icons';
 
-function UnpaidCaissesSelect({ driver }: { driver: Driver }) {
-  const unpaid = getUnpaidCaisses(driver);
+function UnpaidCaissesSelect({
+  driver,
+  allDrivers,
+  isSuperviseur,
+}: {
+  driver: Driver;
+  allDrivers: Driver[];
+  isSuperviseur?: boolean;
+}) {
+  const unpaid = getUnpaidCaisses(driver, allDrivers);
   if (unpaid.length === 0) {
-    return <span className="text-xs font-semibold text-emerald-600">✓ Aucune</span>;
+    return (
+      <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+        ✓ Aucune caisse impayée
+      </span>
+    );
   }
   return (
     <select
-      defaultValue=""
+      value=""
       onClick={(e) => e.stopPropagation()}
-      className="select !w-full !py-1 !pl-2 !pr-7 !text-xs font-semibold text-rose-700 border-rose-200 bg-rose-50"
-      title="Liste des caisses non payées"
+      onChange={(e) => {
+        e.stopPropagation();
+        const targetTr = e.target.value;
+        if (targetTr && !isSuperviseur && typeof window !== 'undefined') {
+          window.location.href = `/caisse?tr=${encodeURIComponent(targetTr)}`;
+        }
+      }}
+      className="select !w-full !py-1.5 !pl-2.5 !pr-7 !text-xs font-extrabold text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100/70 cursor-pointer"
+      title="Liste des caisses non payées de ce chauffeur"
     >
-      <option value="">{unpaid.length} non payée{unpaid.length > 1 ? 's' : ''} ▾</option>
-      {unpaid.map((u) => (
-        <option key={u.id} value="" disabled>
-          {u.circuit}
-          {u.date ? ` — ${new Date(u.date).toLocaleDateString('fr-FR')}` : ''}
-          {u.current ? ' (aujourd’hui)' : ''}
+      <option value="">
+        ⚠️ {unpaid.length} Caisse{unpaid.length > 1 ? 's' : ''} non payée{unpaid.length > 1 ? 's' : ''} ({unpaid[0].circuit})
+      </option>
+      {unpaid.map((u, idx) => (
+        <option key={`${u.driverId}-${u.id}-${idx}`} value={u.tr} className="bg-white font-semibold text-slate-900">
+          {idx + 1}. {u.circuit} (TR {u.tr}) — {u.date ? new Date(u.date).toLocaleDateString('fr-FR') : 'Jour'} · {u.retardText}
         </option>
       ))}
     </select>
@@ -915,7 +941,7 @@ export default function DashboardPage() {
                       <span className="text-[10px] text-slate-400 font-bold uppercase block">
                         Caisses non payées
                       </span>
-                      <UnpaidCaissesSelect driver={d} />
+                      <UnpaidCaissesSelect driver={d} allDrivers={drivers} isSuperviseur={isSuperviseur} />
                     </div>
                     <div>
                       <span className="text-[10px] text-slate-400 font-bold uppercase block">
@@ -989,12 +1015,12 @@ export default function DashboardPage() {
                   <tr>
                     <th className="w-20">Code TR</th>
                     <th>Chauffeur</th>
-                    <th className="w-32">Programme du jour</th>
-                    <th className="w-44">Caisses non payées</th>
+                    <th className="w-40">Programme du jour</th>
+                    <th className="w-64">Caisses non payées (Listbox)</th>
                     <th className="!text-right w-32">Bordereaux (TND)</th>
                     <th className="!text-right w-32">Mvt Caisse (TND)</th>
                     <th className="!text-right w-32">Écart (TND)</th>
-                    <th className="w-32">Circuit</th>
+                    <th className="w-44">Échéance / Retard 12:30</th>
                     <th className="w-36">Statut</th>
                     {!isSuperviseur && <th className="!text-center w-32">Actions</th>}
                   </tr>
@@ -1018,12 +1044,22 @@ export default function DashboardPage() {
                         </p>
                       </td>
                       <td>
-                        <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                        <span
+                          className={`inline-flex rounded-lg px-2.5 py-1 font-mono text-xs font-extrabold ${
+                            !d.programmeJour || d.programmeJour.toUpperCase() === 'STAND-BY'
+                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                              : 'bg-sky-50 text-sky-900 border border-sky-200'
+                          }`}
+                        >
                           {d.programmeJour || 'STAND-BY'}
                         </span>
                       </td>
                       <td onClick={(e) => e.stopPropagation()}>
-                        <UnpaidCaissesSelect driver={d} />
+                        <UnpaidCaissesSelect
+                          driver={d}
+                          allDrivers={drivers}
+                          isSuperviseur={isSuperviseur}
+                        />
                       </td>
                       <td className="text-right num font-black text-xs text-slate-900">
                         {formatMoney(d.montantBordereau)}
@@ -1045,9 +1081,24 @@ export default function DashboardPage() {
                         </span>
                       </td>
                       <td>
-                        <span className="badge-slate truncate" title={d.programmeJour}>
-                          {d.programmeJour || 'STAND-BY'}
-                        </span>
+                        {(() => {
+                          const retard = calculateRetardFrom1230(d.programmeDate || d.dateDerniere);
+                          if (d.statut === 'PAYE') {
+                            return <span className="text-xs font-bold text-emerald-600">✓ Réglé</span>;
+                          }
+                          if (d.statut === 'PAS DE CAISSE') {
+                            return <span className="text-xs text-slate-400">Stand-by</span>;
+                          }
+                          return retard.isOverdue ? (
+                            <span className="text-xs font-extrabold text-rose-600">
+                              ⚠️ Retard : {retard.text}
+                            </span>
+                          ) : (
+                            <span className="text-xs font-semibold text-sky-700">
+                              🕒 {retard.text}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td>
                         <div className="flex flex-col items-start gap-0.5">

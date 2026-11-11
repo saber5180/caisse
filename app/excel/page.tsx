@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useCaisseStore } from '@/lib/store';
-import { Driver, DriverStatus } from '@/types/caisse';
 import PageHeader from '@/components/PageHeader';
 import {
   IconAlert,
@@ -14,17 +13,125 @@ import {
 } from '@/components/Icons';
 import * as XLSX from 'xlsx';
 
+function parseProgrammeWorkbook(wb: XLSX.WorkBook): {
+  nom: string;
+  circuit: string;
+  tr: string;
+}[] {
+  const rows: { nom: string; circuit: string; tr: string }[] = [];
+
+  wb.SheetNames.forEach((sheetName) => {
+    const ws = wb.Sheets[sheetName];
+    if (!ws) return;
+    const matrix = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
+    if (matrix.length === 0) return;
+
+    let nomCol = -1;
+    let progCol = -1;
+    let trCol = -1;
+    let startRow = 0;
+
+    for (let r = 0; r < Math.min(matrix.length, 15); r++) {
+      const rowCells = (matrix[r] || []).map((c) =>
+        String(c ?? '')
+          .replace(/\u00A0/g, ' ')
+          .trim()
+          .toUpperCase()
+      );
+
+      let foundNom = -1;
+      let foundProg = -1;
+      let foundTr = -1;
+
+      rowCells.forEach((cell, idx) => {
+        if (!cell) return;
+        if (
+          foundProg === -1 &&
+          (cell.includes('PROGRAMME') || cell.includes('CIRCUIT') || cell.includes('TOURN'))
+        ) {
+          foundProg = idx;
+        } else if (
+          foundTr === -1 &&
+          (cell === 'TR' ||
+            cell.includes('CODE TR') ||
+            cell.includes('CODE') ||
+            cell.includes('N° TR') ||
+            cell.includes('MATRICULE'))
+        ) {
+          foundTr = idx;
+        } else if (
+          foundNom === -1 &&
+          (cell.includes('NOM') || cell.includes('PRÉNOM') || cell.includes('PRENOM') || cell.includes('CHAUFFEUR'))
+        ) {
+          foundNom = idx;
+        }
+      });
+
+      if (foundProg !== -1 && (foundNom !== -1 || foundTr !== -1)) {
+        nomCol = foundNom;
+        progCol = foundProg;
+        trCol = foundTr;
+        startRow = r + 1;
+        break;
+      }
+    }
+
+    if (progCol === -1) {
+      const sample = matrix.find((row) => (row || []).filter((c) => String(c).trim() !== '').length >= 2);
+      if (sample) {
+        const firstNonEmpty = sample.findIndex((c) => String(c).trim() !== '');
+        if (firstNonEmpty >= 0) {
+          nomCol = firstNonEmpty;
+          progCol = firstNonEmpty + 1;
+          trCol = firstNonEmpty + 2;
+        }
+      }
+    }
+
+    for (let r = startRow; r < matrix.length; r++) {
+      const row = matrix[r] || [];
+      const rawNom = nomCol !== -1 ? String(row[nomCol] ?? '') : '';
+      const rawProg = progCol !== -1 ? String(row[progCol] ?? '') : '';
+      const rawTr = trCol !== -1 ? String(row[trCol] ?? '') : '';
+
+      const nom = rawNom.replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim();
+      const circuit = rawProg.replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim();
+      const tr = rawTr.replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim();
+
+      if (!nom && !circuit && !tr) continue;
+      if (
+        nom.toUpperCase().includes('NOM & PR') ||
+        circuit.toUpperCase() === 'PROGRAMME DE CHAUFFEUR' ||
+        tr.toUpperCase() === 'CODE TR'
+      ) {
+        continue;
+      }
+
+      if (nom || tr) {
+        rows.push({
+          nom,
+          circuit: circuit || 'STAND-BY',
+          tr,
+        });
+      }
+    }
+  });
+
+  return rows;
+}
+
 export default function ExcelPage() {
   const drivers = useCaisseStore((state) => state.drivers);
   const transactions = useCaisseStore((state) => state.transactions);
   const billetterieItems = useCaisseStore((state) => state.billetterieItems);
+  const importProgramme = useCaisseStore((state) => state.importProgramme);
 
   const [uploading, setUploading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const processFile = async (file: File) => {
-    if (!/\.(xlsx|xlsm|xls)$/i.test(file.name)) {
-      setFeedback({ type: 'error', text: 'Format de fichier invalide. Utilisez un fichier .xlsx ou .xlsm.' });
+    if (!/\.(xlsx|xlsm|xls|csv)$/i.test(file.name)) {
+      setFeedback({ type: 'error', text: 'Format de fichier invalide. Utilisez un fichier .xlsx, .xls, .xlsm ou .csv.' });
       return;
     }
 
@@ -36,61 +143,19 @@ export default function ExcelPage() {
       reader.onload = (e) => {
         try {
           const data = e.target?.result;
-          const wb = XLSX.read(data, { type: 'binary' });
+          const wb = XLSX.read(data, { type: 'array' });
+          const parsedRows = parseProgrammeWorkbook(wb);
 
-          let importedCount = 0;
-          // Look for MOUVEMENT DE CHAUFFEUR or first sheet
-          const sheetName =
-            wb.SheetNames.find((n) => n.toUpperCase().includes('MOUVEMENT')) ||
-            wb.SheetNames[0];
-
-          const ws = wb.Sheets[sheetName];
-          if (!ws) throw new Error(`Feuille ${sheetName} introuvable.`);
-
-          const json = XLSX.utils.sheet_to_json<any>(ws, { header: 'A' });
-
-          const newDrivers: Driver[] = [];
-          for (let i = 4; i < json.length; i++) {
-            const row = json[i];
-            const nom = row['B'];
-            const tr = row['D'];
-            const statutRaw = row['E'];
-            const prog = row['J'];
-
-            if (nom || tr) {
-              const statut: DriverStatus =
-                statutRaw === 'PAYE' || statutRaw === 'PAYÉ'
-                  ? 'PAYE'
-                  : statutRaw === 'PAS DE CAISSE'
-                  ? 'PAS DE CAISSE'
-                  : 'NON PAYE';
-
-              newDrivers.push({
-                id: `DRV-${Date.now()}-${i}`,
-                nom: String(nom || `Chauffeur ${tr}`).trim(),
-                tr: String(tr || '').trim(),
-                statut,
-                dateDerniere: new Date().toISOString(),
-                reclamation: '',
-                caissesDues: statut === 'NON PAYE' ? 1 : 0,
-                programmeJour: String(prog || '').trim(),
-                circuitActuel: String(prog || '').trim(),
-              });
-              importedCount++;
-            }
-          }
-
-          if (newDrivers.length > 0) {
-            useCaisseStore.setState({ drivers: newDrivers });
-            useCaisseStore.getState().syncToBackend();
+          if (parsedRows.length > 0) {
+            const { updatedCount, createdCount, totalProgrammes } = importProgramme(parsedRows);
             setFeedback({
               type: 'success',
-              text: `${importedCount} chauffeurs importés et synchronisés avec succès depuis "${sheetName}".`,
+              text: `${parsedRows.length} lignes importées avec succès : ${updatedCount} chauffeur(s) mis à jour, ${createdCount} nouveau(x) chauffeur(s) créé(s), et ${totalProgrammes} programme(s) du jour créés ! Retard calculé après 12:30 demain.`,
             });
           } else {
             setFeedback({
               type: 'error',
-              text: 'Aucune donnée de chauffeur valide trouvée dans la feuille sélectionnée.',
+              text: 'Aucune donnée valide trouvée dans le fichier Excel. Colonnes attendues : Nom & Prénom du Chauffeur, PROGRAMME DE CHAUFFEUR, Code TR.',
             });
           }
         } catch (err) {
@@ -103,7 +168,7 @@ export default function ExcelPage() {
         }
       };
 
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
     } catch (err) {
       setFeedback({ type: 'error', text: (err as Error).message });
       setUploading(false);

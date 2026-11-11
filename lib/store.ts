@@ -8,7 +8,13 @@ import {
   CaisseLiveSummary,
 } from '@/types/caisse';
 import { INITIAL_DRIVERS } from '@/data/initialDrivers';
-import { recalculateReclamation, generateId, cleanScannerTr } from './utils';
+import { DEFAULT_PROGRAMME_EXCEL_ROWS } from '@/data/programmeJourDefault';
+import {
+  recalculateReclamation,
+  generateId,
+  cleanScannerTr,
+  applyProgrammeRowsToFleet,
+} from './utils';
 
 export const DEFAULT_DESK_ROWS: CashDeskRow[] = [
   { denomination: 20, entree: 0, sortie: 0 },
@@ -122,7 +128,12 @@ interface CaisseStore {
   deleteDriver: (id: string) => void;
   addDriver: (driver: Omit<Driver, 'id' | 'reclamation'>) => void;
   executeBascule1230: () => void;
-  importProgramme: (rows: { tr: string; circuit: string }[]) => { matched: number; unmatched: string[] };
+  importProgramme: (rows: { nom?: string; tr?: string; circuit: string }[]) => {
+    updatedCount: number;
+    createdCount: number;
+    totalProgrammes: number;
+  };
+  loadDefaultProgrammeExcel: () => void;
   markProgramEntryPaid: (driverId: string, entryId: string) => void;
   resetAllDriversStatus: (status: DriverStatus) => void;
   refreshAlarms: () => void;
@@ -856,62 +867,34 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     },
 
     importProgramme: (rows) => {
-      const now = new Date();
-      const nowIso = now.toISOString();
-      const todayKey = nowIso.slice(0, 10);
-      const map = new Map<string, string>();
-      rows.forEach((r) => {
-        const k = cleanScannerTr(r.tr).toUpperCase();
-        const c = (r.circuit || '').trim().toUpperCase();
-        if (k && c) map.set(k, c);
-      });
-      const matchedKeys = new Set<string>();
+      const currentDrivers = get().drivers;
+      const { drivers: nextDrivers, updatedCount, createdCount, totalProgrammes } =
+        applyProgrammeRowsToFleet(currentDrivers, rows);
 
-      set((state) => {
-        const updated = state.drivers.map((d) => {
-          const key = cleanScannerTr(d.tr).toUpperCase();
-          const newCircuit = map.get(key);
-          if (!newCircuit) return d;
-          matchedKeys.add(key);
-
-          const history = [...(d.programmeHistorique || [])];
-          const prevCircuit = (d.programmeJour || '').trim();
-          const sameDayImport = d.programmeDate && d.programmeDate.slice(0, 10) === todayKey;
-          // Archive l'ancien programme dans l'historique (sauf ré-import le même jour)
-          if (prevCircuit && prevCircuit.toUpperCase() !== 'STAND-BY' && !sameDayImport) {
-            history.unshift({
-              id: generateId('PRG'),
-              date: d.programmeDate || d.dateDerniere || nowIso,
-              circuit: prevCircuit,
-              paid: d.statut === 'PAYE' || d.statut === 'PAS DE CAISSE',
-            });
-          }
-
-          const u: Driver = {
-            ...d,
-            programmeJour: newCircuit,
-            circuitActuel: newCircuit,
-            programmeDate: nowIso,
-            programmeHistorique: history.slice(0, 60),
-            statut: 'NON PAYE',
-            caissesDues: 1,
-            dateDerniere: sameDayImport ? d.dateDerniere : nowIso,
-          };
-          const { reclamation } = recalculateReclamation(u);
-          return { ...u, reclamation };
-        });
-        return { drivers: updated };
-      });
-
-      const unmatched = Array.from(map.keys()).filter((k) => !matchedKeys.has(k));
       set({
+        drivers: nextDrivers,
         feedbackMessage: {
-          type: matchedKeys.size > 0 ? 'success' : 'error',
-          text: `Programme importé : ${matchedKeys.size} chauffeur(s) mis à jour${unmatched.length ? `, ${unmatched.length} TR introuvable(s)` : ''}.`,
+          type: 'success',
+          text: `Programme du jour importé : ${updatedCount} chauffeur(s) mis à jour, ${createdCount} nouveau(x) chauffeur(s) ajouté(s), ${totalProgrammes} programme(s) actif(s). Échéance de retard : demain à 12:30.`,
         },
       });
-      if (matchedKeys.size > 0) triggerImmediateSync();
-      return { matched: matchedKeys.size, unmatched };
+      triggerImmediateSync(true);
+      return { updatedCount, createdCount, totalProgrammes };
+    },
+
+    loadDefaultProgrammeExcel: () => {
+      const baseDrivers = get().drivers.length > 0 ? get().drivers : INITIAL_DRIVERS.filter((d) => d.tr !== '0' && d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1');
+      const { drivers: nextDrivers, updatedCount, createdCount, totalProgrammes } =
+        applyProgrammeRowsToFleet(baseDrivers, DEFAULT_PROGRAMME_EXCEL_ROWS);
+
+      set({
+        drivers: nextDrivers,
+        feedbackMessage: {
+          type: 'success',
+          text: `Programme complet (87 lignes Excel) chargé : ${updatedCount} chauffeurs mis à jour, ${createdCount} nouveaux chauffeurs créés, ${totalProgrammes} programmes créés.`,
+        },
+      });
+      triggerImmediateSync(true);
     },
 
     markProgramEntryPaid: (driverId, entryId) => {
@@ -919,19 +902,38 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         drivers: state.drivers.map((d) => {
           if (d.id !== driverId) return d;
           if (entryId === 'CURRENT') {
-            const u: Driver = { ...d, statut: 'PAYE', caissesDues: 0, dateDerniere: new Date().toISOString() };
+            const unpaidHist = (d.programmeHistorique || []).filter((e) => !e.paid).length;
+            const u: Driver = {
+              ...d,
+              statut: unpaidHist > 0 ? 'NON PAYE' : 'PAYE',
+              caissesDues: unpaidHist,
+              dateDerniere: new Date().toISOString(),
+            };
             const { reclamation } = recalculateReclamation(u);
             return { ...u, reclamation };
           }
-          return {
+          const nextHist = (d.programmeHistorique || []).map((e) =>
+            e.id === entryId ? { ...e, paid: true } : e
+          );
+          const remainingUnpaidHist = nextHist.filter((e) => !e.paid).length;
+          const isCurrentStandby = !d.programmeJour || d.programmeJour.toUpperCase() === 'STAND-BY';
+          const nextStatut: DriverStatus =
+            remainingUnpaidHist > 0
+              ? 'NON PAYE'
+              : isCurrentStandby
+              ? 'PAS DE CAISSE'
+              : d.statut;
+          const u: Driver = {
             ...d,
-            programmeHistorique: (d.programmeHistorique || []).map((e) =>
-              e.id === entryId ? { ...e, paid: true } : e
-            ),
+            programmeHistorique: nextHist,
+            statut: nextStatut,
+            caissesDues: remainingUnpaidHist + (!isCurrentStandby && nextStatut === 'NON PAYE' ? 1 : 0),
           };
+          const { reclamation } = recalculateReclamation(u);
+          return { ...u, reclamation };
         }),
       }));
-      triggerImmediateSync();
+      triggerImmediateSync(true);
     },
     resetAllDriversStatus: (status) => {
       const nowStr = new Date().toISOString();

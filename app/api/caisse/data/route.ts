@@ -12,7 +12,8 @@ import {
   DeskRow,
   CaisseLiveSummary,
 } from '@/types/caisse';
-import { cleanScannerTr } from '@/lib/utils';
+import { cleanScannerTr, applyProgrammeRowsToFleet } from '@/lib/utils';
+import { DEFAULT_PROGRAMME_EXCEL_ROWS } from '@/data/programmeJourDefault';
 
 const CAISSE_CODES_MAP: Record<string, { code: 'CRNU' | 'CRSF' | 'CRTN'; name: string }> = {
   'acc-crnu': { code: 'CRNU', name: 'Caisse CRNU' },
@@ -135,7 +136,7 @@ export async function GET() {
       [GLOBAL_FLEET_ACCOUNT_ID]
     );
 
-    const drivers: Driver[] = driversRes.rows.map((r) => {
+    let drivers: Driver[] = driversRes.rows.map((r) => {
       const cleanTr = cleanScannerTr(r.tr).toUpperCase();
       const paidInfo = paidDriverTrMap.get(cleanTr);
       const effectiveStatut = paidInfo ? 'PAYE' : r.statut;
@@ -162,6 +163,50 @@ export async function GET() {
         programmeDate: r.programme_date ? new Date(r.programme_date).toISOString() : undefined,
       };
     }).filter((d) => d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1' && d.tr !== '0');
+
+    // Si le programme Excel complet (87 lignes avec les nouveaux chauffeurs ex: REBAH AMMRI, SAMI IBRAHIM, HASSAN CHAMEM) n'a pas encore été appliqué en base, on l'applique automatiquement
+    const hasSeededFullProgramme = drivers.some(
+      (d) => d.tr === '122' || d.nom.toUpperCase().includes('REBAH AMMRI') || d.nom.toUpperCase().includes('HASSAN CHAMEM')
+    );
+    if (!hasSeededFullProgramme && drivers.length > 0) {
+      const applied = applyProgrammeRowsToFleet(drivers, DEFAULT_PROGRAMME_EXCEL_ROWS);
+      drivers = applied.drivers;
+      for (const d of drivers) {
+        await mainPool.query(
+          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, CURRENT_TIMESTAMP)
+           ON CONFLICT (account_id, id) DO UPDATE SET
+             nom = EXCLUDED.nom,
+             tr = EXCLUDED.tr,
+             statut = EXCLUDED.statut,
+             date_derniere = EXCLUDED.date_derniere,
+             reclamation = EXCLUDED.reclamation,
+             caisses_dues = EXCLUDED.caisses_dues,
+             programme_jour = EXCLUDED.programme_jour,
+             circuit_actuel = EXCLUDED.circuit_actuel,
+             programme_historique = EXCLUDED.programme_historique,
+             programme_date = EXCLUDED.programme_date,
+             updated_at = CURRENT_TIMESTAMP`,
+          [
+            d.id,
+            GLOBAL_FLEET_ACCOUNT_ID,
+            d.nom,
+            d.tr,
+            d.statut,
+            d.dateDerniere || new Date().toISOString(),
+            d.reclamation || '',
+            d.caissesDues || 0,
+            d.programmeJour || '',
+            d.circuitActuel || '',
+            d.serie || '',
+            d.sousSerie || '',
+            d.montantBordereau || 0,
+            JSON.stringify(Array.isArray(d.programmeHistorique) ? d.programmeHistorique : []),
+            d.programmeDate || null,
+          ]
+        );
+      }
+    }
 
     // Transactions for current view:
     // - Supervisor & Admin get all transactions across all caisses
