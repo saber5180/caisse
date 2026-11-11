@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useCaisseStore } from '@/lib/store';
-import { formatDateTime, formatMoney, getStatusBadge, cleanScannerTr } from '@/lib/utils';
+import { formatDateTime, formatMoney, getStatusBadge, cleanScannerTr, getUnpaidCaisses } from '@/lib/utils';
 import StatCard from '@/components/StatCard';
 import EmptyState from '@/components/EmptyState';
 import PrintReceiptModal, { ReceiptData } from '@/components/PrintReceiptModal';
@@ -28,6 +28,30 @@ import {
   IconSync,
   IconTruck,
 } from '@/components/Icons';
+
+function UnpaidCaissesSelect({ driver }: { driver: Driver }) {
+  const unpaid = getUnpaidCaisses(driver);
+  if (unpaid.length === 0) {
+    return <span className="text-xs font-semibold text-emerald-600">✓ Aucune</span>;
+  }
+  return (
+    <select
+      defaultValue=""
+      onClick={(e) => e.stopPropagation()}
+      className="select !w-full !py-1 !pl-2 !pr-7 !text-xs font-semibold text-rose-700 border-rose-200 bg-rose-50"
+      title="Liste des caisses non payées"
+    >
+      <option value="">{unpaid.length} non payée{unpaid.length > 1 ? 's' : ''} ▾</option>
+      {unpaid.map((u) => (
+        <option key={u.id} value="" disabled>
+          {u.circuit}
+          {u.date ? ` — ${new Date(u.date).toLocaleDateString('fr-FR')}` : ''}
+          {u.current ? ' (aujourd’hui)' : ''}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 export default function DashboardPage() {
   const currentUser = useCaisseStore((state) => state.currentUser);
@@ -881,11 +905,17 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 rounded-xl p-2.5 mb-2.5">
                     <div>
                       <span className="text-[10px] text-slate-400 font-bold uppercase block">
-                        Série / Sous-série
+                        Programme du jour
                       </span>
                       <span className="font-semibold text-slate-800">
-                        {d.serie} / {d.sousSerie}
+                        {d.programmeJour || 'STAND-BY'}
                       </span>
+                    </div>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">
+                        Caisses non payées
+                      </span>
+                      <UnpaidCaissesSelect driver={d} />
                     </div>
                     <div>
                       <span className="text-[10px] text-slate-400 font-bold uppercase block">
@@ -959,8 +989,8 @@ export default function DashboardPage() {
                   <tr>
                     <th className="w-20">Code TR</th>
                     <th>Chauffeur</th>
-                    <th className="w-24">Série</th>
-                    <th className="w-24">Sous-série</th>
+                    <th className="w-32">Programme du jour</th>
+                    <th className="w-44">Caisses non payées</th>
                     <th className="!text-right w-32">Bordereaux (TND)</th>
                     <th className="!text-right w-32">Mvt Caisse (TND)</th>
                     <th className="!text-right w-32">Écart (TND)</th>
@@ -989,13 +1019,11 @@ export default function DashboardPage() {
                       </td>
                       <td>
                         <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                          {d.serie}
+                          {d.programmeJour || 'STAND-BY'}
                         </span>
                       </td>
-                      <td>
-                        <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                          {d.sousSerie}
-                        </span>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <UnpaidCaissesSelect driver={d} />
                       </td>
                       <td className="text-right num font-black text-xs text-slate-900">
                         {formatMoney(d.montantBordereau)}
@@ -1679,16 +1707,14 @@ export default function DashboardPage() {
                     {selectedDriverDetails.programmeJour || 'STAND-BY'}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Série :</span>
-                  <span className="font-mono font-bold text-slate-800">
-                    {selectedDriverDetails.serie || '—'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Sous-série :</span>
-                  <span className="font-mono font-bold text-slate-800">
-                    {selectedDriverDetails.sousSerie || '—'}
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-500 font-medium">Caisses non payées :</span>
+                  <span className="font-mono font-bold text-rose-700 text-right">
+                    {getUnpaidCaisses(selectedDriverDetails).length === 0
+                      ? 'Aucune'
+                      : getUnpaidCaisses(selectedDriverDetails)
+                          .map((u) => u.circuit)
+                          .join(', ')}
                   </span>
                 </div>
                 {selectedDriverDetails.reclamation && (

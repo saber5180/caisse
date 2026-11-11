@@ -128,7 +128,7 @@ export async function GET() {
 
     // 2. Fetch shared global drivers fleet (stored under GLOBAL_FLEET_ACCOUNT_ID)
     const driversRes = await mainPool.query(
-      `SELECT id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau
+      `SELECT id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date
        FROM caisse_drivers
        WHERE account_id = $1
        ORDER BY tr ASC, nom ASC`,
@@ -158,6 +158,8 @@ export async function GET() {
         serie: r.serie || '',
         sousSerie: r.sous_serie || '',
         montantBordereau: parseFloat(r.montant_bordereau) || 0,
+        programmeHistorique: Array.isArray(r.programme_historique) ? r.programme_historique : [],
+        programmeDate: r.programme_date ? new Date(r.programme_date).toISOString() : undefined,
       };
     }).filter((d) => d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1' && d.tr !== '0');
 
@@ -346,8 +348,8 @@ export async function POST(req: NextRequest) {
 
       for (const d of realDrivers) {
         await mainPool.query(
-          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
+          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, CURRENT_TIMESTAMP)
            ON CONFLICT (account_id, id) DO UPDATE SET
              nom = EXCLUDED.nom,
              tr = EXCLUDED.tr,
@@ -360,6 +362,8 @@ export async function POST(req: NextRequest) {
              serie = EXCLUDED.serie,
              sous_serie = EXCLUDED.sous_serie,
              montant_bordereau = EXCLUDED.montant_bordereau,
+             programme_historique = EXCLUDED.programme_historique,
+             programme_date = EXCLUDED.programme_date,
              updated_at = CURRENT_TIMESTAMP`,
           [
             d.id,
@@ -375,6 +379,8 @@ export async function POST(req: NextRequest) {
             d.serie || '',
             d.sousSerie || '',
             d.montantBordereau || 0,
+            JSON.stringify(Array.isArray(d.programmeHistorique) ? d.programmeHistorique : []),
+            d.programmeDate || null,
           ]
         );
       }

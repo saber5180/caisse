@@ -16,6 +16,16 @@ export interface Driver {
   montantBordereau?: number; // Montant théorique calculé des bordereaux saisis
   mouvementCaisse?: number; // État réel de mouvement de caisse (encaissé)
   ecartBordereau?: number; // Écart automatique (montantBordereau - mouvementCaisse)
+  // Historique des programmes (importés par Excel) pour détecter les caisses non payées
+  programmeHistorique?: ProgramEntry[];
+  programmeDate?: string; // Date d'import du programme du jour actuel (ISO)
+}
+
+export interface ProgramEntry {
+  id: string;
+  date: string; // ISO - date du programme
+  circuit: string;
+  paid: boolean;
 }
 
 export interface CashDeskRow {

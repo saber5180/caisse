@@ -122,6 +122,8 @@ interface CaisseStore {
   deleteDriver: (id: string) => void;
   addDriver: (driver: Omit<Driver, 'id' | 'reclamation'>) => void;
   executeBascule1230: () => void;
+  importProgramme: (rows: { tr: string; circuit: string }[]) => { matched: number; unmatched: string[] };
+  markProgramEntryPaid: (driverId: string, entryId: string) => void;
   resetAllDriversStatus: (status: DriverStatus) => void;
   refreshAlarms: () => void;
   loadDemoDriversTemplate: () => void;
@@ -853,6 +855,84 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       triggerImmediateSync();
     },
 
+    importProgramme: (rows) => {
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const todayKey = nowIso.slice(0, 10);
+      const map = new Map<string, string>();
+      rows.forEach((r) => {
+        const k = cleanScannerTr(r.tr).toUpperCase();
+        const c = (r.circuit || '').trim().toUpperCase();
+        if (k && c) map.set(k, c);
+      });
+      const matchedKeys = new Set<string>();
+
+      set((state) => {
+        const updated = state.drivers.map((d) => {
+          const key = cleanScannerTr(d.tr).toUpperCase();
+          const newCircuit = map.get(key);
+          if (!newCircuit) return d;
+          matchedKeys.add(key);
+
+          const history = [...(d.programmeHistorique || [])];
+          const prevCircuit = (d.programmeJour || '').trim();
+          const sameDayImport = d.programmeDate && d.programmeDate.slice(0, 10) === todayKey;
+          // Archive l'ancien programme dans l'historique (sauf ré-import le même jour)
+          if (prevCircuit && prevCircuit.toUpperCase() !== 'STAND-BY' && !sameDayImport) {
+            history.unshift({
+              id: generateId('PRG'),
+              date: d.programmeDate || d.dateDerniere || nowIso,
+              circuit: prevCircuit,
+              paid: d.statut === 'PAYE' || d.statut === 'PAS DE CAISSE',
+            });
+          }
+
+          const u: Driver = {
+            ...d,
+            programmeJour: newCircuit,
+            circuitActuel: newCircuit,
+            programmeDate: nowIso,
+            programmeHistorique: history.slice(0, 60),
+            statut: 'NON PAYE',
+            caissesDues: 1,
+            dateDerniere: sameDayImport ? d.dateDerniere : nowIso,
+          };
+          const { reclamation } = recalculateReclamation(u);
+          return { ...u, reclamation };
+        });
+        return { drivers: updated };
+      });
+
+      const unmatched = Array.from(map.keys()).filter((k) => !matchedKeys.has(k));
+      set({
+        feedbackMessage: {
+          type: matchedKeys.size > 0 ? 'success' : 'error',
+          text: `Programme importé : ${matchedKeys.size} chauffeur(s) mis à jour${unmatched.length ? `, ${unmatched.length} TR introuvable(s)` : ''}.`,
+        },
+      });
+      if (matchedKeys.size > 0) triggerImmediateSync();
+      return { matched: matchedKeys.size, unmatched };
+    },
+
+    markProgramEntryPaid: (driverId, entryId) => {
+      set((state) => ({
+        drivers: state.drivers.map((d) => {
+          if (d.id !== driverId) return d;
+          if (entryId === 'CURRENT') {
+            const u: Driver = { ...d, statut: 'PAYE', caissesDues: 0, dateDerniere: new Date().toISOString() };
+            const { reclamation } = recalculateReclamation(u);
+            return { ...u, reclamation };
+          }
+          return {
+            ...d,
+            programmeHistorique: (d.programmeHistorique || []).map((e) =>
+              e.id === entryId ? { ...e, paid: true } : e
+            ),
+          };
+        }),
+      }));
+      triggerImmediateSync();
+    },
     resetAllDriversStatus: (status) => {
       const nowStr = new Date().toISOString();
       set((state) => ({

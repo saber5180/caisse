@@ -133,3 +133,26 @@ export function cleanScannerTr(raw: string | undefined | null): string {
   return stripped === '' ? '0' : stripped;
 }
 
+
+export interface UnpaidCaisse {
+  id: string;
+  circuit: string;
+  date?: string;
+  current: boolean;
+}
+
+/**
+ * Liste des caisses non payées d'un chauffeur :
+ * - les anciens programmes (historique) non payés
+ * - le programme du jour s'il est affecté et que le chauffeur est NON PAYE
+ */
+export function getUnpaidCaisses(driver: Driver): UnpaidCaisse[] {
+  const list: UnpaidCaisse[] = (driver.programmeHistorique || [])
+    .filter((e) => !e.paid)
+    .map((e) => ({ id: e.id, circuit: e.circuit, date: e.date, current: false }));
+  const prog = (driver.programmeJour || '').trim();
+  if (driver.statut === 'NON PAYE' && prog && prog.toUpperCase() !== 'STAND-BY') {
+    list.push({ id: 'CURRENT', circuit: prog, date: driver.programmeDate, current: true });
+  }
+  return list;
+}

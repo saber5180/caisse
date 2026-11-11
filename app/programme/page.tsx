@@ -1,16 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
+import * as XLSX from 'xlsx';
 import { useCaisseStore } from '@/lib/store';
-import { getStatusBadge } from '@/lib/utils';
+import { getStatusBadge, getUnpaidCaisses, formatDate } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import {
+  IconAlert,
   IconBolt,
   IconCalendar,
   IconCheck,
   IconTruck,
+  IconUpload,
 } from '@/components/Icons';
 
 const KNOWN_CIRCUITS = [
@@ -48,6 +51,79 @@ export default function ProgrammePage() {
   const executeBascule1230 = useCaisseStore((state) => state.executeBascule1230);
 
   const [filterCircuit, setFilterCircuit] = useState('');
+  const importProgramme = useCaisseStore((state) => state.importProgramme);
+  const markProgramEntryPaid = useCaisseStore((state) => state.markProgramEntryPaid);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importMsg, setImportMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [historySearch, setHistorySearch] = useState('');
+
+  const handleExcelFile = (file: File) => {
+    if (!/\.(xlsx|xlsm|xls|csv)$/i.test(file.name)) {
+      setImportMsg({ type: 'error', text: 'Format invalide. Utilisez un fichier .xlsx, .xls ou .csv.' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target?.result, { type: 'array' });
+        const rows: { tr: string; circuit: string }[] = [];
+        wb.SheetNames.forEach((sn) => {
+          const matrix = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[sn], { header: 1, defval: '' });
+          let trCol = -1;
+          let progCol = -1;
+          let start = 0;
+          for (let i = 0; i < Math.min(matrix.length, 15); i++) {
+            const cells = (matrix[i] || []).map((c) => String(c).trim().toUpperCase());
+            const t = cells.findIndex((c) => c === 'TR' || c.includes('CODE') || c === 'N° TR' || c === 'NUMERO TR');
+            const p = cells.findIndex((c) => c.includes('CIRCUIT') || c.includes('PROGRAMME') || c.includes('PROG'));
+            if (t !== -1 && p !== -1) {
+              trCol = t;
+              progCol = p;
+              start = i + 1;
+              break;
+            }
+          }
+          if (trCol === -1) {
+            trCol = 0;
+            progCol = 1;
+          }
+          for (let i = start; i < matrix.length; i++) {
+            const tr = String(matrix[i]?.[trCol] ?? '').trim();
+            const circuit = String(matrix[i]?.[progCol] ?? '').trim();
+            if (tr && circuit && /^[A-Za-z]*\d+$/.test(tr)) rows.push({ tr, circuit });
+          }
+        });
+        if (rows.length === 0) {
+          setImportMsg({
+            type: 'error',
+            text: 'Aucune ligne valide trouvée. Le fichier doit contenir une colonne "TR" et une colonne "Circuit / Programme".',
+          });
+          return;
+        }
+        const { matched, unmatched } = importProgramme(rows);
+        setImportMsg({
+          type: matched > 0 ? 'success' : 'error',
+          text: `${matched} chauffeur(s) mis à jour avec le programme du jour sur ${rows.length} ligne(s) du fichier.${
+            unmatched.length ? ` TR introuvables : ${unmatched.slice(0, 15).join(', ')}${unmatched.length > 15 ? '…' : ''}` : ''
+          }`,
+        });
+      } catch (err) {
+        setImportMsg({ type: 'error', text: 'Erreur de lecture du fichier : ' + (err as Error).message });
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const driversWithHistory = drivers.filter(
+    (d) => (d.programmeHistorique?.length || 0) > 0 || getUnpaidCaisses(d).length > 0
+  );
+  const historyFiltered = driversWithHistory.filter((d) => {
+    const q = historySearch.trim().toLowerCase();
+    return !q || d.nom.toLowerCase().includes(q) || d.tr.toLowerCase().includes(q);
+  });
+  const totalUnpaidCaisses = driversWithHistory.reduce((s, d) => s + getUnpaidCaisses(d).length, 0);
 
   const filteredDrivers = drivers.filter((d) => {
     if (!filterCircuit) return true;
@@ -100,6 +176,51 @@ export default function ProgrammePage() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Import Excel du programme du jour */}
+      <div className="card mb-5 p-4 sm:p-5 border-indigo-200 bg-indigo-50/40">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-indigo-900">Importer le programme du jour (Excel)</h3>
+            <p className="mt-1 text-xs text-indigo-800/80 leading-relaxed">
+              Colonnes attendues : <strong>TR</strong> et <strong>Circuit / Programme</strong>. À chaque import
+              (à partir de 12:30), l&apos;ancien programme de chaque chauffeur est archivé dans l&apos;historique
+              ci-dessous avec son état (payé / non payé).
+            </p>
+          </div>
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.xlsm,.csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleExcelFile(f);
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="btn-primary w-full sm:w-auto !py-2.5 text-xs sm:text-sm font-bold"
+            >
+              <IconUpload className="h-4 w-4" />
+              Importer un fichier Excel
+            </button>
+          </div>
+        </div>
+        {importMsg && (
+          <div
+            className={`mt-3 rounded-xl border px-3 py-2 text-xs font-semibold ${
+              importMsg.type === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border-rose-200 bg-rose-50 text-rose-800'
+            }`}
+          >
+            {importMsg.text}
+          </div>
+        )}
       </div>
 
       {/* Filtre par Circuit */}
@@ -254,6 +375,92 @@ export default function ProgrammePage() {
               </table>
             </div>
           </>
+        )}
+      </div>
+
+      {/* Historique des anciens programmes + caisses non payées */}
+      <div className="card mt-5 overflow-hidden">
+        <div className="card-header bg-slate-50/70 flex-wrap gap-2">
+          <h2 className="card-title text-sm flex items-center gap-2">
+            <IconAlert className="h-4 w-4 text-rose-500" />
+            Historique des Programmes ({driversWithHistory.length} chauffeurs)
+          </h2>
+          <div className="flex items-center gap-2">
+            <span className={totalUnpaidCaisses > 0 ? 'badge-solid-rose text-[11px]' : 'badge-slate text-[11px]'}>
+              {totalUnpaidCaisses} caisse(s) non payée(s)
+            </span>
+            <input
+              type="text"
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              placeholder="Chercher TR / nom..."
+              className="input !min-h-9 !py-1 !text-xs w-44"
+            />
+          </div>
+        </div>
+
+        {historyFiltered.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-400">
+            Aucun historique. Importez un fichier Excel pour commencer le suivi des programmes.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100 max-h-[560px] overflow-y-auto">
+            {historyFiltered.map((d) => {
+              const unpaid = getUnpaidCaisses(d);
+              return (
+                <div key={d.id} className="p-3.5 sm:p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="badge-indigo font-mono text-xs">TR {d.tr}</span>
+                      <p className="text-sm font-bold text-slate-900 truncate">{d.nom}</p>
+                      <span className={getStatusBadge(d.statut)}>{d.statut}</span>
+                    </div>
+                    <span
+                      className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                        unpaid.length > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                      }`}
+                    >
+                      {unpaid.length > 0 ? `${unpaid.length} caisse(s) non payée(s)` : 'Tout est payé'}
+                    </span>
+                  </div>
+
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {d.programmeJour && d.programmeJour !== 'STAND-BY' && (
+                      <div className="rounded-xl border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs">
+                        <span className="font-bold text-sky-800">Aujourd&apos;hui : {d.programmeJour}</span>
+                        <span className="ml-1.5 text-sky-700/80">
+                          {d.statut === 'PAYE' ? '✓ payé' : 'à payer'}
+                        </span>
+                      </div>
+                    )}
+                    {(d.programmeHistorique || []).map((e) => (
+                      <div
+                        key={e.id}
+                        className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${
+                          e.paid
+                            ? 'border-emerald-200 bg-emerald-50/60 text-emerald-800'
+                            : 'border-rose-200 bg-rose-50 text-rose-800'
+                        }`}
+                      >
+                        <span className="font-semibold">{e.circuit}</span>
+                        <span className="opacity-70">{formatDate(e.date)}</span>
+                        <span className="font-bold">{e.paid ? '✓ Payé' : '✗ Non payé'}</span>
+                        {!e.paid && (
+                          <button
+                            type="button"
+                            onClick={() => markProgramEntryPaid(d.id, e.id)}
+                            className="rounded-lg bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-emerald-500"
+                          >
+                            Marquer payé
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </>
