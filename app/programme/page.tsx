@@ -9,6 +9,7 @@ import {
   formatDate,
   getStatusBadge,
   getUnpaidCaisses,
+  ProgrammeImportError,
 } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
@@ -232,6 +233,7 @@ export default function ProgrammePage() {
   const [importMsg, setImportMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(
     null
   );
+  const [importErrors, setImportErrors] = useState<ProgrammeImportError[]>([]);
 
   // Construire dynamiquement la liste de TOUS les programmes (ceux de base + ceux créés via Excel)
   const allCircuits = useMemo(() => {
@@ -384,11 +386,19 @@ export default function ProgrammePage() {
           return;
         }
 
-        const { updatedCount, createdCount, totalProgrammes } = importProgramme(parsedRows);
-        setImportMsg({
-          type: 'success',
-          text: `Fichier Excel importé avec succès (${parsedRows.length} lignes lues) : ${updatedCount} chauffeur(s) mis à jour, ${createdCount} nouveau(x) chauffeur(s) ajouté(s), et ${totalProgrammes} programmes actifs créés ! Le retard sera calculé après 12:30 demain.`,
-        });
+        const { updatedCount, createdCount, totalProgrammes, errors } = importProgramme(parsedRows);
+        setImportErrors(errors);
+        if (errors.length > 0) {
+          setImportMsg({
+            type: 'error',
+            text: `Attention : ${errors.length} erreur(s) détectée(s) et bloquée(s) dans le fichier Excel (Code TR en double ou conflit de nom sur un Code TR existant). Les ${updatedCount + createdCount} autres lignes valides ont été appliquées.`,
+          });
+        } else {
+          setImportMsg({
+            type: 'success',
+            text: `Fichier Excel importé avec succès (${parsedRows.length} lignes lues) : ${updatedCount} chauffeur(s) mis à jour, ${createdCount} nouveau(x) chauffeur(s) ajouté(s), et ${totalProgrammes} programmes actifs créés ! Le retard sera calculé après 12:30 demain.`,
+          });
+        }
       } catch (err) {
         setImportMsg({
           type: 'error',
@@ -512,6 +522,41 @@ export default function ProgrammePage() {
             >
               <IconClose className="h-4 w-4" />
             </button>
+          </div>
+        )}
+
+        {importErrors.length > 0 && (
+          <div className="mt-3 rounded-2xl border-2 border-rose-300 bg-rose-50/90 p-4 text-rose-950 shadow-sm">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <IconAlert className="h-5 w-5 text-rose-600 shrink-0" />
+                <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-800">
+                  Erreurs détectées lors de la vérification du fichier Excel ({importErrors.length} ligne{importErrors.length > 1 ? 's' : ''} bloquée{importErrors.length > 1 ? 's' : ''})
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setImportErrors([])}
+                className="text-xs font-bold text-rose-600 hover:text-rose-900"
+              >
+                Fermer
+              </button>
+            </div>
+            <ul className="space-y-1.5 text-xs font-semibold text-rose-900">
+              {importErrors.map((err, idx) => (
+                <li
+                  key={idx}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/90 border border-rose-200 px-3 py-2"
+                >
+                  <span>{err.message}</span>
+                  <span className="badge-solid-rose font-mono text-[10px] shrink-0">
+                    {err.type === 'DUPLICATE_TR_IN_FILE'
+                      ? `TR ${err.tr} EN DOUBLE`
+                      : `CONFLIT NOM TR ${err.tr}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>

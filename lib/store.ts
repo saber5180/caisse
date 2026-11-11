@@ -14,6 +14,7 @@ import {
   generateId,
   cleanScannerTr,
   applyProgrammeRowsToFleet,
+  ProgrammeImportError,
 } from './utils';
 
 export const DEFAULT_DESK_ROWS: CashDeskRow[] = [
@@ -132,6 +133,7 @@ interface CaisseStore {
     updatedCount: number;
     createdCount: number;
     totalProgrammes: number;
+    errors: ProgrammeImportError[];
   };
   loadDefaultProgrammeExcel: () => void;
   markProgramEntryPaid: (driverId: string, entryId: string) => void;
@@ -868,18 +870,21 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
 
     importProgramme: (rows) => {
       const currentDrivers = get().drivers;
-      const { drivers: nextDrivers, updatedCount, createdCount, totalProgrammes } =
+      const { drivers: nextDrivers, updatedCount, createdCount, totalProgrammes, errors } =
         applyProgrammeRowsToFleet(currentDrivers, rows);
 
+      const hasErrors = errors.length > 0;
       set({
         drivers: nextDrivers,
         feedbackMessage: {
-          type: 'success',
-          text: `Programme du jour importé : ${updatedCount} chauffeur(s) mis à jour, ${createdCount} nouveau(x) chauffeur(s) ajouté(s), ${totalProgrammes} programme(s) actif(s). Échéance de retard : demain à 12:30.`,
+          type: hasErrors ? 'error' : 'success',
+          text: hasErrors
+            ? `Import terminé avec ${errors.length} erreur(s) bloquée(s) (TR en double ou conflit de nom sur un TR existant). ${updatedCount} mis à jour, ${createdCount} créé(s).`
+            : `Programme du jour importé : ${updatedCount} chauffeur(s) mis à jour, ${createdCount} nouveau(x) chauffeur(s) ajouté(s), ${totalProgrammes} programme(s) actif(s). Échéance de retard : demain à 12:30.`,
         },
       });
       triggerImmediateSync(true);
-      return { updatedCount, createdCount, totalProgrammes };
+      return { updatedCount, createdCount, totalProgrammes, errors };
     },
 
     loadDefaultProgrammeExcel: () => {

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useCaisseStore } from '@/lib/store';
+import { ProgrammeImportError } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import {
   IconAlert,
@@ -128,6 +129,7 @@ export default function ExcelPage() {
 
   const [uploading, setUploading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [importErrors, setImportErrors] = useState<ProgrammeImportError[]>([]);
 
   const processFile = async (file: File) => {
     if (!/\.(xlsx|xlsm|xls|csv)$/i.test(file.name)) {
@@ -137,6 +139,7 @@ export default function ExcelPage() {
 
     setUploading(true);
     setFeedback(null);
+    setImportErrors([]);
 
     try {
       const reader = new FileReader();
@@ -147,11 +150,19 @@ export default function ExcelPage() {
           const parsedRows = parseProgrammeWorkbook(wb);
 
           if (parsedRows.length > 0) {
-            const { updatedCount, createdCount, totalProgrammes } = importProgramme(parsedRows);
-            setFeedback({
-              type: 'success',
-              text: `${parsedRows.length} lignes importées avec succès : ${updatedCount} chauffeur(s) mis à jour, ${createdCount} nouveau(x) chauffeur(s) créé(s), et ${totalProgrammes} programme(s) du jour créés ! Retard calculé après 12:30 demain.`,
-            });
+            const { updatedCount, createdCount, totalProgrammes, errors } = importProgramme(parsedRows);
+            setImportErrors(errors);
+            if (errors.length > 0) {
+              setFeedback({
+                type: 'error',
+                text: `Attention : ${errors.length} erreur(s) détectée(s) et bloquée(s) (Code TR en double ou conflit de nom sur un Code TR existant). ${updatedCount} chauffeur(s) mis à jour, ${createdCount} créé(s).`,
+              });
+            } else {
+              setFeedback({
+                type: 'success',
+                text: `${parsedRows.length} lignes importées avec succès : ${updatedCount} chauffeur(s) mis à jour, ${createdCount} nouveau(x) chauffeur(s) créé(s), et ${totalProgrammes} programme(s) du jour créés ! Retard calculé après 12:30 demain.`,
+              });
+            }
           } else {
             setFeedback({
               type: 'error',
@@ -268,11 +279,29 @@ export default function ExcelPage() {
             }`}
           >
             {feedback.type === 'success' ? (
-              <IconCheck className="h-4 w-4 text-emerald-600" />
+              <IconCheck className="h-4 w-4 text-emerald-600 shrink-0" />
             ) : (
-              <IconAlert className="h-4 w-4 text-rose-600" />
+              <IconAlert className="h-4 w-4 text-rose-600 shrink-0" />
             )}
             <p className="font-medium">{feedback.text}</p>
+          </div>
+        )}
+
+        {importErrors.length > 0 && (
+          <div className="mt-4 rounded-2xl border-2 border-rose-300 bg-rose-50 p-4 text-rose-950">
+            <h4 className="text-xs font-black uppercase tracking-wider text-rose-800 mb-2">
+              Détail des erreurs bloquées ({importErrors.length}) :
+            </h4>
+            <ul className="space-y-1.5 text-xs font-semibold text-rose-900">
+              {importErrors.map((err, idx) => (
+                <li
+                  key={idx}
+                  className="rounded-xl bg-white border border-rose-200 px-3 py-2"
+                >
+                  {err.message}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>

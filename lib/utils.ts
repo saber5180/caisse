@@ -319,11 +319,44 @@ export function getUnpaidCaisses(driver: Driver, allDrivers?: Driver[]): UnpaidC
   return list;
 }
 
+export interface ProgrammeImportError {
+  rowNumber: number;
+  type: 'DUPLICATE_TR_IN_FILE' | 'TR_NAME_MISMATCH_DB';
+  tr: string;
+  excelNom: string;
+  existingNom: string;
+  circuit: string;
+  message: string;
+}
+
+/**
+ * Vérifie si deux noms de chauffeurs correspondent à la même personne (ex: "HASSEN YOUSSFI 37" et "HASSEN YOUSSFI")
+ * Retourne false si les noms sont différents (ex: "SAMI" vs "AHMED" ou "MED KTATA" vs "HASSAN KTATA").
+ */
+export function isSameDriverName(existingNom: string, newNom: string): boolean {
+  const baseA = getDriverBaseName(existingNom);
+  const baseB = getDriverBaseName(newNom);
+  if (!baseA || !baseB) return true;
+  if (baseA === baseB) return true;
+  // Normalisation simple des variantes orthographiques connues (ex: RBEH / RABAH, BRAHIM / IBRAHIM)
+  const norm = (s: string) =>
+    s
+      .replace(/\bRBEH\b/g, 'RABAH')
+      .replace(/\bBRAHIM\b/g, 'IBRAHIM')
+      .replace(/\s+/g, ' ')
+      .trim();
+  if (norm(baseA) === norm(baseB)) return true;
+  return false;
+}
+
 /**
  * Applique une liste de lignes Excel (Nom & Prénom, Programme de Chauffeur, Code TR) à la flotte :
- * - Crée tous les programmes du jour (avec échéance demain 12:30)
- * - Archive les anciens programmes non payés dans programmeHistorique pour garder la trace des caisses non payées
- * - Ajoute automatiquement tous les nouveaux chauffeurs qui n'existaient pas encore dans la base
+ * - Vérifie les erreurs avant d'appliquer chaque ligne :
+ *   1) Deux chauffeurs avec le même Code TR dans le fichier Excel -> Bloqué + Erreur signalée
+ *   2) Un Code TR existant en base (hier) avec un nom différent aujourd'hui (ex: TR 10 = SAMI hier vs AHMED aujourd'hui) -> Bloqué + Erreur signalée
+ * - Crée tous les programmes du jour valides (avec échéance demain 12:30)
+ * - Archive les anciens programmes non payés dans programmeHistorique
+ * - Ajoute automatiquement les nouveaux chauffeurs valides
  */
 export function applyProgrammeRowsToFleet(
   existingDrivers: Driver[],
@@ -334,6 +367,7 @@ export function applyProgrammeRowsToFleet(
   updatedCount: number;
   createdCount: number;
   totalProgrammes: number;
+  errors: ProgrammeImportError[];
 } {
   const nowIso = nowIsoInput || new Date().toISOString();
   const todayKey = nowIso.slice(0, 10);
@@ -344,6 +378,8 @@ export function applyProgrammeRowsToFleet(
   }));
 
   const usedIndices = new Set<number>();
+  const seenTrInExcel = new Map<string, { nom: string; rowNumber: number }>();
+  const errors: ProgrammeImportError[] = [];
   let updatedCount = 0;
   let createdCount = 0;
 
@@ -374,26 +410,46 @@ export function applyProgrammeRowsToFleet(
 
     const baseRowNom = getDriverBaseName(cleanNom);
 
-    // Recherche du chauffeur existant correspondant (non encore utilisé dans cet import)
-    let matchIdx = -1;
-
-    // 1. Correspondance exacte TR + Nom de base
-    if (cleanTr && baseRowNom) {
-      matchIdx = resultDrivers.findIndex(
-        (d, idx) =>
-          !usedIndices.has(idx) &&
-          cleanScannerTr(d.tr).toUpperCase() === cleanTr &&
-          (getDriverBaseName(d.nom) === baseRowNom ||
-            d.nom.toUpperCase().includes(baseRowNom) ||
-            baseRowNom.includes(getDriverBaseName(d.nom)))
-      );
+    // VÉRIFICATION 1 : Deux chauffeurs avec le même Code TR dans le fichier Excel !
+    if (cleanTr) {
+      const prevInExcel = seenTrInExcel.get(cleanTr);
+      if (prevInExcel) {
+        errors.push({
+          rowNumber: rowIdx + 1,
+          type: 'DUPLICATE_TR_IN_FILE',
+          tr: cleanTr,
+          excelNom: cleanNom || '—',
+          existingNom: prevInExcel.nom,
+          circuit: cleanCircuit,
+          message: `Code TR "${cleanTr}" en double dans le fichier Excel : attribué à "${prevInExcel.nom}" (ligne ${prevInExcel.rowNumber}) ET à "${cleanNom}" (ligne ${rowIdx + 1}).`,
+        });
+        return; // On bloque cette ligne erronée
+      }
+      seenTrInExcel.set(cleanTr, { nom: cleanNom || `TR ${cleanTr}`, rowNumber: rowIdx + 1 });
     }
 
-    // 2. Correspondance par TR uniquement (si disponible)
-    if (matchIdx === -1 && cleanTr) {
-      matchIdx = resultDrivers.findIndex(
-        (d, idx) => !usedIndices.has(idx) && cleanScannerTr(d.tr).toUpperCase() === cleanTr
+    // VÉRIFICATION 2 : Si le Code TR existe déjà dans la base, vérifier que le nom du chauffeur n'a pas changé !
+    let matchIdx = -1;
+    if (cleanTr) {
+      const existingByTrIdx = resultDrivers.findIndex(
+        (d) => cleanScannerTr(d.tr).toUpperCase() === cleanTr
       );
+      if (existingByTrIdx !== -1) {
+        const existingDriver = resultDrivers[existingByTrIdx];
+        if (cleanNom && !isSameDriverName(existingDriver.nom, cleanNom)) {
+          errors.push({
+            rowNumber: rowIdx + 1,
+            type: 'TR_NAME_MISMATCH_DB',
+            tr: cleanTr,
+            excelNom: cleanNom,
+            existingNom: getDriverBaseName(existingDriver.nom),
+            circuit: cleanCircuit,
+            message: `Conflit sur TR "${cleanTr}" (ligne ${rowIdx + 1}) : enregistré précédemment sous le nom "${getDriverBaseName(existingDriver.nom)}", mais écrit "${cleanNom}" aujourd'hui.`,
+          });
+          return; // On bloque cette ligne erronée pour ne pas écraser l'ancien chauffeur
+        }
+        matchIdx = existingByTrIdx;
+      }
     }
 
     // 3. Si pas de TR dans Excel, correspondance par Nom + même circuit ou Nom disponible
@@ -517,5 +573,6 @@ export function applyProgrammeRowsToFleet(
     updatedCount,
     createdCount,
     totalProgrammes: uniqueProgrammes.size,
+    errors,
   };
 }
