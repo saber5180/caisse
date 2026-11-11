@@ -671,8 +671,19 @@ function CaisseContent() {
               return (
                 <div key={idx} className="p-3.5 hover:bg-slate-50/60 transition-colors">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="inline-flex items-center rounded-xl bg-slate-100 px-3 py-1 text-xs font-bold text-slate-900 border border-slate-200">
-                      {row.denomination} TND {isOneTnd && <span className="text-[10px] text-indigo-600 font-normal ml-1">(pas 0.1)</span>}
+                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-xs font-bold text-slate-900 border border-slate-200">
+                      <span>{row.denomination} TND</span>
+                      {row.denomination === 5 && idx === 3 && (
+                        <span className="rounded-md bg-indigo-600 px-1.5 py-0.5 font-mono text-[10px] font-black text-white">
+                          B · Billet
+                        </span>
+                      )}
+                      {row.denomination === 5 && idx === 4 && (
+                        <span className="rounded-md bg-amber-500 px-1.5 py-0.5 font-mono text-[10px] font-black text-white">
+                          P · Pièce
+                        </span>
+                      )}
+                      {isOneTnd && <span className="text-[10px] text-indigo-600 font-normal ml-1">(pas 0.1)</span>}
                     </span>
                     <span className={`num text-xs font-bold ${netLigne >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
                       Net : {formatMoney(netLigne)} TND
@@ -792,6 +803,22 @@ function CaisseContent() {
                           <span className="num font-bold text-slate-900 text-sm">
                             {row.denomination} TND
                           </span>
+                          {row.denomination === 5 && idx === 3 && (
+                            <span
+                              className="inline-flex items-center rounded-md bg-indigo-600 px-1.5 py-0.5 font-mono text-[10px] font-black text-white shadow-sm"
+                              title="5 TND Billet (versé automatiquement en Billetterie)"
+                            >
+                              B · Billet
+                            </span>
+                          )}
+                          {row.denomination === 5 && idx === 4 && (
+                            <span
+                              className="inline-flex items-center rounded-md bg-amber-500 px-1.5 py-0.5 font-mono text-[10px] font-black text-white shadow-sm"
+                              title="5 TND Pièce (comptage manuel en Billetterie)"
+                            >
+                              P · Pièce
+                            </span>
+                          )}
                           {isOneTnd && (
                             <span className="badge-slate font-mono text-[10px] text-indigo-600 bg-indigo-50 border-indigo-200">
                               pas 0.1

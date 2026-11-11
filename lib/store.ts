@@ -608,20 +608,19 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         return d;
       });
 
-      // Update billetterie items counts with net cash denominations (entree - sortie)
+      // Update billetterie items counts ONLY for Billets (isBillet === true).
+      // Les Pièces (0,050 / 0,100 / 0,200 / 0,500 / 1,000 / 2,000 / 5,000 TND Pièce) ne sont JAMAIS versées automatiquement (saisie manuelle).
       const updatedBilletterieItems = billetterieItems.map((bItem) => ({ ...bItem }));
-      deskRows.forEach((row) => {
+      deskRows.forEach((row, idx) => {
+        // L'index 4 est le 2ème champ 5 TND ("5 TND Pièce") et les coupures de 1 TND sont des pièces : ne pas les verser en billetterie
+        const isPieceRow = idx === 4 || row.denomination < 5;
+        if (isPieceRow) return;
+
         const netCount = (row.entree || 0) - (row.sortie || 0);
         if (netCount !== 0) {
-          // Find matching item by value
-          let matchIdx = updatedBilletterieItems.findIndex(
-            (b) => Math.abs(b.valeur - row.denomination) < 0.001 && (row.denomination === 5 ? b.isBillet : true)
+          const matchIdx = updatedBilletterieItems.findIndex(
+            (b) => b.isBillet && Math.abs(b.valeur - row.denomination) < 0.001
           );
-          if (matchIdx === -1) {
-            matchIdx = updatedBilletterieItems.findIndex(
-              (b) => Math.abs(b.valeur - row.denomination) < 0.001
-            );
-          }
           if (matchIdx !== -1) {
             const currentItem = updatedBilletterieItems[matchIdx];
             const newTotalCount = Math.max(0, Math.round((currentItem.nombre + netCount) * 100) / 100);

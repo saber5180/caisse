@@ -48,8 +48,8 @@ function UnpaidCaissesSelect({
   const unpaid = getUnpaidCaisses(driver, allDrivers);
   if (unpaid.length === 0) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-        ✓ Aucune caisse impayée
+      <span className="inline-flex items-center gap-1 rounded-xl border border-emerald-200/90 bg-emerald-50/90 px-2.5 py-1 text-[11px] font-bold text-emerald-700 whitespace-nowrap">
+        ✓ 0 caisse impayée
       </span>
     );
   }
@@ -64,11 +64,11 @@ function UnpaidCaissesSelect({
           window.location.href = `/caisse?tr=${encodeURIComponent(targetTr)}`;
         }
       }}
-      className="select !w-full !py-1.5 !pl-2.5 !pr-7 !text-xs font-extrabold text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100/70 cursor-pointer"
-      title="Liste des caisses non payées de ce chauffeur"
+      className="select !min-h-8 !w-full max-w-[230px] !rounded-xl !py-1 !pl-2.5 !pr-7 !text-[11px] font-extrabold text-rose-700 border-rose-200 bg-rose-50/90 hover:bg-rose-100/80 shadow-sm cursor-pointer truncate"
+      title="Liste des caisses non payées de ce Code TR"
     >
       <option value="">
-        ⚠️ {unpaid.length} Caisse{unpaid.length > 1 ? 's' : ''} non payée{unpaid.length > 1 ? 's' : ''} ({unpaid[0].circuit})
+        ⚠️ {unpaid.length} impayée{unpaid.length > 1 ? 's' : ''} · {unpaid[0].circuit}
       </option>
       {unpaid.map((u, idx) => (
         <option key={`${u.driverId}-${u.id}-${idx}`} value={u.tr} className="bg-white font-semibold text-slate-900">
@@ -910,235 +910,257 @@ export default function DashboardPage() {
           />
         ) : (
           <>
-            {/* Mobile Cards (sm:hidden) */}
-            <div className="divide-y divide-slate-100 max-h-[520px] overflow-y-auto sm:hidden">
-              {filteredDrivers.map((d) => (
-                <div
-                  key={d.id}
-                  onClick={() => setSelectedDriverDetails(d)}
-                  className="p-4 hover:bg-slate-50/80 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="rounded-md bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-white">
-                        TR {d.tr}
-                      </span>
-                      <p className="truncate text-sm font-extrabold text-slate-900">{d.nom}</p>
-                    </div>
-                    <span className={getStatusBadge(d.statut)}>{d.statut}</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 rounded-xl p-2.5 mb-2.5">
+            {/* Responsive Cards View for Mobile & Tablet / Compact Laptops (xl:hidden) */}
+            <div className="grid grid-cols-1 gap-3 p-3.5 sm:p-4 md:grid-cols-2 max-h-[600px] overflow-y-auto xl:hidden bg-slate-50/40">
+              {filteredDrivers.map((d) => {
+                const retard = calculateRetardFrom1230(d.programmeDate || d.dateDerniere);
+                const isStandby = isStandbyCircuit(d.programmeJour);
+                return (
+                  <div
+                    key={d.id}
+                    onClick={() => setSelectedDriverDetails(d)}
+                    className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3"
+                  >
                     <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">
-                        Programme du jour
-                      </span>
-                      <span className="font-semibold text-slate-800">
-                        {d.programmeJour || 'STAND-BY'}
-                      </span>
-                    </div>
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">
-                        Caisses non payées
-                      </span>
-                      <UnpaidCaissesSelect driver={d} allDrivers={drivers} isSuperviseur={isSuperviseur} />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">
-                        Circuit
-                      </span>
-                      <span className="font-semibold text-slate-800 truncate block">
-                        {d.programmeJour || 'STAND-BY'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">
-                        Montant Bordereaux
-                      </span>
-                      <strong className="num text-slate-900">
-                        {formatMoney(d.montantBordereau)} TND
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">
-                        Mouvement Caisse
-                      </span>
-                      <strong className="num text-emerald-700">
-                        {formatMoney(d.mouvementCaisse)} TND
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-slate-500 font-medium text-[11px]">Écart :</span>
-                      <span
-                        className={`font-mono font-black text-xs ${
-                          d.ecartBordereau === 0
-                            ? 'text-slate-700'
-                            : d.ecartBordereau > 0
-                            ? 'text-rose-600'
-                            : 'text-emerald-600'
-                        }`}
-                      >
-                        {d.ecartBordereau > 0 ? '+' : ''}{formatMoney(d.ecartBordereau)} TND
-                      </span>
-                    </div>
-
-                    {!isSuperviseur && (
-                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={(e) => startEditDriver(e, d)}
-                          className="btn-ghost !py-1 !px-2 text-xs font-semibold"
-                          title="Modifier Série / Bordereau"
-                        >
-                          <IconEdit className="h-3.5 w-3.5" />
-                        </button>
-                        <Link
-                          href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                          className="btn-primary !py-1 !px-2.5 text-xs font-bold"
-                        >
-                          Encaisser
-                        </Link>
+                      <div className="flex items-start justify-between gap-2 mb-2.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="shrink-0 rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-black text-white">
+                            TR {d.tr}
+                          </span>
+                          <p className="truncate text-sm font-extrabold text-slate-900" title={d.nom}>
+                            {d.nom}
+                          </p>
+                        </div>
+                        <span className={`${getStatusBadge(d.statut)} shrink-0`}>
+                          {d.statut === 'NON PAYE' && isStandby
+                            ? 'STAND-BY / IMPAYÉ'
+                            : d.statut === 'PAS DE CAISSE'
+                            ? 'SANS CAISSE'
+                            : d.statut}
+                        </span>
                       </div>
-                    )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl bg-slate-50/90 border border-slate-100 p-2.5 text-xs">
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block mb-1">
+                            Programme du jour &amp; Échéance
+                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={`inline-flex rounded-lg px-2 py-0.5 font-mono text-[11px] font-extrabold ${
+                                isStandby
+                                  ? 'bg-amber-100/80 text-amber-900'
+                                  : 'bg-sky-100/80 text-sky-900'
+                              }`}
+                            >
+                              {d.programmeJour || 'STAND-BY'}
+                            </span>
+                            {d.statut === 'NON PAYE' && (
+                              <span
+                                className={`text-[10px] font-bold ${
+                                  retard.isOverdue ? 'text-rose-600' : 'text-sky-700'
+                                }`}
+                              >
+                                {retard.isOverdue ? `⚠️ ${retard.text}` : `🕒 ${retard.text}`}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block mb-1">
+                            Caisses non payées
+                          </span>
+                          <UnpaidCaissesSelect
+                            driver={d}
+                            allDrivers={drivers}
+                            isSuperviseur={isSuperviseur}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2.5 text-xs">
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Bordereau</span>
+                          <strong className="num text-slate-900">{formatMoney(d.montantBordereau)}</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Mvt Caisse</span>
+                          <strong className="num text-emerald-700">{formatMoney(d.mouvementCaisse)}</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Écart</span>
+                          <strong
+                            className={`num ${
+                              d.ecartBordereau === 0
+                                ? 'text-slate-700'
+                                : d.ecartBordereau > 0
+                                ? 'text-rose-600'
+                                : 'text-emerald-600'
+                            }`}
+                          >
+                            {d.ecartBordereau > 0 ? '+' : ''}
+                            {formatMoney(d.ecartBordereau)}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {!isSuperviseur && (
+                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={(e) => startEditDriver(e, d)}
+                            className="btn-ghost !py-1.5 !px-2.5 text-xs font-semibold"
+                            title="Modifier Bordereau"
+                          >
+                            <IconEdit className="h-3.5 w-3.5" />
+                          </button>
+                          <Link
+                            href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
+                            className="btn-primary !py-1.5 !px-3 text-xs font-bold"
+                          >
+                            Encaisser →
+                          </Link>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {/* Desktop Table View with Sticky Header & Clean Scroll (hidden sm:block) */}
-            <div className="table-wrap hidden max-h-[520px] overflow-y-auto sm:block">
+            {/* Desktop Pro Table View (hidden xl:block) */}
+            <div className="table-wrap hidden max-h-[560px] overflow-y-auto xl:block">
               <table className="data-table">
-                <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_rgba(226,232,240,1)]">
+                <thead className="sticky top-0 z-10 bg-slate-50/95 shadow-[0_1px_0_rgba(226,232,240,1)]">
                   <tr>
-                    <th className="w-20">Code TR</th>
-                    <th>Chauffeur</th>
-                    <th className="w-40">Programme du jour</th>
-                    <th className="w-64">Caisses non payées (Listbox)</th>
-                    <th className="!text-right w-32">Bordereaux (TND)</th>
-                    <th className="!text-right w-32">Mvt Caisse (TND)</th>
-                    <th className="!text-right w-32">Écart (TND)</th>
-                    <th className="w-44">Échéance / Retard 12:30</th>
+                    <th className="w-24">Code TR</th>
+                    <th className="min-w-[180px]">Chauffeur</th>
+                    <th className="w-56">Programme du Jour &amp; Échéance 12:30</th>
+                    <th className="w-60">Caisses Non Payées (Listbox)</th>
+                    <th className="!text-right w-28">Bordereau</th>
+                    <th className="!text-right w-28">Mvt Caisse</th>
+                    <th className="!text-right w-28">Écart</th>
                     <th className="w-36">Statut</th>
-                    {!isSuperviseur && <th className="!text-center w-32">Actions</th>}
+                    {!isSuperviseur && <th className="!text-right w-28">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDrivers.map((d) => (
-                    <tr
-                      key={d.id}
-                      onClick={() => setSelectedDriverDetails(d)}
-                      className="cursor-pointer hover:bg-slate-50/80 transition-colors group"
-                      title="Cliquez pour afficher la fiche détaillée du chauffeur"
-                    >
-                      <td>
-                        <span className="inline-flex rounded-lg bg-slate-900 px-2.5 py-0.5 font-mono text-xs font-extrabold text-white">
-                          #{d.tr}
-                        </span>
-                      </td>
-                      <td>
-                        <p className="font-bold text-slate-900" title={d.nom}>
-                          {d.nom}
-                        </p>
-                      </td>
-                      <td>
-                        <span
-                          className={`inline-flex rounded-lg px-2.5 py-1 font-mono text-xs font-extrabold ${
-                            !d.programmeJour || d.programmeJour.toUpperCase() === 'STAND-BY'
-                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                              : 'bg-sky-50 text-sky-900 border border-sky-200'
-                          }`}
-                        >
-                          {d.programmeJour || 'STAND-BY'}
-                        </span>
-                      </td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <UnpaidCaissesSelect
-                          driver={d}
-                          allDrivers={drivers}
-                          isSuperviseur={isSuperviseur}
-                        />
-                      </td>
-                      <td className="text-right num font-black text-xs text-slate-900">
-                        {formatMoney(d.montantBordereau)}
-                      </td>
-                      <td className="text-right num font-black text-xs text-emerald-700">
-                        {formatMoney(d.mouvementCaisse)}
-                      </td>
-                      <td className="text-right">
-                        <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full font-mono text-xs font-black ${
-                            d.ecartBordereau === 0
-                              ? 'bg-slate-100 text-slate-700'
-                              : d.ecartBordereau > 0
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          }`}
-                        >
-                          {d.ecartBordereau > 0 ? '+' : ''}{formatMoney(d.ecartBordereau)}
-                        </span>
-                      </td>
-                      <td>
-                        {(() => {
-                          const retard = calculateRetardFrom1230(d.programmeDate || d.dateDerniere);
-                          if (d.statut === 'PAYE') {
-                            return <span className="text-xs font-bold text-emerald-600">✓ Réglé</span>;
-                          }
-                          if (d.statut === 'PAS DE CAISSE') {
-                            return <span className="text-xs text-slate-400">Stand-by</span>;
-                          }
-                          return retard.isOverdue ? (
-                            <span className="text-xs font-extrabold text-rose-600">
-                              ⚠️ Retard : {retard.text}
-                            </span>
-                          ) : (
-                            <span className="text-xs font-semibold text-sky-700">
-                              🕒 {retard.text}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td>
-                        <div className="flex flex-col items-start gap-0.5">
-                          <span className={getStatusBadge(d.statut)}>
-                            {d.statut === 'NON PAYE' && isStandbyCircuit(d.programmeJour)
-                              ? 'STAND-BY / NON PAYÉ'
-                              : d.statut === 'PAS DE CAISSE'
-                              ? 'SANS CAISSE'
-                              : d.statut}
+                  {filteredDrivers.map((d) => {
+                    const retard = calculateRetardFrom1230(d.programmeDate || d.dateDerniere);
+                    const isStandby = isStandbyCircuit(d.programmeJour);
+                    return (
+                      <tr
+                        key={d.id}
+                        onClick={() => setSelectedDriverDetails(d)}
+                        className="cursor-pointer hover:bg-indigo-50/35 transition-colors group"
+                        title="Cliquez pour afficher la fiche détaillée du chauffeur"
+                      >
+                        <td className="!py-3">
+                          <span className="inline-flex rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-extrabold text-white shadow-sm">
+                            TR {d.tr}
                           </span>
-                          {isSupervisorOrAdmin && d.paidCaisseCode && d.statut === 'PAYE' && (
-                            <span className="font-mono text-[9px] font-bold text-emerald-700">
-                              Réglé : {d.paidCaisseCode}
+                        </td>
+                        <td className="!py-3">
+                          <p className="font-extrabold text-slate-900 text-xs sm:text-[13px] truncate max-w-[220px]" title={d.nom}>
+                            {d.nom}
+                          </p>
+                        </td>
+                        <td className="!py-3">
+                          <div className="flex flex-col items-start gap-1">
+                            <span
+                              className={`inline-flex rounded-lg px-2.5 py-0.5 font-mono text-[11px] font-extrabold ${
+                                isStandby
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-200/80'
+                                  : 'bg-sky-50 text-sky-900 border border-sky-200/80'
+                              }`}
+                            >
+                              {d.programmeJour || 'STAND-BY'}
                             </span>
-                          )}
-                        </div>
-                      </td>
-                      {!isSuperviseur && (
-                        <td className="text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={(e) => startEditDriver(e, d)}
-                              className="btn-ghost !p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
-                              title="Modifier Série / Sous-série / Bordereau"
-                            >
-                              <IconEdit className="h-3.5 w-3.5" />
-                            </button>
-                            <Link
-                              href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                              className="btn-primary !px-2.5 !py-1 !text-xs font-bold"
-                              title="Ouvrir au Guichet POS Caisse"
-                            >
-                              Encaisser
-                            </Link>
+                            {d.statut === 'PAYE' ? (
+                              <span className="text-[10.5px] font-bold text-emerald-600">✓ Caisse réglée</span>
+                            ) : d.statut === 'PAS DE CAISSE' ? (
+                              <span className="text-[10.5px] text-slate-400">Repos / Sans caisse</span>
+                            ) : retard.isOverdue ? (
+                              <span className="text-[10.5px] font-extrabold text-rose-600">
+                                ⚠️ Retard : {retard.text}
+                              </span>
+                            ) : (
+                              <span className="text-[10.5px] font-semibold text-sky-700">
+                                🕒 {retard.text}
+                              </span>
+                            )}
                           </div>
                         </td>
-                      )}
-                    </tr>
-                  ))}
+                        <td className="!py-3" onClick={(e) => e.stopPropagation()}>
+                          <UnpaidCaissesSelect
+                            driver={d}
+                            allDrivers={drivers}
+                            isSuperviseur={isSuperviseur}
+                          />
+                        </td>
+                        <td className="!py-3 text-right num font-black text-xs text-slate-900">
+                          {formatMoney(d.montantBordereau)}
+                        </td>
+                        <td className="!py-3 text-right num font-black text-xs text-emerald-700">
+                          {formatMoney(d.mouvementCaisse)}
+                        </td>
+                        <td className="!py-3 text-right">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-lg font-mono text-xs font-black ${
+                              d.ecartBordereau === 0
+                                ? 'bg-slate-100 text-slate-700'
+                                : d.ecartBordereau > 0
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            }`}
+                          >
+                            {d.ecartBordereau > 0 ? '+' : ''}
+                            {formatMoney(d.ecartBordereau)}
+                          </span>
+                        </td>
+                        <td className="!py-3">
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span className={getStatusBadge(d.statut)}>
+                              {d.statut === 'NON PAYE' && isStandby
+                                ? 'STAND-BY / IMPAYÉ'
+                                : d.statut === 'PAS DE CAISSE'
+                                ? 'SANS CAISSE'
+                                : d.statut}
+                            </span>
+                            {isSupervisorOrAdmin && d.paidCaisseCode && d.statut === 'PAYE' && (
+                              <span className="font-mono text-[9px] font-bold text-emerald-700">
+                                Réglé : {d.paidCaisseCode}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        {!isSuperviseur && (
+                          <td className="!py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={(e) => startEditDriver(e, d)}
+                                className="btn-ghost !p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                                title="Modifier Série / Sous-série / Bordereau"
+                              >
+                                <IconEdit className="h-3.5 w-3.5" />
+                              </button>
+                              <Link
+                                href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
+                                className="btn-primary !px-2.5 !py-1 !text-xs font-bold"
+                                title="Ouvrir au Guichet POS Caisse"
+                              >
+                                Encaisser
+                              </Link>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
