@@ -137,6 +137,7 @@ interface CaisseStore {
   };
   loadDefaultProgrammeExcel: () => void;
   markProgramEntryPaid: (driverId: string, entryId: string) => void;
+  deleteProgramEntry: (driverId: string, entryId: string) => void;
   resetAllDriversStatus: (status: DriverStatus) => void;
   refreshAlarms: () => void;
   loadDemoDriversTemplate: () => void;
@@ -964,6 +965,43 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       }).then(() => get().fetchAccountData());
     },
 
+    deleteProgramEntry: (driverId, entryId) => {
+      set((state) => ({
+        drivers: state.drivers.map((d) => {
+          if (d.id !== driverId) return d;
+          let next: Driver;
+          if (entryId === 'CURRENT') {
+            const unpaidHist = (d.programmeHistorique || []).filter((e) => !e.paid).length;
+            next = {
+              ...d,
+              programmeJour: 'STAND-BY',
+              circuitActuel: 'STAND-BY',
+              programmeDate: undefined,
+              statut: unpaidHist > 0 ? 'NON PAYE' : 'PAS DE CAISSE',
+              caissesDues: unpaidHist,
+            };
+          } else {
+            const nextHist = (d.programmeHistorique || []).filter((e) => e.id !== entryId);
+            const unpaidHist = nextHist.filter((e) => !e.paid).length;
+            const prog = (d.programmeJour || '').trim().toUpperCase();
+            const hasActive = prog && prog !== 'STAND-BY' && prog !== 'STANDBY';
+            const activeUnpaid = hasActive && d.statut === 'NON PAYE';
+            const caissesDues = unpaidHist + (activeUnpaid ? 1 : 0);
+            next = {
+              ...d,
+              programmeHistorique: nextHist,
+              caissesDues,
+              statut:
+                caissesDues > 0 ? 'NON PAYE' : hasActive ? d.statut : 'PAS DE CAISSE',
+            };
+          }
+          const { reclamation } = recalculateReclamation(next);
+          return { ...next, reclamation };
+        }),
+        feedbackMessage: { type: 'success', text: 'Programme supprimé.' },
+      }));
+      triggerImmediateSync(true);
+    },
     markProgramEntryPaid: (driverId, entryId) => {
       set((state) => ({
         drivers: state.drivers.map((d) => {

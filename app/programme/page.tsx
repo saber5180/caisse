@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import { useCaisseStore } from '@/lib/store';
@@ -224,6 +224,7 @@ export default function ProgrammePage() {
   const importProgramme = useCaisseStore((state) => state.importProgramme);
   const loadDefaultProgrammeExcel = useCaisseStore((state) => state.loadDefaultProgrammeExcel);
   const markProgramEntryPaid = useCaisseStore((state) => state.markProgramEntryPaid);
+  const deleteProgramEntry = useCaisseStore((state) => state.deleteProgramEntry);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [filterCircuit, setFilterCircuit] = useState('');
@@ -357,6 +358,34 @@ export default function ProgrammePage() {
     });
   }, [drivers, historyFilter, historySearch]);
 
+  // Regroupement par jour (chaque jour reste séparé), jours récents d'abord
+  const historyGroups = useMemo(() => {
+    const dayKey = (iso: string) => {
+      const dt = new Date(iso);
+      if (isNaN(dt.getTime())) return '0000-00-00';
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    };
+    const map = new Map<string, typeof historyRows>();
+    historyRows.forEach((r) => {
+      const k = dayKey(r.date);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(r);
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([day, rows]) => {
+        const sorted = [...rows].sort(
+          (a, b) =>
+            Number(a.paid) - Number(b.paid) ||
+            a.tr.localeCompare(b.tr, undefined, { numeric: true })
+        );
+        const dt = new Date(day + 'T12:00:00');
+        const label = isNaN(dt.getTime())
+          ? 'Date inconnue'
+          : dt.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+        return { day, label, rows: sorted, unpaid: sorted.filter((r) => !r.paid).length };
+      });
+  }, [historyRows]);
   const totalUnpaidHistoryCount = useMemo(
     () =>
       drivers.reduce((sum, d) => sum + getUnpaidCaisses(d).length, 0),
@@ -943,8 +972,8 @@ export default function ProgrammePage() {
         ) : (
           <>
             {/* Mobile / Tablet Cards for History (lg:hidden) */}
-            <div className="grid grid-cols-1 gap-3 p-3.5 sm:p-4 md:grid-cols-2 max-h-[520px] overflow-y-auto lg:hidden bg-rose-50/10">
-              {historyRows.map((row) => (
+<div className="max-h-[520px] space-y-4 overflow-y-auto bg-rose-50/10 p-3.5 sm:p-4 lg:hidden">
+{historyGroups.map((g) => (<div key={g.day}><div className="mb-2 flex items-center justify-between rounded-xl bg-slate-900 px-3.5 py-2 text-white"><span className="text-xs font-extrabold uppercase tracking-wider">📅 {g.label}</span><span className="text-[11px] font-bold text-slate-300">{g.rows.length} ligne(s) · {g.unpaid} non payée(s)</span></div><div className="grid grid-cols-1 gap-3 md:grid-cols-2">{g.rows.map((row) => (
                 <div
                   key={row.key}
                   className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-2.5"
@@ -1005,9 +1034,10 @@ export default function ProgrammePage() {
                         </button>
                       </div>
                     )}
+                    <button type="button" title="Supprimer ce programme" onClick={() => { if (confirm(`Supprimer ce programme ?`)) deleteProgramEntry(row.driverId, row.entryId); }} className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100">🗑 Supprimer</button>
                   </div>
                 </div>
-              ))}
+))}</div></div>))}
             </div>
 
             {/* Desktop Table for History (hidden lg:block) */}
@@ -1025,7 +1055,7 @@ export default function ProgrammePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {historyRows.map((row) => (
+{historyGroups.map((g) => (<Fragment key={g.day}><tr className="bg-slate-900 text-white"><td colSpan={7} className="!py-2.5 !px-4"><div className="flex items-center justify-between"><span className="text-xs font-extrabold uppercase tracking-wider">📅 {g.label}</span><span className="text-[11px] font-bold text-slate-300">{g.rows.length} ligne(s) · {g.unpaid} non payée(s)</span></div></td></tr>{g.rows.map((row) => (
                     <tr key={row.key} className="hover:bg-slate-50/80">
                       <td className="!py-3">
                         <span className="font-mono text-xs font-black text-white bg-slate-900 px-2.5 py-1 rounded-lg">
@@ -1081,10 +1111,11 @@ export default function ProgrammePage() {
                               </button>
                             </>
                           )}
+                          <button type="button" title="Supprimer ce programme" onClick={() => { if (confirm(`Supprimer ce programme ?`)) deleteProgramEntry(row.driverId, row.entryId); }} className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100">🗑 Supprimer</button>
                         </div>
                       </td>
                     </tr>
-                  ))}
+))}</Fragment>))}
                 </tbody>
               </table>
             </div>
