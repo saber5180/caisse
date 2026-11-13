@@ -146,7 +146,8 @@ function CaisseContent() {
   });
 
   const handleNavKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentId: string) => {
-    if (e.key === 'Enter') {
+    // 1. Navigation avec Tabulation ou Entrée
+    if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault();
 
       if (currentId === 'scanner-tr') {
@@ -180,6 +181,82 @@ function CaisseContent() {
           }
         }
       }
+      return;
+    }
+
+    // 2. Flèches de direction pour naviguer entre colonnes/lignes SANS changer la valeur numérique
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (currentId.startsWith('entree-')) {
+        const idx = parseInt(currentId.replace('entree-', ''), 10);
+        if (!isNaN(idx)) {
+          const target = e.key === 'ArrowDown' ? idx + 1 : idx - 1;
+          if (target >= 0 && target < deskRows.length) {
+            const el = document.getElementById(`entree-${target}`) as HTMLInputElement | null;
+            if (el) { el.focus(); el.select(); }
+          } else if (e.key === 'ArrowDown') {
+            const el = document.getElementById('versement-banque') as HTMLInputElement | null;
+            if (el) { el.focus(); el.select(); }
+          } else if (e.key === 'ArrowUp') {
+            const el = document.getElementById('desk-recette') as HTMLInputElement | null;
+            if (el) { el.focus(); el.select(); }
+          }
+        }
+      } else if (currentId.startsWith('sortie-')) {
+        const idx = parseInt(currentId.replace('sortie-', ''), 10);
+        if (!isNaN(idx)) {
+          const target = e.key === 'ArrowDown' ? idx + 1 : idx - 1;
+          if (target >= 0 && target < deskRows.length) {
+            const el = document.getElementById(`sortie-${target}`) as HTMLInputElement | null;
+            if (el) { el.focus(); el.select(); }
+          } else if (e.key === 'ArrowDown') {
+            const el = document.getElementById('versement-coffre') as HTMLInputElement | null;
+            if (el) { el.focus(); el.select(); }
+          } else if (e.key === 'ArrowUp') {
+            const el = document.getElementById('desk-recette') as HTMLInputElement | null;
+            if (el) { el.focus(); el.select(); }
+          }
+        }
+      } else if (currentId === 'desk-recette') {
+        if (e.key === 'ArrowDown') {
+          const el = document.getElementById('entree-0') as HTMLInputElement | null;
+          if (el) { el.focus(); el.select(); }
+        }
+      } else if (currentId === 'versement-banque') {
+        if (e.key === 'ArrowDown') {
+          const el = document.getElementById('versement-coffre') as HTMLInputElement | null;
+          if (el) { el.focus(); el.select(); }
+        } else if (e.key === 'ArrowUp') {
+          const el = document.getElementById(`entree-${deskRows.length - 1}`) as HTMLInputElement | null;
+          if (el) { el.focus(); el.select(); }
+        }
+      } else if (currentId === 'versement-coffre') {
+        if (e.key === 'ArrowUp') {
+          const el = document.getElementById(`sortie-${deskRows.length - 1}`) as HTMLInputElement | null;
+          if (el) { el.focus(); el.select(); }
+        }
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowRight') {
+      if (currentId.startsWith('entree-')) {
+        e.preventDefault();
+        const idx = currentId.replace('entree-', '');
+        const el = document.getElementById(`sortie-${idx}`) as HTMLInputElement | null;
+        if (el) { el.focus(); el.select(); }
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowLeft') {
+      if (currentId.startsWith('sortie-')) {
+        e.preventDefault();
+        const idx = currentId.replace('sortie-', '');
+        const el = document.getElementById(`entree-${idx}`) as HTMLInputElement | null;
+        if (el) { el.focus(); el.select(); }
+      }
+      return;
     }
   };
 
@@ -217,13 +294,9 @@ function CaisseContent() {
   };
 
   const handleValidate = () => {
-    const currentDrvId = selectedDriver?.id;
     const entryToMark = activeUnpaidEntryId;
-    const txn = validateCurrentSale();
+    const txn = validateCurrentSale(entryToMark);
     if (txn) {
-      if (currentDrvId && entryToMark && entryToMark !== 'CURRENT') {
-        markProgramEntryPaid(currentDrvId, entryToMark);
-      }
       setActiveUnpaidEntryId('CURRENT');
       setPrintModalData({
         receiptNo: txn.id,
@@ -591,6 +664,8 @@ function CaisseContent() {
                   value={deskRecette === 0 ? '' : deskRecette}
                   onChange={(e) => setDeskRecette(parseFloat(e.target.value) || 0)}
                   onKeyDown={(e) => handleNavKeyDown(e, 'desk-recette')}
+                  onFocus={(e) => e.target.select()}
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
                   placeholder="0.000 TND"
                   className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm font-bold text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
@@ -707,6 +782,8 @@ function CaisseContent() {
                           setDeskEntree(idx, val);
                         }}
                         onKeyDown={(e) => handleNavKeyDown(e, `entree-${idx}`)}
+                        onFocus={(e) => e.target.select()}
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
                         placeholder="0"
                         className="w-full rounded-lg border border-emerald-300 bg-white py-1.5 text-center text-sm font-bold text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
@@ -727,6 +804,8 @@ function CaisseContent() {
                           setDeskSortie(idx, val);
                         }}
                         onKeyDown={(e) => handleNavKeyDown(e, `sortie-${idx}`)}
+                        onFocus={(e) => e.target.select()}
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
                         placeholder="0"
                         className="w-full rounded-lg border border-rose-300 bg-white py-1.5 text-center text-sm font-bold text-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
                       />
@@ -840,6 +919,8 @@ function CaisseContent() {
                             setDeskEntree(idx, val);
                           }}
                           onKeyDown={(e) => handleNavKeyDown(e, `entree-${idx}`)}
+                          onFocus={(e) => e.target.select()}
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
                           placeholder="0"
                           className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-bold text-emerald-800 bg-emerald-50/40 border-emerald-200"
                         />
@@ -858,6 +939,8 @@ function CaisseContent() {
                             setDeskSortie(idx, val);
                           }}
                           onKeyDown={(e) => handleNavKeyDown(e, `sortie-${idx}`)}
+                          onFocus={(e) => e.target.select()}
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
                           placeholder="0"
                           className="input num !w-24 !min-h-9 !py-1 !text-center text-sm font-bold text-rose-800 bg-rose-50/40 border-rose-200"
                         />
@@ -892,6 +975,8 @@ function CaisseContent() {
                       value={deskVersementBanque === 0 ? '' : deskVersementBanque}
                       onChange={(e) => setDeskVersementBanque(parseFloat(e.target.value) || 0)}
                       onKeyDown={(e) => handleNavKeyDown(e, 'versement-banque')}
+                      onFocus={(e) => e.target.select()}
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
                       placeholder="0.000"
                       className="input num !w-32 !min-h-9 !py-1 !text-right text-sm font-bold text-indigo-700"
                     />
@@ -919,6 +1004,8 @@ function CaisseContent() {
                       value={deskVersementCoffre === 0 ? '' : deskVersementCoffre}
                       onChange={(e) => setDeskVersementCoffre(parseFloat(e.target.value) || 0)}
                       onKeyDown={(e) => handleNavKeyDown(e, 'versement-coffre')}
+                      onFocus={(e) => e.target.select()}
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
                       placeholder="0.000"
                       className="input num !w-32 !min-h-9 !py-1 !text-right text-sm font-bold text-indigo-700"
                     />

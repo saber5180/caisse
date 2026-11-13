@@ -473,36 +473,30 @@ export function applyProgrammeRowsToFleet(
       usedIndices.add(matchIdx);
       updatedCount++;
       const current = resultDrivers[matchIdx];
+      // Conserver intégralement tout l'historique existant (notamment toutes les caisses non payées !)
       const history: ProgramEntry[] = [...(current.programmeHistorique || [])];
-      const sameDayImport =
-        Boolean(current.programmeDate) && current.programmeDate!.slice(0, 10) === todayKey;
 
       const prevProg = (current.programmeJour || current.circuitActuel || '').trim();
-      const prevIsStandby = !prevProg || prevProg.toUpperCase() === 'STAND-BY';
+      const prevIsStandby =
+        !prevProg || prevProg.toUpperCase() === 'STAND-BY' || prevProg.toUpperCase() === 'STANDBY';
 
-      // Archiver l'ancienne caisse dans l'historique si ce n'est pas un ré-import le même jour
-      if (!sameDayImport) {
-        if (current.statut === 'NON PAYE') {
-          const histCircuit = !prevIsStandby ? prevProg : 'ANCIENNE CAISSE (STAND-BY)';
-          const alreadyArchived = history.some(
-            (h) => !h.paid && h.circuit === histCircuit && h.date === (current.programmeDate || current.dateDerniere)
-          );
-          if (!alreadyArchived) {
-            history.unshift({
-              id: `PRG-${Date.now()}-${rowIdx}`,
-              date: current.programmeDate || current.dateDerniere || nowIso,
-              circuit: histCircuit,
-              paid: false,
-            });
-          }
-        } else if (!prevIsStandby && current.statut === 'PAYE') {
-          history.unshift({
-            id: `PRG-${Date.now()}-${rowIdx}`,
-            date: current.programmeDate || current.dateDerniere || nowIso,
-            circuit: prevProg,
-            paid: true,
-          });
-        }
+      // Toujours basculer l'ancien programme actif dans l'historique avant d'affecter le nouveau programme du jour
+      if (!prevIsStandby) {
+        const isPaidPrev = current.statut === 'PAYE';
+        history.unshift({
+          id: `PRG-${Date.now()}-${rowIdx}-${Math.random().toString(36).substring(2, 6)}`,
+          date: current.programmeDate || current.dateDerniere || nowIso,
+          circuit: prevProg,
+          paid: isPaidPrev,
+        });
+      } else if (current.statut === 'NON PAYE' && history.filter((h) => !h.paid).length === 0) {
+        // Si le chauffeur était en NON PAYE sans programme actif ni entrée d'historique, conserver cette dette dans l'historique
+        history.unshift({
+          id: `PRG-${Date.now()}-${rowIdx}-${Math.random().toString(36).substring(2, 6)}`,
+          date: current.programmeDate || current.dateDerniere || nowIso,
+          circuit: 'ANCIENNE CAISSE',
+          paid: false,
+        });
       }
 
       const unpaidHistoryCount = history.filter((h) => !h.paid).length;
@@ -525,6 +519,7 @@ export function applyProgrammeRowsToFleet(
         tr: cleanTr || current.tr,
         programmeJour: cleanCircuit,
         circuitActuel: cleanCircuit,
+        dateDerniere: nowIso,
         programmeDate: nowIso,
         programmeHistorique: history.slice(0, 60),
         statut: nextStatut,
@@ -563,6 +558,47 @@ export function applyProgrammeRowsToFleet(
       usedIndices.add(resultDrivers.length - 1);
     }
   });
+
+  // Pour les chauffeurs déjà en base qui ne figurent pas dans le nouveau fichier Excel importé :
+  // basculer leur ancien programme actif dans l'historique et conserver leurs caisses non payées
+  for (let i = 0; i < resultDrivers.length; i++) {
+    if (usedIndices.has(i)) continue;
+    const d = resultDrivers[i];
+    const history: ProgramEntry[] = [...(d.programmeHistorique || [])];
+    const prevProg = (d.programmeJour || d.circuitActuel || '').trim();
+    const prevIsStandby =
+      !prevProg || prevProg.toUpperCase() === 'STAND-BY' || prevProg.toUpperCase() === 'STANDBY';
+
+    if (!prevIsStandby) {
+      history.unshift({
+        id: `PRG-ARCH-${Date.now()}-${i}`,
+        date: d.programmeDate || d.dateDerniere || nowIso,
+        circuit: prevProg,
+        paid: d.statut === 'PAYE',
+      });
+    } else if (d.statut === 'NON PAYE' && history.filter((h) => !h.paid).length === 0) {
+      history.unshift({
+        id: `PRG-ARCH-${Date.now()}-${i}`,
+        date: d.programmeDate || d.dateDerniere || nowIso,
+        circuit: 'ANCIENNE CAISSE',
+        paid: false,
+      });
+    }
+
+    const unpaidHistoryCount = history.filter((h) => !h.paid).length;
+    const nextStatut: DriverStatus = unpaidHistoryCount > 0 ? 'NON PAYE' : 'PAS DE CAISSE';
+    const updated: Driver = {
+      ...d,
+      programmeJour: 'STAND-BY',
+      circuitActuel: 'STAND-BY',
+      programmeHistorique: history.slice(0, 60),
+      statut: nextStatut,
+      caissesDues: unpaidHistoryCount,
+    };
+    const { reclamation } = recalculateReclamation(updated);
+    updated.reclamation = reclamation;
+    resultDrivers[i] = updated;
+  }
 
   const uniqueProgrammes = new Set(
     resultDrivers.map((d) => (d.programmeJour || 'STAND-BY').trim().toUpperCase()).filter(Boolean)

@@ -496,17 +496,19 @@ export default function ProgrammePage() {
             <button
               type="button"
               onClick={() => {
-                loadDefaultProgrammeExcel();
-                setImportErrors([]);
-                setImportMsg({
-                  type: 'success',
-                  text: 'Les 87 lignes du fichier Programme de Chauffeur ont été chargées avec création des nouveaux chauffeurs et des programmes !',
-                });
+                if (confirm('Voulez-vous vraiment supprimer TOUS les chauffeurs, programmes et historiques de caisses ?')) {
+                  loadDefaultProgrammeExcel();
+                  setImportErrors([]);
+                  setImportMsg({
+                    type: 'success',
+                    text: 'Tous les chauffeurs, programmes et historiques de transactions ont été supprimés (base 100% vide).',
+                  });
+                }
               }}
-              className="btn border border-white/15 bg-white/10 hover:bg-white/15 text-white !py-2.5 !px-3.5 text-xs font-bold backdrop-blur-sm"
+              className="btn border border-rose-400/40 bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 !py-2.5 !px-3.5 text-xs font-bold backdrop-blur-sm"
             >
-              <IconSync className="h-4 w-4" />
-              Charger Programme Complet (87 lignes)
+              <IconClose className="h-4 w-4" />
+              Vider Tous les Chauffeurs &amp; Historiques
             </button>
           </div>
         </div>

@@ -113,7 +113,7 @@ interface CaisseStore {
   setDeskTrInput: (val: string) => void;
   selectDriverByTr: (tr: string) => Driver | null;
   selectDriverById: (id: string | null) => Driver | null;
-  validateCurrentSale: () => CashTransaction | null;
+  validateCurrentSale: (targetEntryId?: string) => CashTransaction | null;
   resetDesk: () => void;
   clearFeedback: () => void;
 
@@ -541,7 +541,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       }
     },
 
-    validateCurrentSale: () => {
+    validateCurrentSale: (targetEntryId?: string) => {
       const {
         deskRows,
         deskVersement,
@@ -595,12 +595,74 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
 
       const updatedDrivers = drivers.map((d) => {
         if (d.id === driver.id) {
-          const updatedStatus: DriverStatus = resAPayer >= 0 ? 'PAYE' : 'NON PAYE';
+          const nowIso = new Date().toISOString();
+          if (resAPayer < 0) {
+            const updated: Driver = {
+              ...d,
+              statut: 'NON PAYE',
+              dateDerniere: nowIso,
+              caissesDues: Math.max(1, d.caissesDues || 1),
+            };
+            const { reclamation } = recalculateReclamation(updated);
+            return { ...updated, reclamation };
+          }
+
+          let nextHist = [...(d.programmeHistorique || [])];
+          const prog = (d.programmeJour || d.circuitActuel || '').trim();
+          const isStandby =
+            !prog || prog.toUpperCase() === 'STAND-BY' || prog.toUpperCase() === 'STANDBY';
+          let nextProgJour = d.programmeJour;
+          let nextCircuitActuel = d.circuitActuel;
+          let nextStatut: DriverStatus = 'PAYE';
+          let nextCaissesDues = 0;
+
+          if (targetEntryId && targetEntryId !== 'CURRENT') {
+            nextHist = nextHist.map((e) => (e.id === targetEntryId ? { ...e, paid: true } : e));
+            const remainingUnpaidHist = nextHist.filter((e) => !e.paid).length;
+            const currentProgUnpaid = !isStandby && d.statut === 'NON PAYE';
+            nextCaissesDues = remainingUnpaidHist + (currentProgUnpaid ? 1 : 0);
+            nextStatut = nextCaissesDues > 0 ? 'NON PAYE' : 'PAYE';
+          } else if (isStandby && nextHist.some((e) => !e.paid)) {
+            let markedOne = false;
+            nextHist = nextHist.map((e) => {
+              if (!markedOne && !e.paid) {
+                markedOne = true;
+                return { ...e, paid: true };
+              }
+              return e;
+            });
+            const remainingUnpaidHist = nextHist.filter((e) => !e.paid).length;
+            nextCaissesDues = remainingUnpaidHist;
+            nextStatut = remainingUnpaidHist > 0 ? 'NON PAYE' : 'PAYE';
+          } else {
+            const remainingUnpaidHist = nextHist.filter((e) => !e.paid).length;
+            if (remainingUnpaidHist > 0) {
+              if (!isStandby) {
+                nextHist.unshift({
+                  id: generateId('PRG'),
+                  date: d.programmeDate || nowIso,
+                  circuit: prog,
+                  paid: true,
+                });
+                nextProgJour = 'STAND-BY';
+                nextCircuitActuel = 'STAND-BY';
+              }
+              nextCaissesDues = remainingUnpaidHist;
+              nextStatut = 'NON PAYE';
+            } else {
+              nextCaissesDues = 0;
+              nextStatut = 'PAYE';
+            }
+          }
+
           const updated: Driver = {
             ...d,
-            statut: updatedStatus,
-            dateDerniere: new Date().toISOString(),
-            caissesDues: resAPayer >= 0 ? 0 : 1,
+            programmeJour: nextProgJour,
+            circuitActuel: nextCircuitActuel,
+            programmeHistorique: nextHist,
+            statut: nextStatut,
+            dateDerniere: nowIso,
+            caissesDues: nextCaissesDues,
           };
           const { reclamation } = recalculateReclamation(updated);
           return { ...updated, reclamation };
@@ -818,49 +880,46 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       set((state) => {
         const now = new Date();
         const nowStr = now.toISOString();
+        const pastDate = new Date(now.getTime() - 25 * 3600 * 1000).toISOString();
 
         const updated = state.drivers.map((d) => {
-          const hasCircuit = d.programmeJour && d.programmeJour.trim().length > 0 && d.programmeJour !== 'STAND-BY';
+          const history = [...(d.programmeHistorique || [])];
+          const prog = (d.programmeJour || d.circuitActuel || '').trim();
+          const hasCircuit =
+            prog.length > 0 && prog.toUpperCase() !== 'STAND-BY' && prog.toUpperCase() !== 'STANDBY';
 
-          if (hasCircuit && d.statut !== 'PAYE') {
-            const u: Driver = {
-              ...d,
-              statut: 'NON PAYE',
-              caissesDues: 1,
-              dateDerniere: nowStr,
-            };
-            const { reclamation } = recalculateReclamation(u);
-            return { ...u, reclamation };
+          if (hasCircuit) {
+            const wasPaid = d.statut === 'PAYE';
+            history.unshift({
+              id: generateId('PRG-BASC'),
+              date: wasPaid ? d.programmeDate || d.dateDerniere || nowStr : pastDate,
+              circuit: prog,
+              paid: wasPaid,
+            });
           }
 
-          if (d.statut === 'PAYE') {
-            const u: Driver = {
-              ...d,
-              statut: 'PAS DE CAISSE',
-              caissesDues: 0,
-              dateDerniere: nowStr,
-            };
-            const { reclamation } = recalculateReclamation(u);
-            return { ...u, reclamation };
-          }
+          const unpaidCount = history.filter((h) => !h.paid).length;
+          const nextStatut: DriverStatus = unpaidCount > 0 ? 'NON PAYE' : 'PAS DE CAISSE';
 
-          if (!hasCircuit) {
-            if (d.caissesDues === 0) {
-              const u: Driver = { ...d, statut: 'PAS DE CAISSE' };
-              const { reclamation } = recalculateReclamation(u);
-              return { ...u, reclamation };
-            }
-          }
-
-          const { reclamation } = recalculateReclamation(d);
-          return { ...d, reclamation };
+          const u: Driver = {
+            ...d,
+            programmeJour: 'STAND-BY',
+            circuitActuel: 'STAND-BY',
+            programmeDate: undefined,
+            programmeHistorique: history.slice(0, 60),
+            statut: nextStatut,
+            caissesDues: unpaidCount,
+            dateDerniere: unpaidCount > 0 ? pastDate : nowStr,
+          };
+          const { reclamation } = recalculateReclamation(u);
+          return { ...u, reclamation };
         });
 
         return {
           drivers: updated,
           feedbackMessage: {
             type: 'success',
-            text: 'Bascule de 12:30 exécutée avec succès ! Les circuits dus ont été mis à jour.',
+            text: 'Bascule de 12:30 exécutée : les programmes actifs ont été archivés dans l’historique et les caisses non payées conservées !',
           },
         };
       });
@@ -887,18 +946,22 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     },
 
     loadDefaultProgrammeExcel: () => {
-      const baseDrivers = get().drivers.length > 0 ? get().drivers : INITIAL_DRIVERS.filter((d) => d.tr !== '0' && d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1');
-      const { drivers: nextDrivers, updatedCount, createdCount, totalProgrammes } =
-        applyProgrammeRowsToFleet(baseDrivers, DEFAULT_PROGRAMME_EXCEL_ROWS);
-
       set({
-        drivers: nextDrivers,
+        drivers: [],
+        transactions: [],
+        allTransactions: [],
+        selectedDriverId: null,
+        deskTrInput: '',
         feedbackMessage: {
-          type: 'success',
-          text: `Programme complet (87 lignes Excel) chargé : ${updatedCount} chauffeurs mis à jour, ${createdCount} nouveaux chauffeurs créés, ${totalProgrammes} programmes créés.`,
+          type: 'info',
+          text: 'Tous les chauffeurs, programmes et historiques de caisses ont été supprimés (0 chauffeur).',
         },
       });
-      triggerImmediateSync(true);
+      void fetch('/api/caisse/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ drivers: [], transactions: [], clearAllHistory: true }),
+      }).then(() => get().fetchAccountData());
     },
 
     markProgramEntryPaid: (driverId, entryId) => {

@@ -136,22 +136,32 @@ export async function GET() {
       [GLOBAL_FLEET_ACCOUNT_ID]
     );
 
-    let drivers: Driver[] = driversRes.rows.map((r) => {
+    const drivers: Driver[] = driversRes.rows.map((r) => {
       const cleanTr = cleanScannerTr(r.tr).toUpperCase();
       const paidInfo = paidDriverTrMap.get(cleanTr);
-      const effectiveStatut = paidInfo ? 'PAYE' : r.statut;
-      const effectiveCaissesDues = effectiveStatut === 'PAYE' ? 0 : r.caisses_dues || 0;
+      const progMs = r.programme_date ? new Date(r.programme_date).getTime() : 0;
+      const paidMs = paidInfo?.date ? new Date(paidInfo.date).getTime() : 0;
+      const hist = Array.isArray(r.programme_historique) ? r.programme_historique : [];
+      const unpaidHistCount = hist.filter((h: any) => !h.paid).length;
+      // Une transaction ne passe le chauffeur en PAYE que s'il n'a plus aucune caisse impayée dans son historique et que la transaction est postérieure au programme du jour
+      const isPaidForCurrentProg =
+        r.statut === 'PAYE' ||
+        (unpaidHistCount === 0 && Boolean(paidInfo) && progMs > 0 && paidMs >= progMs);
+      const effectiveStatut = isPaidForCurrentProg ? 'PAYE' : r.statut;
+      const effectiveCaissesDues =
+        effectiveStatut === 'PAYE' ? 0 : Math.max(unpaidHistCount, r.caisses_dues || 0);
 
       return {
         id: r.id,
         nom: r.nom,
         tr: r.tr,
         statut: effectiveStatut,
-        dateDerniere: paidInfo?.date
-          ? paidInfo.date
-          : r.date_derniere
-          ? new Date(r.date_derniere).toISOString()
-          : new Date().toISOString(),
+        dateDerniere:
+          isPaidForCurrentProg && paidInfo?.date && paidMs >= progMs
+            ? paidInfo.date
+            : r.date_derniere
+            ? new Date(r.date_derniere).toISOString()
+            : new Date().toISOString(),
         reclamation: r.reclamation || '',
         caissesDues: effectiveCaissesDues,
         programmeJour: r.programme_jour || '',
@@ -163,50 +173,6 @@ export async function GET() {
         programmeDate: r.programme_date ? new Date(r.programme_date).toISOString() : undefined,
       };
     }).filter((d) => d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1' && d.tr !== '0');
-
-    // Si le programme Excel complet (87 lignes avec les nouveaux chauffeurs ex: REBAH AMMRI, SAMI IBRAHIM, HASSAN CHAMEM) n'a pas encore été appliqué en base, on l'applique automatiquement
-    const hasSeededFullProgramme = drivers.some(
-      (d) => d.tr === '122' || d.nom.toUpperCase().includes('REBAH AMMRI') || d.nom.toUpperCase().includes('HASSAN CHAMEM')
-    );
-    if (!hasSeededFullProgramme && drivers.length > 0) {
-      const applied = applyProgrammeRowsToFleet(drivers, DEFAULT_PROGRAMME_EXCEL_ROWS);
-      drivers = applied.drivers;
-      for (const d of drivers) {
-        await mainPool.query(
-          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, CURRENT_TIMESTAMP)
-           ON CONFLICT (account_id, id) DO UPDATE SET
-             nom = EXCLUDED.nom,
-             tr = EXCLUDED.tr,
-             statut = EXCLUDED.statut,
-             date_derniere = EXCLUDED.date_derniere,
-             reclamation = EXCLUDED.reclamation,
-             caisses_dues = EXCLUDED.caisses_dues,
-             programme_jour = EXCLUDED.programme_jour,
-             circuit_actuel = EXCLUDED.circuit_actuel,
-             programme_historique = EXCLUDED.programme_historique,
-             programme_date = EXCLUDED.programme_date,
-             updated_at = CURRENT_TIMESTAMP`,
-          [
-            d.id,
-            GLOBAL_FLEET_ACCOUNT_ID,
-            d.nom,
-            d.tr,
-            d.statut,
-            d.dateDerniere || new Date().toISOString(),
-            d.reclamation || '',
-            d.caissesDues || 0,
-            d.programmeJour || '',
-            d.circuitActuel || '',
-            d.serie || '',
-            d.sousSerie || '',
-            d.montantBordereau || 0,
-            JSON.stringify(Array.isArray(d.programmeHistorique) ? d.programmeHistorique : []),
-            d.programmeDate || null,
-          ]
-        );
-      }
-    }
 
     // Transactions for current view:
     // - Supervisor & Admin get all transactions across all caisses
@@ -374,17 +340,29 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { drivers, transactions, billetterie, deskState } = body;
+    const { drivers, transactions, billetterie, deskState, clearAllHistory } = body;
 
     const targetPool = account.custom_db_url ? getPool(account.custom_db_url) : mainPool;
 
+    if (clearAllHistory) {
+      await mainPool.query('DELETE FROM caisse_drivers');
+      await mainPool.query('DELETE FROM caisse_transactions');
+      await mainPool.query("UPDATE caisse_desk_state SET selected_driver_id = NULL, desk_tr_input = ''");
+      return NextResponse.json({ success: true, message: 'Tous les chauffeurs et historiques ont été supprimés' });
+    }
+
     // 1. Save shared global drivers if provided
-    if (Array.isArray(drivers) && drivers.length > 0) {
+    if (Array.isArray(drivers)) {
       const realDrivers = drivers.filter(
         (d) => d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1'
       );
       const driverIds = realDrivers.map((d) => d.id).filter(Boolean);
-      if (driverIds.length > 0) {
+      if (driverIds.length === 0) {
+        await mainPool.query(
+          'DELETE FROM caisse_drivers WHERE account_id = $1',
+          [GLOBAL_FLEET_ACCOUNT_ID]
+        );
+      } else {
         await mainPool.query(
           'DELETE FROM caisse_drivers WHERE account_id = $1 AND NOT (id = ANY($2::text[]))',
           [GLOBAL_FLEET_ACCOUNT_ID, driverIds]
@@ -433,7 +411,20 @@ export async function POST(req: NextRequest) {
 
     // 2. Save transactions for this caisse account
     if (Array.isArray(transactions)) {
+      const txnIds = transactions.map((t) => t.id).filter(Boolean);
+      if (txnIds.length === 0) {
+        await targetPool.query('DELETE FROM caisse_transactions WHERE account_id = $1', [
+          session.id,
+        ]);
+      } else {
+        await targetPool.query(
+          'DELETE FROM caisse_transactions WHERE account_id = $1 AND NOT (id = ANY($2::text[]))',
+          [session.id, txnIds]
+        );
+      }
+
       for (const t of transactions) {
+        const txnDate = t.date || new Date().toISOString();
         await targetPool.query(
           `INSERT INTO caisse_transactions (id, account_id, date, code_chauffeur, nom_chauffeur, recette, t_payer, res_a_payer, versement, status, raw_data)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -450,7 +441,7 @@ export async function POST(req: NextRequest) {
           [
             t.id,
             session.id,
-            t.date || new Date().toISOString(),
+            txnDate,
             t.codeChauffeur,
             t.nomChauffeur,
             t.recette,
@@ -462,17 +453,19 @@ export async function POST(req: NextRequest) {
           ]
         );
 
-        // Liaison automatique inter-modules : si le paiement est validé ('PAYE'), forcer la mise à jour du statut global du chauffeur
-        if (t.status === 'PAYE' && t.codeChauffeur) {
+        // Liaison automatique inter-modules : uniquement si la transaction est plus récente que le programme du jour du chauffeur
+        if (t.status === 'PAYE' && t.codeChauffeur && !Array.isArray(drivers)) {
           await mainPool.query(
             `UPDATE caisse_drivers
              SET statut = 'PAYE',
                  caisses_dues = 0,
-                 date_derniere = CURRENT_TIMESTAMP,
+                 date_derniere = $3,
                  reclamation = 'CAISSE REGLEE - AUCUNE RECLAMATION',
                  updated_at = CURRENT_TIMESTAMP
-             WHERE account_id = $1 AND (tr = $2 OR TRIM(LEADING '0' FROM tr) = TRIM(LEADING '0' FROM $2))`,
-            [GLOBAL_FLEET_ACCOUNT_ID, String(t.codeChauffeur)]
+             WHERE account_id = $1
+               AND (tr = $2 OR TRIM(LEADING '0' FROM tr) = TRIM(LEADING '0' FROM $2))
+               AND (programme_date IS NULL OR programme_date <= $3)`,
+            [GLOBAL_FLEET_ACCOUNT_ID, String(t.codeChauffeur), txnDate]
           );
         }
       }

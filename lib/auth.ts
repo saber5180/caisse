@@ -132,35 +132,6 @@ export async function ensureDefaultAccountsAndSeed() {
     }
   }
 
-  // Ensure the shared global fleet (stored under GLOBAL_FLEET_ACCOUNT_ID = 'acc-admin') is seeded
-  const drvCountRes = await pool.query(
-    'SELECT COUNT(*) FROM caisse_drivers WHERE account_id = $1',
-    [GLOBAL_FLEET_ACCOUNT_ID]
-  );
-  const drvCount = parseInt(drvCountRes.rows[0].count, 10);
-
-  if (drvCount === 0) {
-    for (const d of INITIAL_DRIVERS) {
-      await pool.query(
-        `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (account_id, id) DO NOTHING`,
-        [
-          d.id,
-          GLOBAL_FLEET_ACCOUNT_ID,
-          d.nom,
-          d.tr,
-          d.statut,
-          d.dateDerniere || new Date().toISOString(),
-          d.reclamation || '',
-          d.caissesDues || 0,
-          d.programmeJour || '',
-          d.circuitActuel || '',
-        ]
-      );
-    }
-  }
-
   accountsInitialized = true;
 }
 

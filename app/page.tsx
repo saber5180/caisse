@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useCaisseStore } from '@/lib/store';
 import {
@@ -107,6 +107,32 @@ export default function DashboardPage() {
 
   // Modal de modification rapide de Série / Sous-série / Montant Bordereau
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
+  const [heroSerie, setHeroSerie] = useState('');
+  const [heroSousSerie, setHeroSousSerie] = useState('');
+  const [heroSerie2, setHeroSerie2] = useState('');
+  const [heroSerie3, setHeroSerie3] = useState('');
+  const [ecartValeurInput, setEcartValeurInput] = useState('');
+  const [heroLoaded, setHeroLoaded] = useState(false);
+  useEffect(() => {
+    try {
+      setHeroSerie(localStorage.getItem('hero_serie') || '');
+      setHeroSousSerie(localStorage.getItem('hero_sous_serie') || '');
+      setHeroSerie2(localStorage.getItem('hero_serie_2') || '');
+      setHeroSerie3(localStorage.getItem('hero_serie_3') || '');
+      setEcartValeurInput(localStorage.getItem('hero_ecart_valeur') || '');
+    } catch {}
+    setHeroLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (!heroLoaded) return;
+    try {
+      localStorage.setItem('hero_serie', heroSerie);
+      localStorage.setItem('hero_sous_serie', heroSousSerie);
+      localStorage.setItem('hero_serie_2', heroSerie2);
+      localStorage.setItem('hero_serie_3', heroSerie3);
+      localStorage.setItem('hero_ecart_valeur', ecartValeurInput);
+    } catch {}
+  }, [heroLoaded, heroSerie, heroSerie2, heroSerie3, heroSousSerie, ecartValeurInput]);
   const [editSerie, setEditSerie] = useState('');
   const [editSousSerie, setEditSousSerie] = useState('');
   const [editMontantBordereau, setEditMontantBordereau] = useState<number>(0);
@@ -173,7 +199,7 @@ export default function DashboardPage() {
           ? d.montantBordereau
           : driverTxns.reduce((sum, t) => sum + t.recette, 0);
 
-      const ecart = Math.round((mtBordereau - mvtCaisse) * 1000) / 1000;
+      const ecart = Math.round((mvtCaisse - mtBordereau) * 1000) / 1000;
       const lastPaidCaisse = isSupervisorOrAdmin
         ? driverTxns.find((t) => t.status === 'PAYE')?.caisseCode
         : undefined;
@@ -236,7 +262,8 @@ export default function DashboardPage() {
 
   const cumulBordereaux = enrichedDrivers.reduce((sum, d) => sum + (d.montantBordereau || 0), 0);
   const cumulMouvements = enrichedDrivers.reduce((sum, d) => sum + (d.mouvementCaisse || 0), 0);
-  const cumulEcart = Math.round((cumulBordereaux - cumulMouvements) * 1000) / 1000;
+  const cumulEcart = Math.round((cumulMouvements - cumulBordereaux) * 1000) / 1000;
+  const ecartDiff = Math.round((cumulBordereaux - (parseFloat(ecartValeurInput) || 0)) * 1000) / 1000;
 
   const openTransactionReceipt = (t: CashTransaction) => {
     setReceiptData({
@@ -289,151 +316,104 @@ export default function DashboardPage() {
       {/* =========================================================================
           HERO BANNER COMMAND CENTER
       ========================================================================= */}
-      <div className="card-dark bg-grid-pattern relative mb-6 overflow-hidden p-6 sm:p-8">
-        <div className="relative z-10 flex flex-col justify-between gap-6 xl:flex-row xl:items-center">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[11px] font-bold text-indigo-300 backdrop-blur-sm">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
-              <span>
-                {currentUser?.displayName || 'Trésorerie Centrale'} ·{' '}
+      <div className="card-dark bg-grid-pattern relative mb-6 overflow-hidden p-5 sm:p-7 lg:p-8">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-indigo-500/20 blur-3xl" />
+        <div className="relative z-10">
+          {/* Identité de la caisse */}
+          <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
                 {isSupervisorOrAdmin ? 'Supervision Multi-Caisses Active' : 'Caisse Isolée Active'}
-              </span>
-            </div>
-
-            <h1 className="mt-3 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-              {isSuperviseur
-                ? 'Tableau de Bord Superviseur — Pilotage Temps Réel'
-                : `Centre de Pilotage — ${currentUser?.displayName || 'Caisse'}`}
-            </h1>
-            <p className="mt-1 max-w-xl text-xs text-slate-400 sm:text-sm">
-              {isSuperviseur
-                ? 'Suivi en direct des recettes des caisses CRNU, CRSF et CRTN (MT Espèce & Versement), statut des chauffeurs, journal consolidé et contrôle à distance des caissiers.'
-                : 'Suivi en temps réel de votre caisse, calcul automatique des bordereaux et synchronisation instantanée des statuts chauffeurs.'}
-            </p>
-
-            {/* Actions Rapides */}
-            <div className="mt-5 flex flex-wrap items-center gap-2.5">
-              {!isSuperviseur ? (
-                <>
-                  <Link href="/caisse" className="btn-primary !px-4 !py-2.5 !text-xs sm:!text-sm">
-                    <IconCalculator className="h-4 w-4" />
-                    Ouvrir le Guichet Caisse
-                  </Link>
-                  <Link
-                    href="/chauffeurs"
-                    className="btn border border-white/15 bg-white/10 !px-4 !py-2.5 !text-xs font-bold text-white backdrop-blur-sm hover:bg-white/15 sm:!text-sm"
-                  >
-                    <IconPlus className="h-4 w-4" />
-                    Gérer les Chauffeurs ({totalDrivers})
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (
-                        confirm(
-                          'Exécuter la Bascule de 12:30 ? Les tournées actives non réglées passeront en dette formelle.'
-                        )
-                      ) {
-                        executeBascule1230();
-                      }
-                    }}
-                    className="btn-amber !px-3.5 !py-2.5 !text-xs"
-                  >
-                    <IconBolt className="h-4 w-4" />
-                    Bascule 12:30
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link href="/journal" className="btn-primary !px-4 !py-2.5 !text-xs sm:!text-sm">
-                    <IconReceipt className="h-4 w-4" />
-                    Journal des Transactions Avancé
-                  </Link>
-                  <Link
-                    href="/billetterie/historique"
-                    className="btn border border-white/15 bg-white/10 !px-4 !py-2.5 !text-xs font-bold text-white backdrop-blur-sm hover:bg-white/15 sm:!text-sm"
-                  >
-                    <IconHistory className="h-4 w-4" />
-                    Historique des Clôtures (CRNU · CRSF · CRTN)
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => fetchAccountData()}
-                    className="btn border border-emerald-400/30 bg-emerald-500/20 !px-3.5 !py-2.5 !text-xs font-bold text-emerald-300 hover:bg-emerald-500/30"
-                  >
-                    <IconSync className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                    Actualiser en Direct
-                  </button>
-                </>
-              )}
+              </div>
+              <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
+                {currentUser?.displayName || 'Trésorerie Centrale'}
+              </h1>
+              <p className="mt-1 text-sm font-medium italic text-indigo-200/90 sm:text-base">
+                « Précision au centime, confiance à chaque encaissement. »
+              </p>
             </div>
           </div>
 
-          {/* Right Financial Snapshot Pod */}
-          <div className="w-full rounded-2xl border border-white/10 bg-white/[0.05] p-5 backdrop-blur-md xl:w-96">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-                {isSupervisorOrAdmin
-                  ? 'Total Global des Caisses (CRNU+CRSF+CRTN)'
-                  : `Total Encaissé (${currentUser?.caisseCode || 'Ma Caisse'})`}
-              </span>
-              <span
-                className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold ${
-                  ecartGlobal >= 0
-                    ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-400/30'
-                    : 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-400/30'
-                }`}
-              >
-                {isSupervisorOrAdmin
-                  ? 'Temps Réel'
-                  : `Écart ${ecartGlobal > 0 ? '+' : ''}${formatMoney(ecartGlobal)} TND`}
-              </span>
-            </div>
+          <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-12">
+            {/* Panneau Séries */}
+            <section className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 sm:p-5 xl:col-span-5">
+              <h2 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-400">Séries &amp; Sous-série</h2>
+              <div className="mt-3 space-y-2.5">
+                {[
+                  { id: 'hero-serie-1', label: 'Série 1', v: heroSerie, set: setHeroSerie },
+                  { id: 'hero-serie-2', label: 'Série 2', v: heroSerie2, set: setHeroSerie2 },
+                  { id: 'hero-serie-3', label: 'Série 3', v: heroSerie3, set: setHeroSerie3 },
+                  { id: 'hero-sous-serie', label: 'Sous-série', v: heroSousSerie, set: setHeroSousSerie },
+                ].map((f, i) => (
+                  <div key={f.id} className={`flex items-center gap-3 ${i === 3 ? 'border-t border-white/10 pt-3' : ''}`}>
+                    <label htmlFor={f.id} className="w-24 shrink-0 text-xs font-extrabold uppercase tracking-wider text-indigo-300 sm:w-28 sm:text-[13px]">
+                      {f.label}
+                    </label>
+                    <input
+                      id={f.id}
+                      type="text"
+                      value={f.v}
+                      onChange={(e) => f.set(e.target.value)}
+                      className="min-w-0 flex-1 rounded-xl border border-white/15 bg-slate-950/50 px-3.5 py-2.5 text-lg font-extrabold tracking-wide text-white placeholder-slate-500 transition focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 sm:text-xl"
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
 
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="font-mono text-3xl font-extrabold tracking-tight text-white tabular-nums">
-                {formatMoney(isSupervisorOrAdmin ? globalMontantActuel : totalEncaisse)}
-              </span>
-              <span className="font-mono text-xs font-bold text-indigo-300">TND</span>
-            </div>
-
-            {isSupervisorOrAdmin && (
-              <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-white/[0.06] p-2.5 text-xs">
-                <div>
-                  <span className="block text-[10px] font-bold uppercase text-slate-400">
-                    Total MT Espèce
-                  </span>
-                  <strong className="font-mono text-emerald-300">
-                    {formatMoney(globalMtEspece)} TND
-                  </strong>
+            {/* Panneau Cumuls */}
+            <section className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 sm:p-5 xl:col-span-7">
+              <h2 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-400">Cumuls Bordereaux &amp; Mouvements</h2>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3.5">
+                  <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Bordereaux</span>
+                  <div className="mt-1.5 flex items-baseline gap-1.5">
+                    <strong className="font-mono text-xl font-extrabold tabular-nums text-white sm:text-2xl">{formatMoney(cumulBordereaux)}</strong>
+                    <span className="font-mono text-[11px] font-bold text-indigo-300">TND</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="block text-[10px] font-bold uppercase text-slate-400">
-                    Total Versement
-                  </span>
-                  <strong className="font-mono text-sky-300">
-                    {formatMoney(globalVersement)} TND
-                  </strong>
+                <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-3.5">
+                  <span className="block text-[11px] font-bold uppercase tracking-wider text-emerald-300">Mouvements</span>
+                  <div className="mt-1.5 flex items-baseline gap-1.5">
+                    <strong className="font-mono text-xl font-extrabold tabular-nums text-emerald-200 sm:text-2xl">{formatMoney(cumulMouvements)}</strong>
+                    <span className="font-mono text-[11px] font-bold text-emerald-300">TND</span>
+                  </div>
+                </div>
+                <div className={`rounded-xl border p-3.5 ${cumulEcart === 0 ? 'border-white/10 bg-white/[0.06]' : cumulEcart > 0 ? 'border-rose-400/30 bg-rose-500/15' : 'border-indigo-400/30 bg-indigo-500/15'}`}>
+                  <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-300">Écart</span>
+                  <div className="mt-1.5 flex items-baseline gap-1.5">
+                    <strong className={`font-mono text-xl font-extrabold tabular-nums sm:text-2xl ${cumulEcart === 0 ? 'text-white' : cumulEcart > 0 ? 'text-rose-300' : 'text-indigo-200'}`}>
+                      {cumulEcart > 0 ? '+' : ''}{formatMoney(cumulEcart)}
+                    </strong>
+                    <span className="font-mono text-[11px] font-bold text-slate-400">TND</span>
+                  </div>
                 </div>
               </div>
-            )}
-
-            <div className="mt-4 border-t border-white/10 pt-3.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-medium text-slate-300">Progression Flotte Globale</span>
-                <span className="font-mono font-bold text-emerald-400">{settlementPct}%</span>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3.5">
+                  <label htmlFor="ecart-valeur" className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Valeur à soustraire</label>
+                  <input
+                    id="ecart-valeur"
+                    type="number"
+                    step="0.001"
+                    value={ecartValeurInput}
+                    onChange={(e) => setEcartValeurInput(e.target.value)}
+                    placeholder="0.000"
+                    className="mt-1.5 w-full rounded-lg border border-white/15 bg-slate-950/50 px-3 py-2 font-mono text-lg font-bold text-white placeholder-slate-500 transition focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/20"
+                  />
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3.5">
+                  <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Différence (Bordereaux − Valeur)</span>
+                  <div className="mt-2 flex items-baseline gap-1.5">
+                    <strong className={`font-mono text-xl font-extrabold tabular-nums sm:text-2xl ${ecartDiff === 0 ? 'text-white' : ecartDiff > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                      {ecartDiff > 0 ? '+' : ''}{formatMoney(ecartDiff)}
+                    </strong>
+                    <span className="font-mono text-[11px] font-bold text-slate-400">TND</span>
+                  </div>
+                </div>
               </div>
-              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-indigo-400 via-sky-400 to-emerald-400 transition-all duration-500"
-                  style={{ width: `${settlementPct}%` }}
-                />
-              </div>
-              <div className="mt-2 flex justify-between text-[11px] text-slate-400">
-                <span>{payes.length} payé(s)</span>
-                <span>{allNonPayes.length} non payé(s)</span>
-              </div>
-            </div>
+            </section>
           </div>
         </div>
       </div>
@@ -805,26 +785,39 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Cumuls Pills */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-[11px] text-slate-700">
-              Bordereaux : <strong className="text-slate-900">{formatMoney(cumulBordereaux)} TND</strong>
-            </span>
-            <span className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-1.5 font-mono text-[11px] text-emerald-800">
-              Mouvements : <strong className="text-emerald-900">{formatMoney(cumulMouvements)} TND</strong>
-            </span>
-            <span
-              className={`rounded-xl px-3 py-1.5 font-mono text-[11px] font-bold ${
-                cumulEcart === 0
-                  ? 'border border-slate-200 bg-slate-50 text-slate-700'
-                  : cumulEcart > 0
-                  ? 'border border-rose-200 bg-rose-50 text-rose-700'
-                  : 'border border-indigo-200 bg-indigo-50 text-indigo-700'
-              }`}
-            >
-              Écart : {cumulEcart > 0 ? '+' : ''}
-              {formatMoney(cumulEcart)} TND
-            </span>
+          {/* Total Encaissé + Progression Flotte (ancienne position des cumuls) */}
+          <div className="grid w-full grid-cols-1 gap-3 text-xs sm:grid-cols-2 lg:w-auto lg:min-w-[34rem]">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                  {isSupervisorOrAdmin ? 'Total Global des Caisses' : `Total Encaissé (${currentUser?.caisseCode || 'Ma Caisse'})`}
+                </span>
+                {!isSupervisorOrAdmin && (
+                  <span className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-bold ${ecartGlobal >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                    Écart {ecartGlobal > 0 ? '+' : ''}{formatMoney(ecartGlobal)} TND
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 flex items-baseline gap-1.5">
+                <strong className="font-mono text-xl font-extrabold tabular-nums text-slate-900">
+                  {formatMoney(isSupervisorOrAdmin ? globalMontantActuel : totalEncaisse)}
+                </strong>
+                <span className="font-mono text-[11px] font-bold text-indigo-600">TND</span>
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Progression Flotte Globale</span>
+                <span className="font-mono font-bold text-emerald-600">{settlementPct}%</span>
+              </div>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                <div className="h-full rounded-full bg-gradient-to-r from-indigo-400 via-sky-400 to-emerald-400 transition-all duration-500" style={{ width: `${settlementPct}%` }} />
+              </div>
+              <div className="mt-1.5 flex justify-between text-[11px] text-slate-500">
+                <span>{payes.length} payé(s)</span>
+                <span>{allNonPayes.length} non payé(s)</span>
+              </div>
+            </div>
           </div>
         </div>
 

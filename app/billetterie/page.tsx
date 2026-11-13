@@ -91,6 +91,77 @@ export default function BilletteriePage() {
 
   const currentDateStr = new Date().toLocaleString('fr-FR');
 
+  const handleNavKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentId: string) => {
+    // Navigation avec Tab ou Entrée
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      const isShift = e.shiftKey;
+      const isMobile = currentId.startsWith('mobile-');
+      const prefix = isMobile ? 'mobile-billetterie-nombre-' : 'billetterie-nombre-';
+
+      const navSequence = [
+        ...items.map((_, i) => `${prefix}${i}`),
+        'billetterie-srf-moins',
+        'billetterie-ver',
+        'billetterie-recette',
+      ];
+
+      const curIdx = navSequence.indexOf(currentId);
+      if (curIdx !== -1) {
+        const nextIdx = isShift
+          ? (curIdx - 1 + navSequence.length) % navSequence.length
+          : (curIdx + 1) % navSequence.length;
+        const targetId = navSequence[nextIdx];
+        const nextEl = document.getElementById(targetId) as HTMLInputElement | null;
+        if (nextEl) {
+          nextEl.focus();
+          nextEl.select();
+        }
+      }
+      return;
+    }
+
+    // Flèches haut / bas pour naviguer verticalement entre les lignes sans altérer la valeur numérique
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const isMobile = currentId.startsWith('mobile-');
+      const prefix = isMobile ? 'mobile-billetterie-nombre-' : 'billetterie-nombre-';
+
+      if (currentId.startsWith(prefix)) {
+        const rowIdx = parseInt(currentId.replace(prefix, ''), 10);
+        if (!isNaN(rowIdx)) {
+          const targetIdx = e.key === 'ArrowDown' ? rowIdx + 1 : rowIdx - 1;
+          if (targetIdx >= 0 && targetIdx < items.length) {
+            const nextEl = document.getElementById(`${prefix}${targetIdx}`) as HTMLInputElement | null;
+            if (nextEl) {
+              nextEl.focus();
+              nextEl.select();
+            }
+          } else if (e.key === 'ArrowDown' && targetIdx >= items.length) {
+            const nextEl = document.getElementById('billetterie-srf-moins') as HTMLInputElement | null;
+            if (nextEl) {
+              nextEl.focus();
+              nextEl.select();
+            }
+          }
+        }
+      } else if (currentId === 'billetterie-srf-moins') {
+        const targetId = e.key === 'ArrowDown' ? 'billetterie-ver' : `${prefix}${items.length - 1}`;
+        const el = document.getElementById(targetId) as HTMLInputElement | null;
+        if (el) { el.focus(); el.select(); }
+      } else if (currentId === 'billetterie-ver') {
+        const targetId = e.key === 'ArrowDown' ? 'billetterie-recette' : 'billetterie-srf-moins';
+        const el = document.getElementById(targetId) as HTMLInputElement | null;
+        if (el) { el.focus(); el.select(); }
+      } else if (currentId === 'billetterie-recette') {
+        if (e.key === 'ArrowUp') {
+          const el = document.getElementById('billetterie-ver') as HTMLInputElement | null;
+          if (el) { el.focus(); el.select(); }
+        }
+      }
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl pb-16 sm:pb-6">
       {/* ===================== PRINTABLE A4 OFFICIAL DOCUMENT ===================== */}
@@ -315,10 +386,14 @@ export default function BilletteriePage() {
                 <div>
                   <label className="label text-[11px]">SRF - (Retenues / Déductions)</label>
                   <input
+                    id="billetterie-srf-moins"
                     type="number"
                     step="0.001"
                     value={srfMoins === 0 ? '' : srfMoins}
                     onChange={(e) => setSrfMoins(parseFloat(e.target.value) || 0)}
+                    onKeyDown={(e) => handleNavKeyDown(e, 'billetterie-srf-moins')}
+                    onFocus={(e) => e.target.select()}
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
                     placeholder="0.000"
                     className="input num !min-h-9 !py-1 text-sm font-semibold"
                   />
@@ -328,10 +403,14 @@ export default function BilletteriePage() {
                 <div>
                   <label className="label text-[11px]">VER (Versements)</label>
                   <input
+                    id="billetterie-ver"
                     type="number"
                     step="0.001"
                     value={ver === 0 ? '' : ver}
                     onChange={(e) => setVer(parseFloat(e.target.value) || 0)}
+                    onKeyDown={(e) => handleNavKeyDown(e, 'billetterie-ver')}
+                    onFocus={(e) => e.target.select()}
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
                     placeholder="0.000"
                     className="input num !min-h-9 !py-1 text-sm font-semibold text-emerald-700"
                   />
@@ -351,10 +430,14 @@ export default function BilletteriePage() {
                 <div>
                   <label className="label text-[11px]">RECETTE (Ventes Théoriques)</label>
                   <input
+                    id="billetterie-recette"
                     type="number"
                     step="0.001"
                     value={recetteTheorique === 0 ? '' : recetteTheorique}
                     onChange={(e) => setRecetteTheorique(parseFloat(e.target.value) || 0)}
+                    onKeyDown={(e) => handleNavKeyDown(e, 'billetterie-recette')}
+                    onFocus={(e) => e.target.select()}
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
                     placeholder="0.000"
                     className="input num !min-h-10 !py-1 text-sm font-bold text-indigo-700"
                   />
@@ -438,6 +521,7 @@ export default function BilletteriePage() {
                         -
                       </button>
                       <input
+                        id={`mobile-billetterie-nombre-${idx}`}
                         type="number"
                         step="0.1"
                         min={0}
@@ -445,6 +529,9 @@ export default function BilletteriePage() {
                         onChange={(e) =>
                           setBilletterieCount(idx, parseFloat(e.target.value) || 0)
                         }
+                        onKeyDown={(e) => handleNavKeyDown(e, `mobile-billetterie-nombre-${idx}`)}
+                        onFocus={(e) => e.target.select()}
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
                         placeholder="0"
                         className="input num flex-1 !h-10 !text-center text-sm font-bold text-slate-900"
                       />
@@ -491,6 +578,7 @@ export default function BilletteriePage() {
                         </td>
                         <td className="text-center">
                           <input
+                            id={`billetterie-nombre-${idx}`}
                             type="number"
                             step="0.1"
                             min={0}
@@ -498,6 +586,9 @@ export default function BilletteriePage() {
                             onChange={(e) =>
                               setBilletterieCount(idx, parseFloat(e.target.value) || 0)
                             }
+                            onKeyDown={(e) => handleNavKeyDown(e, `billetterie-nombre-${idx}`)}
+                            onFocus={(e) => e.target.select()}
+                            onClick={(e) => (e.target as HTMLInputElement).select()}
                             placeholder="0"
                             className="input num !w-28 !min-h-9 !py-1 !text-center text-sm font-bold text-slate-900"
                           />
