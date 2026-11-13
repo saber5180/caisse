@@ -113,26 +113,47 @@ export default function DashboardPage() {
   const [heroSerie3, setHeroSerie3] = useState('');
   const [ecartValeurInput, setEcartValeurInput] = useState('');
   const [heroLoaded, setHeroLoaded] = useState(false);
+  // Séries / Sous-série / Valeur : enregistrées en base de données, propres à chaque compte caisse
+  const heroKey = currentUser?.id || '';
   useEffect(() => {
-    try {
-      setHeroSerie(localStorage.getItem('hero_serie') || '');
-      setHeroSousSerie(localStorage.getItem('hero_sous_serie') || '');
-      setHeroSerie2(localStorage.getItem('hero_serie_2') || '');
-      setHeroSerie3(localStorage.getItem('hero_serie_3') || '');
-      setEcartValeurInput(localStorage.getItem('hero_ecart_valeur') || '');
-    } catch {}
-    setHeroLoaded(true);
-  }, []);
+    if (!heroKey) return;
+    let cancelled = false;
+    setHeroLoaded(false);
+    fetch('/api/caisse/hero', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled || !j?.success) return;
+        setHeroSerie(j.data.serie1 || '');
+        setHeroSerie2(j.data.serie2 || '');
+        setHeroSerie3(j.data.serie3 || '');
+        setHeroSousSerie(j.data.sousSerie || '');
+        setEcartValeurInput(j.data.valeur || '');
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setHeroLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [heroKey]);
   useEffect(() => {
-    if (!heroLoaded) return;
-    try {
-      localStorage.setItem('hero_serie', heroSerie);
-      localStorage.setItem('hero_sous_serie', heroSousSerie);
-      localStorage.setItem('hero_serie_2', heroSerie2);
-      localStorage.setItem('hero_serie_3', heroSerie3);
-      localStorage.setItem('hero_ecart_valeur', ecartValeurInput);
-    } catch {}
-  }, [heroLoaded, heroSerie, heroSerie2, heroSerie3, heroSousSerie, ecartValeurInput]);
+    if (!heroLoaded || !heroKey || isSuperviseur) return;
+    const timer = setTimeout(() => {
+      fetch('/api/caisse/hero', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serie1: heroSerie,
+          serie2: heroSerie2,
+          serie3: heroSerie3,
+          sousSerie: heroSousSerie,
+          valeur: ecartValeurInput,
+        }),
+      }).catch(() => {});
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [heroLoaded, heroKey, isSuperviseur, heroSerie, heroSerie2, heroSerie3, heroSousSerie, ecartValeurInput]);
   const [editSerie, setEditSerie] = useState('');
   const [editSousSerie, setEditSousSerie] = useState('');
   const [editMontantBordereau, setEditMontantBordereau] = useState<number>(0);
@@ -195,7 +216,7 @@ export default function DashboardPage() {
 
       const mvtCaisse = driverTxns.reduce((sum, t) => sum + t.tPayer, 0);
       const mtBordereau =
-        typeof d.montantBordereau === 'number' && d.montantBordereau > 0
+        isSupervisorOrAdmin && typeof d.montantBordereau === 'number' && d.montantBordereau > 0
           ? d.montantBordereau
           : driverTxns.reduce((sum, t) => sum + t.recette, 0);
 
@@ -260,7 +281,10 @@ export default function DashboardPage() {
     });
   }, [isSupervisorOrAdmin, txnsSource, journalCaisseFilter, journalSearch]);
 
-  const cumulBordereaux = enrichedDrivers.reduce((sum, d) => sum + (d.montantBordereau || 0), 0);
+  // Caisse isolée : bordereaux = recettes saisies sur SES propres encaissements uniquement
+  const cumulBordereaux = isSupervisorOrAdmin
+    ? enrichedDrivers.reduce((sum, d) => sum + (d.montantBordereau || 0), 0)
+    : Math.round(txnsSource.reduce((sum, t) => sum + (t.recette || 0), 0) * 1000) / 1000;
   const cumulMouvements = enrichedDrivers.reduce((sum, d) => sum + (d.mouvementCaisse || 0), 0);
   const cumulEcart = Math.round((cumulMouvements - cumulBordereaux) * 1000) / 1000;
   const ecartDiff = Math.round((cumulBordereaux - (parseFloat(ecartValeurInput) || 0)) * 1000) / 1000;

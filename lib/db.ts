@@ -134,6 +134,16 @@ export async function initDatabaseSchema(customUrl?: string) {
     );
 
     ALTER TABLE caisse_billetterie_history ADD COLUMN IF NOT EXISTS archived_transactions JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+    CREATE TABLE IF NOT EXISTS caisse_hero_state (
+      account_id VARCHAR(64) PRIMARY KEY REFERENCES caisse_accounts(id) ON DELETE CASCADE,
+      serie1 VARCHAR(120) NOT NULL DEFAULT '',
+      serie2 VARCHAR(120) NOT NULL DEFAULT '',
+      serie3 VARCHAR(120) NOT NULL DEFAULT '',
+      sous_serie VARCHAR(120) NOT NULL DEFAULT '',
+      valeur VARCHAR(40) NOT NULL DEFAULT '',
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 
