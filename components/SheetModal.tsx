@@ -27,12 +27,13 @@ export default function SheetModal({
 }: SheetModalProps) {
   const headerTone = accent
     ? {
-        rose: 'bg-rose-800 text-white',
-        amber: 'bg-amber-700 text-white',
-        emerald: 'bg-emerald-800 text-white',
-        indigo: 'bg-indigo-800 text-white',
+        rose: 'bg-red-600 text-white',
+        amber: 'bg-amber-400 text-slate-950',
+        emerald: 'bg-emerald-600 text-white',
+        indigo: 'bg-indigo-600 text-white',
       }[accent]
     : 'border-b border-slate-200 text-slate-900';
+  const onLightHeader = accent === 'amber';
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -67,17 +68,25 @@ export default function SheetModal({
       >
         <div className={`flex min-h-14 shrink-0 items-center justify-between gap-3 px-4 py-2.5 ${headerTone}`}>
           <div className="min-w-0">
-            {accent ? <p className="text-[11px] font-medium text-white/70">Statut de la flotte</p> : null}
-            <h3 className="truncate text-base font-semibold leading-5">{title}</h3>
+            {accent ? (
+              <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${onLightHeader ? 'text-slate-800/70' : 'text-white/75'}`}>
+                Statut de la flotte
+              </p>
+            ) : null}
+            <h3 className="truncate text-lg font-bold leading-6 tracking-tight">{title}</h3>
             {subtitle ? (
-              <p className={`truncate text-xs leading-4 ${accent ? 'text-white/75' : 'text-slate-500'}`}>{subtitle}</p>
+              <p className={`truncate text-xs font-medium leading-4 ${accent ? (onLightHeader ? 'text-slate-800/80' : 'text-white/80') : 'text-slate-500'}`}>{subtitle}</p>
             ) : null}
           </div>
           <button
             type="button"
             onClick={onClose}
             className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-              accent ? 'text-white/80 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-100'
+              accent
+                ? onLightHeader
+                  ? 'text-slate-900 hover:bg-black/10'
+                  : 'text-white hover:bg-white/15'
+                : 'text-slate-500 hover:bg-slate-100'
             }`}
             aria-label="Fermer"
           >

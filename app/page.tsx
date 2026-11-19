@@ -751,7 +751,7 @@ export default function DashboardPage() {
           SPÉCIFICATION 2 : SUIVI DU STATUT DES CHAUFFEURS (4 STATUTS VISUELS CLIQUABLES)
       ========================================================================= */}
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="truncate text-sm font-semibold text-slate-900">
+        <h2 className="truncate text-base font-bold tracking-tight text-slate-900">
           Statut de la flotte
         </h2>
         <span className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500">
@@ -804,16 +804,16 @@ export default function DashboardPage() {
       {totalDrivers > 0 && (
         <div className="card mt-5 p-4 sm:px-6">
           <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
-              Indicateur Visuel des 4 Statuts Chauffeurs ({totalDrivers} Chauffeurs)
+            <span className="text-sm font-bold tracking-tight text-slate-800">
+              Répartition · {totalDrivers} chauffeurs
             </span>
             <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
               <button
                 type="button"
                 onClick={() => openCategoryModal('NON_PAYES')}
-                className="flex items-center gap-1.5 text-rose-700 hover:underline"
+                className="flex items-center gap-1.5 text-red-700 hover:underline"
               >
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
                 Chauffeur Non Payé ({nonPayesActifs.length})
               </button>
               <button
@@ -854,7 +854,7 @@ export default function DashboardPage() {
             )}
             {nonPayesActifs.length > 0 && (
               <div
-                className="bg-rose-400 transition-all duration-500 cursor-pointer"
+                className="bg-red-500 transition-all duration-500 cursor-pointer"
                 style={{ width: `${(nonPayesActifs.length / totalDrivers) * 100}%` }}
                 onClick={() => openCategoryModal('NON_PAYES')}
                 title="Chauffeur Non Payé"
@@ -862,7 +862,7 @@ export default function DashboardPage() {
             )}
             {standbyNonPayes.length > 0 && (
               <div
-                className="bg-amber-500 transition-all duration-500 cursor-pointer"
+                className="bg-amber-400 transition-all duration-500 cursor-pointer"
                 style={{ width: `${(standbyNonPayes.length / totalDrivers) * 100}%` }}
                 onClick={() => openCategoryModal('STANDBY_NON_PAYES')}
                 title="Chauffeur Stand-by / Non Payé"
@@ -870,7 +870,7 @@ export default function DashboardPage() {
             )}
             {pasDeCaisse.length > 0 && (
               <div
-                className="bg-indigo-400 transition-all duration-500 cursor-pointer"
+                className="bg-indigo-500 transition-all duration-500 cursor-pointer"
                 style={{ width: `${(pasDeCaisse.length / totalDrivers) * 100}%` }}
                 onClick={() => openCategoryModal('PAS_DE_CAISSE')}
                 title="Chauffeur Sans Caisse"
@@ -956,8 +956,8 @@ export default function DashboardPage() {
               onClick={() => setTableFilter('NON_PAYE_ACTIF')}
               className={`h-8 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors ${
                 tableFilter === 'NON_PAYE_ACTIF'
-                  ? 'bg-rose-600 text-white shadow-sm'
-                  : 'bg-rose-50 text-rose-700 border border-rose-200/60 hover:bg-rose-100'
+                  ? 'bg-red-500 text-white shadow-sm'
+                  : 'bg-red-50 text-red-700 border border-red-200/60 hover:bg-red-100'
               }`}
             >
               Non Payé ({nonPayesActifs.length})
@@ -1772,6 +1772,14 @@ export default function DashboardPage() {
               ) : (
                 <ul className="-mx-4 -my-3 space-y-2 bg-slate-50 px-3 py-3">
                   {targetList.map((d) => {
+                    const avatar =
+                      activeCategoryModal === 'NON_PAYES'
+                        ? 'bg-red-500 text-white'
+                        : activeCategoryModal === 'STANDBY_NON_PAYES'
+                        ? 'bg-amber-400 text-amber-950'
+                        : activeCategoryModal === 'PAYES'
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-indigo-500 text-white';
                     const initials = d.nom
                       .split(' ')
                       .filter(Boolean)
@@ -1784,17 +1792,17 @@ export default function DashboardPage() {
                         key={d.id}
                         className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm"
                       >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-semibold text-white">
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-xs font-bold tracking-tight ${avatar}`}>
                           {initials || 'TR'}
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex min-w-0 items-center gap-2">
-                            <p className="truncate text-sm font-semibold text-slate-900">{d.nom}</p>
-                            <span className="shrink-0 whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-medium text-slate-700">
+                            <p className="truncate text-sm font-bold tracking-tight text-slate-900">{d.nom}</p>
+                            <span className="shrink-0 whitespace-nowrap rounded-md bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white">
                               TR {d.tr}
                             </span>
                           </div>
-                          <p className="mt-0.5 truncate text-xs text-slate-500">{d.programmeJour || 'Stand-by'}</p>
+                          <p className="mt-0.5 truncate text-xs font-semibold tracking-wide text-slate-500">{d.programmeJour || 'Stand-by'}</p>
                           {d.reclamation && /retard/i.test(d.reclamation) ? (
                             <p className="mt-0.5 truncate text-xs font-medium text-rose-700">{d.reclamation}</p>
                           ) : null}

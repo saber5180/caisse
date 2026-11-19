@@ -14,34 +14,29 @@ interface StatCardProps {
 
 const accents = {
   indigo: {
-    chip: 'bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200/80',
-    glow: 'from-indigo-500/12 via-indigo-500/4 to-transparent',
-    bar: 'bg-indigo-600',
-    dot: 'bg-indigo-500',
+    chip: 'bg-indigo-500 text-white',
+    bar: 'bg-indigo-500',
+    num: 'text-indigo-600',
   },
   rose: {
-    chip: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',
-    glow: 'from-rose-400/10 via-rose-400/0 to-transparent',
-    bar: 'bg-rose-400',
-    dot: 'bg-rose-500',
+    chip: 'bg-red-500 text-white',
+    bar: 'bg-red-500',
+    num: 'text-red-600',
   },
   amber: {
-    chip: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/80',
-    glow: 'from-amber-500/12 via-amber-500/4 to-transparent',
-    bar: 'bg-amber-500',
-    dot: 'bg-amber-500',
+    chip: 'bg-amber-400 text-amber-950',
+    bar: 'bg-amber-400',
+    num: 'text-amber-600',
   },
   emerald: {
-    chip: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80',
-    glow: 'from-emerald-500/12 via-emerald-500/4 to-transparent',
-    bar: 'bg-emerald-600',
-    dot: 'bg-emerald-500',
+    chip: 'bg-emerald-500 text-white',
+    bar: 'bg-emerald-500',
+    num: 'text-emerald-600',
   },
   sky: {
-    chip: 'bg-sky-50 text-sky-600 ring-1 ring-sky-200/80',
-    glow: 'from-sky-500/12 via-sky-500/4 to-transparent',
-    bar: 'bg-sky-600',
-    dot: 'bg-sky-500',
+    chip: 'bg-sky-500 text-white',
+    bar: 'bg-sky-500',
+    num: 'text-sky-600',
   },
 };
 
@@ -74,7 +69,7 @@ export default function StatCard({
       } ${className}`}
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="truncate text-sm font-medium leading-5 text-slate-600">
+        <p className="truncate text-sm font-bold tracking-tight text-slate-800">
           {label}
         </p>
         <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${a.chip}`}>
@@ -83,7 +78,7 @@ export default function StatCard({
       </div>
 
       <div className="mt-2 flex items-baseline gap-1.5">
-        <span className="font-mono text-2xl font-semibold leading-none tabular-nums text-slate-900">
+        <span className={`font-mono text-[28px] font-bold leading-none tracking-tight tabular-nums ${a.num}`}>
           {value}
         </span>
         {unit && (
@@ -92,7 +87,7 @@ export default function StatCard({
       </div>
 
       {typeof progress === 'number' && (
-        <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-slate-100">
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
           <div
             className={`h-full rounded-full ${a.bar}`}
             style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
@@ -101,7 +96,7 @@ export default function StatCard({
       )}
 
       {hint && (
-        <p className="mt-2 truncate text-xs leading-5 text-slate-500">{hint}</p>
+        <p className="mt-2 truncate text-xs font-medium leading-5 text-slate-500">{hint}</p>
       )}
     </div>
   );

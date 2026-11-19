@@ -15,21 +15,6 @@ const config: Config = {
         "2xl": "10px",
         "3xl": "12px",
       },
-      colors: {
-        rose: {
-          50: "#F8F4F2",
-          100: "#F3EBE7",
-          200: "#E6D5CE",
-          300: "#D4B8AD",
-          400: "#C08E80",
-          500: "#B07A6C",
-          600: "#8E5A4E",
-          700: "#73483F",
-          800: "#5A382F",
-          900: "#3E261F",
-          950: "#2A1915",
-        },
-      },
       fontFamily: {
         sans: [
           "Plus Jakarta Sans",

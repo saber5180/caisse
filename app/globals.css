@@ -186,19 +186,19 @@
 
   /* ---------- Status & Tag Badges ---------- */
   .badge {
-    @apply inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-md px-2 text-[11px] font-medium
-           leading-none ring-1 ring-inset;
+    @apply inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-md px-2 text-[11px] font-semibold
+           tracking-wide leading-none ring-1 ring-inset;
   }
 
   .badge-slate   { @apply badge bg-slate-100/90 text-slate-700 ring-slate-200/90; }
   .badge-indigo  { @apply badge bg-indigo-50 text-indigo-700 ring-indigo-200/90; }
-  .badge-rose    { @apply badge bg-rose-50 text-rose-800 ring-rose-200; }
+  .badge-rose    { @apply badge bg-red-50 text-red-700 ring-red-200; }
   .badge-amber   { @apply badge bg-amber-50 text-amber-900 ring-amber-200/90; }
   .badge-emerald { @apply badge bg-emerald-50 text-emerald-800 ring-emerald-200/90; }
   .badge-sky     { @apply badge bg-sky-50 text-sky-800 ring-sky-200/90; }
-  .badge-solid-rose    { @apply badge bg-rose-50 text-rose-800 ring-rose-200; }
-  .badge-solid-emerald { @apply badge bg-emerald-50 text-emerald-800 ring-emerald-200; }
-  .badge-solid-amber   { @apply badge bg-amber-50 text-amber-900 ring-amber-200; }
+  .badge-solid-rose    { @apply badge bg-red-500 text-white ring-red-500; }
+  .badge-solid-emerald { @apply badge bg-emerald-500 text-white ring-emerald-500; }
+  .badge-solid-amber   { @apply badge bg-amber-400 text-amber-950 ring-amber-400; }
 
   /* ---------- Enterprise Data Tables ---------- */
   .table-wrap {
