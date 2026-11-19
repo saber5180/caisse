@@ -378,4 +378,9 @@
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
+
+  .print-page-break {
+    break-before: page !important;
+    page-break-before: always !important;
+  }
 }

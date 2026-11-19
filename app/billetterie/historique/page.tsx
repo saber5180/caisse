@@ -31,7 +31,7 @@ export default function BilletterieHistoriquePage() {
   const [search, setSearch] = useState('');
   const [caisseFilter, setCaisseFilter] = useState<'ALL' | 'CRNU' | 'CRSF' | 'CRTN'>('ALL');
   const [selectedEntry, setSelectedEntry] = useState<BilletterieHistoryEntry | null>(null);
-  const [printEntry, setPrintEntry] = useState<BilletterieHistoryEntry | null>(null);
+  const [printEntries, setPrintEntries] = useState<BilletterieHistoryEntry[]>([]);
   const [mounted, setMounted] = useState(false);
   const [editingEntry, setEditingEntry] = useState<BilletterieHistoryEntry | null>(null);
   const [editCoupures, setEditCoupures] = useState('');
@@ -57,7 +57,7 @@ export default function BilletterieHistoriquePage() {
       }
     }
     const handleAfterPrint = () => {
-      setPrintEntry(null);
+      setPrintEntries([]);
     };
     window.addEventListener('afterprint', handleAfterPrint);
     return () => {
@@ -162,15 +162,17 @@ export default function BilletterieHistoriquePage() {
       }
       setHistory((prev) => prev.filter((item) => !(item.id === entry.id && item.accountId === entry.accountId)));
       if (selectedEntry?.id === entry.id) setSelectedEntry(null);
-      if (printEntry?.id === entry.id) setPrintEntry(null);
+      setPrintEntries((prev) => prev.filter((item) => item.id !== entry.id));
     } catch {
       alert('Erreur lors de la suppression.');
     }
   };
 
-  const handleTriggerPrint = (entry: BilletterieHistoryEntry) => {
+  const handleTriggerPrint = (entries: BilletterieHistoryEntry | BilletterieHistoryEntry[]) => {
+    const list = Array.isArray(entries) ? entries : [entries];
+    if (list.length === 0) return;
     setSelectedEntry(null);
-    setPrintEntry(entry);
+    setPrintEntries(list);
     setTimeout(() => {
       window.print();
     }, 150);
@@ -179,9 +181,10 @@ export default function BilletterieHistoriquePage() {
   // Calcul des totaux de clôture individuels par caisse (CRNU, CRSF, CRTN) et du montant global (Spécification 5)
   const totalsByCaisse = useMemo(() => {
     const computeFor = (code: 'CRNU' | 'CRSF' | 'CRTN') => {
-      const entries = history.filter(
-        (h) => (h.caisseCode || h.caissierNom || '').toUpperCase() === code
-      );
+      const entries = history.filter((h) => {
+        const raw = `${h.caisseCode || ''} ${h.caissierNom || ''} ${h.caisseName || ''}`.toUpperCase();
+        return raw.includes(code);
+      });
       return {
         code,
         count: entries.length,
@@ -204,7 +207,12 @@ export default function BilletterieHistoriquePage() {
   const filtered = useMemo(() => {
     return history.filter((item) => {
       const code = (item.caisseCode || item.caissierNom || '').toUpperCase();
-      const matchCaisse = caisseFilter === 'ALL' ? true : code === caisseFilter;
+      const matchCaisse =
+        caisseFilter === 'ALL'
+          ? true
+          : `${item.caisseCode || ''} ${item.caissierNom || ''} ${item.caisseName || ''}`
+              .toUpperCase()
+              .includes(caisseFilter);
 
       const q = search.toLowerCase().trim();
       if (!q) return matchCaisse;
@@ -228,8 +236,11 @@ export default function BilletterieHistoriquePage() {
   return (
     <div className="mx-auto max-w-6xl pb-20 sm:pb-8">
       {/* ==================== PRINTABLE DOCUMENT TEMPLATE (VISIBLE ONLY DURING PRINT) ==================== */}
-      {printEntry && (
-        <div className="printable-document hidden print:block text-slate-900 bg-white">
+      {printEntries.map((printEntry, printIdx) => (
+        <div
+          key={`${printEntry.accountId}-${printEntry.id}`}
+          className={`printable-document hidden print:block text-slate-900 bg-white ${printIdx > 0 ? 'print-page-break' : ''}`}
+        >
           <div className="flex items-start justify-between border-b-2 border-slate-900 pb-5">
             <div>
               <div className="flex items-center gap-2">
@@ -241,7 +252,9 @@ export default function BilletterieHistoriquePage() {
                 </span>
               </div>
               <p className="mt-1 text-xs text-slate-500 font-medium">
-                Procès-Verbal Officiel de Clôture Journalière de Billetterie
+                {printEntry.isOpenDay
+                  ? 'PV provisoire — journée en cours (non clôturée)'
+                  : 'Procès-Verbal Officiel de Clôture Journalière de Billetterie'}
               </p>
               <p className="text-[11px] text-slate-400">
                 Caisse / Opérateur :{' '}
@@ -360,7 +373,7 @@ export default function BilletterieHistoriquePage() {
             </div>
           </div>
         </div>
-      )}
+      ))}
 
       {/* ==================== INTERACTIVE SCREEN ==================== */}
       <div className="print:hidden">
@@ -388,6 +401,15 @@ export default function BilletterieHistoriquePage() {
                   Retour au Comptage
                 </Link>
               )}
+              <button
+                type="button"
+                onClick={() => handleTriggerPrint(filtered)}
+                disabled={filtered.length === 0}
+                className="btn-ghost flex-1 sm:flex-none !py-2 text-xs sm:text-sm font-bold"
+              >
+                <IconPrinter className="h-4 w-4" />
+                Imprimer les PV
+              </button>
               <button
                 onClick={fetchHistory}
                 className="btn-primary flex-1 sm:flex-none !py-2 text-xs sm:text-sm font-bold shadow-md"
@@ -439,7 +461,7 @@ export default function BilletterieHistoriquePage() {
 
           {/* Totaux Individuels par Caisse : CRNU, CRSF et CRTN */}
           {isSupervisorOrAdmin && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {(['CRNU', 'CRSF', 'CRTN'] as const).map((code) => {
                 const item = totalsByCaisse[code];
                 const isSelected = caisseFilter === code;
@@ -448,52 +470,28 @@ export default function BilletterieHistoriquePage() {
                     key={code}
                     type="button"
                     onClick={() => setCaisseFilter(isSelected ? 'ALL' : code)}
-                    className={`card p-4 text-left transition-all ${
-                      isSelected
-                        ? 'ring-2 ring-indigo-600 bg-indigo-50/30'
-                        : 'hover:border-indigo-300'
-                    }`}
+                    className={`card p-3 text-left ${isSelected ? 'ring-2 ring-indigo-600' : ''}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`flex h-8 w-8 items-center justify-center rounded-xl font-mono text-xs font-black text-white ${
-                            code === 'CRNU'
-                              ? 'bg-indigo-600'
-                              : code === 'CRSF'
-                              ? 'bg-emerald-600'
-                              : 'bg-sky-600'
-                          }`}
-                        >
-                          {code}
-                        </span>
-                        <div>
-                          <p className="text-xs font-extrabold text-slate-900">
-                            Total Clôture {code}
-                          </p>
-                          <p className="text-[10px] font-medium text-slate-400">
-                            {item.count} clôture{item.count > 1 ? 's' : ''} enregistrée{item.count > 1 ? 's' : ''}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-bold text-indigo-600">
-                        {isSelected ? 'Filtre actif ✓' : 'Filtrer →'}
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={`inline-flex h-7 min-w-[3.25rem] items-center justify-center rounded px-2 font-mono text-[11px] font-black text-white ${
+                          code === 'CRNU' ? 'bg-indigo-600' : code === 'CRSF' ? 'bg-emerald-600' : 'bg-sky-600'
+                        }`}
+                      >
+                        {code}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-400">
+                        {item.count} clôture{item.count > 1 ? 's' : ''}
                       </span>
                     </div>
-
-                    <p className="mt-3 font-mono text-xl font-black text-slate-900">
-                      {formatMoney(item.totalPhysique)}{' '}
-                      <span className="text-xs font-normal text-slate-400">TND</span>
+                    <p className="mt-2 font-mono text-lg font-black text-slate-900">
+                      {formatMoney(item.totalPhysique)} <span className="text-[11px] font-medium text-slate-400">TND</span>
                     </p>
-
-                    <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] text-slate-500">
-                      <span>
-                        Esp: <strong className="font-mono text-emerald-700">{formatMoney(item.totalCoupures)}</strong>
-                      </span>
-                      <span>
-                        Ver: <strong className="font-mono text-indigo-700">{formatMoney(item.totalVer)}</strong>
-                      </span>
-                    </div>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Esp <strong className="font-mono text-emerald-700">{formatMoney(item.totalCoupures)}</strong>
+                      <span className="mx-1 text-slate-300">·</span>
+                      Ver <strong className="font-mono text-indigo-700">{formatMoney(item.totalVer)}</strong>
+                    </p>
                   </button>
                 );
               })}
@@ -501,30 +499,26 @@ export default function BilletterieHistoriquePage() {
           )}
         </div>
 
-        {/* Filter Bar */}
-        <div className="card-pro p-4 mb-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="relative flex-1">
-            <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 flex-1">
+            <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher par caisse (CRNU, CRSF, CRTN), date, référence ou note..."
-              className="input !pl-9 text-xs sm:text-sm font-medium"
+              placeholder="Date, caisse, référence…"
+              className="input !h-9 !pl-9 text-sm"
             />
           </div>
-
           {isSupervisorOrAdmin && (
-            <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
+            <div className="grid grid-cols-4 gap-1 rounded-md bg-slate-100 p-1">
               {(['ALL', 'CRNU', 'CRSF', 'CRTN'] as const).map((code) => (
                 <button
                   key={code}
                   type="button"
                   onClick={() => setCaisseFilter(code)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-extrabold transition-all ${
-                    caisseFilter === code
-                      ? 'bg-slate-900 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
+                  className={`h-8 rounded px-2 text-[11px] font-extrabold ${
+                    caisseFilter === code ? 'bg-slate-900 text-white' : 'text-slate-600'
                   }`}
                 >
                   {code === 'ALL' ? 'Toutes' : code}
@@ -532,286 +526,188 @@ export default function BilletterieHistoriquePage() {
               ))}
             </div>
           )}
-
-          <span className="badge-slate font-mono text-xs self-center">
+          <span className="self-start whitespace-nowrap rounded bg-slate-100 px-2 py-1 font-mono text-[11px] font-bold text-slate-600 sm:self-center">
             {filtered.length} clôture{filtered.length > 1 ? 's' : ''}
           </span>
         </div>
 
-        {/* List of Closings */}
         {loading ? (
-          <div className="card-pro p-12 text-center text-sm text-slate-400">
-            Chargement de l&apos;historique des clôtures...
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="card-pro p-12 text-center">
-            <IconCoins className="mx-auto h-10 w-10 text-slate-300" />
-            <h3 className="mt-3 text-sm font-bold text-slate-800">
-              Aucun enregistrement de clôture trouvé
-            </h3>
-            <p className="mt-1 text-xs text-slate-400 max-w-sm mx-auto">
-              Les clôtures journalières validées par les caisses CRNU, CRSF et CRTN apparaissent ici avec leur détail complet.
-            </p>
-          </div>
+          <div className="card p-10 text-center text-sm text-slate-400">Chargement de l&apos;historique…</div>
         ) : (
-          <div className="card-pro overflow-hidden">
-            {/* Mobile Responsive Cards View (sm:hidden) */}
-            <div className="divide-y divide-slate-100 sm:hidden">
-              {filtered.map((item) => {
-                const code = (item.caisseCode || item.caissierNom || 'CAISSE').toUpperCase();
+          <div className="space-y-5">
+            {(isSupervisorOrAdmin ? (['CRNU', 'CRSF', 'CRTN'] as const).filter((code) => caisseFilter === 'ALL' || caisseFilter === code) : ['ALL' as const]).map(
+              (groupCode) => {
+                const items =
+                  groupCode === 'ALL'
+                    ? filtered
+                    : filtered.filter((h) =>
+                        `${h.caisseCode || ''} ${h.caissierNom || ''} ${h.caisseName || ''}`
+                          .toUpperCase()
+                          .includes(groupCode)
+                      );
+                const accent =
+                  groupCode === 'CRSF' ? 'bg-emerald-600' : groupCode === 'CRTN' ? 'bg-sky-600' : 'bg-indigo-600';
                 return (
-                  <div key={item.id} className="p-4 hover:bg-slate-50/60 transition-colors">
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="rounded bg-slate-900 px-2 py-0.5 font-mono text-[10px] font-black text-white">
-                            {code}
+                  <section key={groupCode}>
+                    {isSupervisorOrAdmin && (
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex h-6 min-w-[3.1rem] items-center justify-center rounded px-2 font-mono text-[11px] font-black text-white ${accent}`}>
+                            {groupCode}
                           </span>
-                          <span className="font-bold text-slate-900 text-xs">
-                            {new Date(item.dateCloture).toLocaleDateString('fr-FR', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                            })}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {new Date(item.dateCloture).toLocaleTimeString('fr-FR', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
+                          <span className="text-xs font-bold text-slate-600">
+                            {items.length} PV
                           </span>
                         </div>
-                        <p className="mt-1 text-[11px] text-slate-500 font-medium">
-                          Caisse : <strong className="text-slate-700">{item.caisseName || code}</strong>
-                        </p>
-                      </div>
-
-                      <span
-                        className={`inline-block px-2.5 py-1 rounded-full font-mono text-[11px] font-bold shrink-0 ${
-                          item.ecartReste >= 0
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
-                        }`}
-                      >
-                        {item.ecartReste > 0 ? '+' : ''}
-                        {formatMoney(item.ecartReste)} TND
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-2.5 text-xs mb-3 border border-slate-100">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                          Total Clôture (TT)
-                        </span>
-                        <strong className="num text-sm text-slate-900 font-black">
-                          {formatMoney(item.ttPhysique)} TND
-                        </strong>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                          Recette Attendue
-                        </span>
-                        <strong className="num text-sm text-slate-700">
-                          {formatMoney(item.recetteTheorique)} TND
-                        </strong>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                          MT Espèce (Coupures)
-                        </span>
-                        <span className="num text-xs font-semibold text-emerald-700">
-                          {formatMoney(item.totalCoupures)} TND
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                          Versements (VER)
-                        </span>
-                        <span className="num text-xs font-semibold text-indigo-700">
-                          {item.ver > 0 ? `+${formatMoney(item.ver)}` : '0.000'} TND
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedEntry(item)}
-                        className="btn-ghost flex-1 !py-1.5 text-xs font-bold text-slate-700 border border-slate-200"
-                      >
-                        Détail Complet
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleTriggerPrint(item)}
-                        className="btn-ghost !py-1.5 !px-3 text-xs font-bold text-indigo-600 border border-indigo-200 bg-indigo-50/50"
-                        title="Imprimer PV"
-                      >
-                        <IconPrinter className="h-4 w-4" />
-                      </button>
-                      {isSuperviseur && (
-                        <>
+                        {items.length > 0 && (
                           <button
                             type="button"
-                            onClick={() => openEdit(item)}
-                            className="btn-ghost !py-1.5 !px-3 text-amber-700 border border-amber-200 bg-amber-50"
-                            title="Modifier"
+                            onClick={() => handleTriggerPrint(items)}
+                            className="btn-ghost !h-7 !px-2 text-[11px] font-bold text-indigo-700"
                           >
-                            <IconEdit className="h-4 w-4" />
+                            <IconPrinter className="h-3.5 w-3.5" />
+                            Imprimer {groupCode}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(item)}
-                            className="btn-ghost !py-1.5 !px-3 text-rose-600 border border-rose-200 bg-rose-50"
-                            title="Supprimer"
-                          >
-                            <IconTrash className="h-4 w-4" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                        )}
+                      </div>
+                    )}
+                    {items.length === 0 ? (
+                      <div className="card p-5 text-center text-xs text-slate-400">
+                        Aucun PV pour {groupCode === 'ALL' ? 'cette caisse' : groupCode} — ni clôture, ni mouvement du jour.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {items.map((item) => {
+                          const code = (item.caisseCode || item.caissierNom || 'CAISSE').toUpperCase();
+                          const badge =
+                            code === 'CRNU'
+                              ? 'bg-indigo-600'
+                              : code === 'CRSF'
+                              ? 'bg-emerald-600'
+                              : code === 'CRTN'
+                              ? 'bg-sky-600'
+                              : 'bg-slate-800';
+                          return (
+                            <article
+                              key={`${item.accountId}-${item.id}`}
+                              className="card overflow-hidden p-3 sm:p-3.5"
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <span className={`inline-flex h-7 min-w-[3.25rem] items-center justify-center rounded px-2 font-mono text-[11px] font-black text-white ${badge}`}>
+                                    {code}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-extrabold leading-tight text-slate-900">
+                                      {item.isOpenDay ? 'Journée en cours' : new Date(item.dateCloture).toLocaleDateString('fr-FR', {
+                                        weekday: 'short',
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric',
+                                      })}
+                                      <span className="ml-1.5 font-mono text-[11px] font-semibold text-slate-400">
+                                        {new Date(item.dateCloture).toLocaleTimeString('fr-FR', {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}
+                                      </span>
+                                    </p>
+                                    <p className="truncate text-[11px] text-slate-500">
+                                      {item.isOpenDay ? 'PV provisoire · ' : ''}
+                                      {item.archivedTransactions?.length || 0} reçu
+                                      {(item.archivedTransactions?.length || 0) > 1 ? 's' : ''}
+                                      {item.notes ? ` · ${item.notes}` : ''}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span
+                                  className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] font-bold ${
+                                    item.isOpenDay
+                                      ? 'bg-amber-50 text-amber-800'
+                                      : item.ecartReste >= 0
+                                      ? 'bg-emerald-50 text-emerald-700'
+                                      : 'bg-red-50 text-red-600'
+                                  }`}
+                                >
+                                  {item.isOpenDay
+                                    ? 'Non clôturée'
+                                    : `Écart ${item.ecartReste > 0 ? '+' : ''}${formatMoney(item.ecartReste)}`}
+                                </span>
+                              </div>
+
+                              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                <div className="rounded bg-slate-50 px-2.5 py-2">
+                                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Clôture</p>
+                                  <p className="font-mono text-sm font-black text-slate-900">
+                                    {formatMoney(item.ttPhysique)}
+                                  </p>
+                                </div>
+                                <div className="rounded bg-slate-50 px-2.5 py-2">
+                                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Attendue</p>
+                                  <p className="font-mono text-sm font-bold text-slate-700">
+                                    {formatMoney(item.recetteTheorique)}
+                                  </p>
+                                </div>
+                                <div className="rounded bg-emerald-50/70 px-2.5 py-2">
+                                  <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700/70">Espèces</p>
+                                  <p className="font-mono text-sm font-bold text-emerald-800">
+                                    {formatMoney(item.totalCoupures)}
+                                  </p>
+                                </div>
+                                <div className="rounded bg-indigo-50/70 px-2.5 py-2">
+                                  <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-700/70">Versements</p>
+                                  <p className="font-mono text-sm font-bold text-indigo-800">
+                                    {formatMoney(item.ver)}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedEntry(item)}
+                                  className="btn-ghost h-8 flex-1 text-xs font-bold sm:flex-none"
+                                >
+                                  Détail
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleTriggerPrint(item)}
+                                  className="btn-ghost h-8 px-2.5 text-indigo-700"
+                                  title="Imprimer le PV"
+                                >
+                                  <IconPrinter className="h-4 w-4" />
+                                </button>
+                                {isSuperviseur && !item.isOpenDay && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => openEdit(item)}
+                                      className="btn-ghost h-8 px-2.5 text-amber-700"
+                                      title="Modifier"
+                                    >
+                                      <IconEdit className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDelete(item)}
+                                      className="btn-ghost h-8 px-2.5 text-red-600"
+                                      title="Supprimer"
+                                    >
+                                      <IconTrash className="h-4 w-4" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
                 );
-              })}
-            </div>
-
-            {/* Desktop Table View (hidden sm:block) */}
-            <div className="table-wrap hidden sm:block">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Caisse</th>
-                    <th>Date & Heure</th>
-                    <th className="!text-right">MT Espèce (Coupures)</th>
-                    <th className="!text-right">Versements</th>
-                    <th className="!text-right">Total Clôture (TT)</th>
-                    <th className="!text-right">Recette Attendue</th>
-                    <th className="!text-right">Écart / Reste</th>
-                    <th className="!text-center">Détail & Impression</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((item) => {
-                    const code = (item.caisseCode || item.caissierNom || 'CAISSE').toUpperCase();
-                    return (
-                      <tr key={item.id} className="hover:bg-slate-50/80">
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`inline-flex rounded-lg px-2.5 py-0.5 font-mono text-xs font-black text-white ${
-                                code === 'CRNU'
-                                  ? 'bg-indigo-600'
-                                  : code === 'CRSF'
-                                  ? 'bg-emerald-600'
-                                  : code === 'CRTN'
-                                  ? 'bg-sky-600'
-                                  : 'bg-slate-800'
-                              }`}
-                            >
-                              {code}
-                            </span>
-                            <span className="text-xs font-semibold text-slate-600">
-                              {item.archivedTransactions?.length || 0} reçu(s)
-                            </span>
-                          </div>
-                        </td>
-
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <IconCalendar className="h-4 w-4 text-slate-400" />
-                            <div>
-                              <p className="font-bold text-slate-900 text-xs">
-                                {new Date(item.dateCloture).toLocaleDateString('fr-FR', {
-                                  day: '2-digit',
-                                  month: '2-digit',
-                                  year: 'numeric',
-                                })}
-                              </p>
-                              <p className="text-[10px] text-slate-400 font-mono">
-                                {new Date(item.dateCloture).toLocaleTimeString('fr-FR', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="text-right num font-bold text-xs text-emerald-700">
-                          {formatMoney(item.totalCoupures)} TND
-                        </td>
-
-                        <td className="text-right num font-semibold text-xs text-indigo-700">
-                          {item.ver > 0 ? `+${formatMoney(item.ver)} TND` : '0.000 TND'}
-                        </td>
-
-                        <td className="text-right num font-black text-xs text-slate-900">
-                          {formatMoney(item.ttPhysique)} TND
-                        </td>
-
-                        <td className="text-right num font-bold text-xs text-slate-600">
-                          {formatMoney(item.recetteTheorique)} TND
-                        </td>
-
-                        <td className="text-right">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded-full font-mono text-xs font-bold ${
-                              item.ecartReste >= 0
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-rose-50 text-rose-700 border border-rose-200'
-                            }`}
-                          >
-                            {item.ecartReste > 0 ? '+' : ''}
-                            {formatMoney(item.ecartReste)} TND
-                          </span>
-                        </td>
-
-                        <td className="text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedEntry(item)}
-                              className="btn-ghost !px-2.5 !py-1.5 text-slate-700 hover:text-indigo-700 border border-slate-200"
-                              title="Voir le détail complet de la clôture"
-                            >
-                              <span className="text-xs font-bold">Détail Complet</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleTriggerPrint(item)}
-                              className="btn-ghost !p-1.5 text-indigo-600 hover:bg-indigo-50"
-                              title="Imprimer le PV de Clôture"
-                            >
-                              <IconPrinter className="h-4 w-4" />
-                            </button>
-                            {isSuperviseur && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => openEdit(item)}
-                                  className="btn-ghost !p-1.5 text-amber-700 hover:bg-amber-50"
-                                  title="Modifier cette clôture"
-                                >
-                                  <IconEdit className="h-4 w-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDelete(item)}
-                                  className="btn-ghost !p-1.5 text-rose-600 hover:bg-rose-50"
-                                  title="Supprimer cette clôture"
-                                >
-                                  <IconTrash className="h-4 w-4" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+              }
+            )}
           </div>
         )}
 

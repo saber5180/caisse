@@ -91,6 +91,7 @@ export interface BilletterieHistoryEntry {
   caissierNom?: string;
   notes?: string;
   createdAt?: string;
+  isOpenDay?: boolean;
 }
 
 export interface CaisseLiveSummary {

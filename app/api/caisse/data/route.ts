@@ -14,12 +14,47 @@ import {
 } from '@/types/caisse';
 import { cleanScannerTr, applyProgrammeRowsToFleet } from '@/lib/utils';
 import { DEFAULT_PROGRAMME_EXCEL_ROWS } from '@/data/programmeJourDefault';
+import {
+  belongsToCaisse,
+  fetchTransactionsFromPool,
+  isMainPoolUrl,
+  loadCashierAccounts,
+  type CashierCode,
+} from '@/lib/cashierAccounts';
 
 const CAISSE_CODES_MAP: Record<string, { code: 'CRNU' | 'CRSF' | 'CRTN'; name: string }> = {
   'acc-crnu': { code: 'CRNU', name: 'Caisse CRNU' },
   'acc-crsf': { code: 'CRSF', name: 'Caisse CRSF' },
   'acc-crtn': { code: 'CRTN', name: 'Caisse CRTN' },
 };
+
+function mapTxnRow(r: any): TransactionRecord {
+  const tPayer = parseFloat(r.t_payer) || 0;
+  const versement = parseFloat(r.versement) || 0;
+  const mtEspece = Math.round((tPayer - versement) * 1000) / 1000;
+  const caisseCode =
+    r.caisse_code ||
+    CAISSE_CODES_MAP[r.account_id]?.code ||
+    (r.username ? r.username.toUpperCase() : 'CAISSE');
+  const caisseName = r.display_name || CAISSE_CODES_MAP[r.account_id]?.name || caisseCode;
+
+  return {
+    id: r.id,
+    accountId: r.account_id,
+    caisseCode,
+    caisseName,
+    date: r.date ? new Date(r.date).toISOString() : new Date().toISOString(),
+    codeChauffeur: r.code_chauffeur,
+    nomChauffeur: r.nom_chauffeur,
+    recette: parseFloat(r.recette) || 0,
+    tPayer,
+    mtEspece,
+    resAPayer: parseFloat(r.res_a_payer) || 0,
+    versement,
+    status: r.status,
+    rawData: r.raw_data || undefined,
+  };
+}
 
 export async function GET() {
   try {
@@ -76,42 +111,27 @@ export async function GET() {
     // 1. Fetch ALL active transactions across all accounts so we can:
     //    a) Synchronize driver paid status globally across all caisses
     //    b) Build real-time multi-caisse summaries (CRNU, CRSF, CRTN)
-    const allTransRes = await mainPool.query(
-      `SELECT t.id, t.account_id, t.date, t.code_chauffeur, t.nom_chauffeur, t.recette, t.t_payer, t.res_a_payer, t.versement, t.status, t.raw_data,
-              a.caisse_code, a.display_name, a.username
-       FROM caisse_transactions t
-       LEFT JOIN caisse_accounts a ON a.id = t.account_id
-       ORDER BY t.date DESC`
-    );
+    const cashierAccounts = await loadCashierAccounts(mainPool);
+    const allTransRows = await fetchTransactionsFromPool(mainPool);
+    const txnByKey = new Map<string, any>();
+    for (const row of allTransRows) {
+      txnByKey.set(`${row.account_id}::${row.id}`, row);
+    }
 
-    const allTransactions: TransactionRecord[] = allTransRes.rows.map((r) => {
-      const tPayer = parseFloat(r.t_payer) || 0;
-      const versement = parseFloat(r.versement) || 0;
-      const mtEspece = Math.round((tPayer - versement) * 1000) / 1000;
-      const caisseCode =
-        r.caisse_code ||
-        CAISSE_CODES_MAP[r.account_id]?.code ||
-        (r.username ? r.username.toUpperCase() : 'CAISSE');
-      const caisseName =
-        r.display_name || CAISSE_CODES_MAP[r.account_id]?.name || caisseCode;
+    for (const acc of cashierAccounts.values()) {
+      if (isMainPoolUrl(acc.custom_db_url)) continue;
+      try {
+        const extra = await fetchTransactionsFromPool(getPool(acc.custom_db_url || undefined), acc.id);
+        for (const row of extra) {
+          const key = `${row.account_id}::${row.id}`;
+          if (!txnByKey.has(key)) txnByKey.set(key, row);
+        }
+      } catch (err) {
+        console.error(`Lecture transactions ${acc.username} (base dédiée) :`, err);
+      }
+    }
 
-      return {
-        id: r.id,
-        accountId: r.account_id,
-        caisseCode,
-        caisseName,
-        date: r.date ? new Date(r.date).toISOString() : new Date().toISOString(),
-        codeChauffeur: r.code_chauffeur,
-        nomChauffeur: r.nom_chauffeur,
-        recette: parseFloat(r.recette) || 0,
-        tPayer,
-        mtEspece,
-        resAPayer: parseFloat(r.res_a_payer) || 0,
-        versement,
-        status: r.status,
-        rawData: r.raw_data || undefined,
-      };
-    });
+    const allTransactions: TransactionRecord[] = Array.from(txnByKey.values()).map(mapTxnRow);
 
     // Map of drivers who have validated a payment in ANY caisse today
     const paidDriverTrMap = new Map<string, { date: string; caisseCode: string }>();
@@ -182,50 +202,81 @@ export async function GET() {
       : allTransactions.filter((t) => t.accountId === session.id);
 
     // 3. Build real-time Caisse Live Summary for CRNU, CRSF, CRTN
-    const caisseAccRes = await mainPool.query(
-      `SELECT id, username, display_name, caisse_code, is_blocked, force_logout_at, updated_at
-       FROM caisse_accounts
-       WHERE id IN ('acc-crnu', 'acc-crsf', 'acc-crtn')`
-    );
-    const caisseAccMap = new Map<string, any>();
-    for (const row of caisseAccRes.rows) {
-      caisseAccMap.set(row.id, row);
+    const cashierIds = Array.from(cashierAccounts.values()).map((a) => a.id);
+    const historyTotalsMap = new Map<
+      string,
+      { nb_clotures: number; total_cloture: number; total_coupures: number; total_ver: number }
+    >();
+    const addHistoryTotals = (rows: any[]) => {
+      for (const row of rows) {
+        const prev = historyTotalsMap.get(row.account_id) || {
+          nb_clotures: 0,
+          total_cloture: 0,
+          total_coupures: 0,
+          total_ver: 0,
+        };
+        prev.nb_clotures += parseInt(row.nb_clotures, 10) || 0;
+        prev.total_cloture += parseFloat(row.total_cloture) || 0;
+        prev.total_coupures += parseFloat(row.total_coupures) || 0;
+        prev.total_ver += parseFloat(row.total_ver) || 0;
+        historyTotalsMap.set(row.account_id, prev);
+      }
+    };
+
+    if (cashierIds.length > 0) {
+      const historyTotalsRes = await mainPool.query(
+        `SELECT account_id,
+                COUNT(*) AS nb_clotures,
+                COALESCE(SUM(tt_physique), 0) AS total_cloture,
+                COALESCE(SUM(total_coupures), 0) AS total_coupures,
+                COALESCE(SUM(ver), 0) AS total_ver
+         FROM caisse_billetterie_history
+         WHERE account_id = ANY($1::text[])
+         GROUP BY account_id`,
+        [cashierIds]
+      );
+      addHistoryTotals(historyTotalsRes.rows);
     }
 
-    const historyTotalsRes = await mainPool.query(
-      `SELECT account_id,
-              COUNT(*) AS nb_clotures,
-              COALESCE(SUM(tt_physique), 0) AS total_cloture,
-              COALESCE(SUM(total_coupures), 0) AS total_coupures,
-              COALESCE(SUM(ver), 0) AS total_ver
-       FROM caisse_billetterie_history
-       WHERE account_id IN ('acc-crnu', 'acc-crsf', 'acc-crtn')
-       GROUP BY account_id`
-    );
-    const historyTotalsMap = new Map<string, any>();
-    for (const row of historyTotalsRes.rows) {
-      historyTotalsMap.set(row.account_id, row);
+    for (const acc of cashierAccounts.values()) {
+      if (isMainPoolUrl(acc.custom_db_url)) continue;
+      try {
+        const extraHist = await getPool(acc.custom_db_url || undefined).query(
+          `SELECT account_id,
+                  COUNT(*) AS nb_clotures,
+                  COALESCE(SUM(tt_physique), 0) AS total_cloture,
+                  COALESCE(SUM(total_coupures), 0) AS total_coupures,
+                  COALESCE(SUM(ver), 0) AS total_ver
+           FROM caisse_billetterie_history
+           WHERE account_id = $1
+           GROUP BY account_id`,
+          [acc.id]
+        );
+        addHistoryTotals(extraHist.rows);
+      } catch (err) {
+        console.error(`Lecture clôtures ${acc.username} (base dédiée) :`, err);
+      }
     }
 
-    const orderedCaisseIds: Array<{ id: string; code: 'CRNU' | 'CRSF' | 'CRTN'; name: string; user: string }> = [
-      { id: 'acc-crnu', code: 'CRNU', name: 'Caisse CRNU', user: 'crnu' },
-      { id: 'acc-crsf', code: 'CRSF', name: 'Caisse CRSF', user: 'crsf' },
-      { id: 'acc-crtn', code: 'CRTN', name: 'Caisse CRTN', user: 'crtn' },
+    const orderedCaisses: Array<{ code: CashierCode; name: string; user: string }> = [
+      { code: 'CRNU', name: 'Caisse CRNU', user: 'crnu' },
+      { code: 'CRSF', name: 'Caisse CRSF', user: 'crsf' },
+      { code: 'CRTN', name: 'Caisse CRTN', user: 'crtn' },
     ];
 
-    const caissesSummary: CaisseLiveSummary[] = orderedCaisseIds.map((item) => {
-      const dbAcc = caisseAccMap.get(item.id);
-      const caisseTxns = allTransactions.filter((t) => t.accountId === item.id);
+    const caissesSummary: CaisseLiveSummary[] = orderedCaisses.map((item) => {
+      const dbAcc = cashierAccounts.get(item.code);
+      const caisseTxns = allTransactions.filter((t) => belongsToCaisse(t, dbAcc, item.code));
       const montantActuel = caisseTxns.reduce((sum, t) => sum + t.tPayer, 0);
       const versement = caisseTxns.reduce((sum, t) => sum + t.versement, 0);
       const mtEspece = Math.round((montantActuel - versement) * 1000) / 1000;
       const recetteAttendue = caisseTxns.reduce((sum, t) => sum + t.recette, 0);
       const ecart = Math.round((montantActuel - recetteAttendue) * 1000) / 1000;
 
-      const hist = historyTotalsMap.get(item.id);
+      const hist = dbAcc ? historyTotalsMap.get(dbAcc.id) : undefined;
 
       return {
-        accountId: item.id,
+        accountId: dbAcc?.id || `acc-${item.code.toLowerCase()}`,
         caisseCode: item.code,
         displayName: dbAcc?.display_name || item.name,
         username: dbAcc?.username || item.user,
@@ -240,10 +291,10 @@ export async function GET() {
         recetteAttendue: Math.round(recetteAttendue * 1000) / 1000,
         ecart,
         nbTransactions: caisseTxns.length,
-        totalCloture: hist ? parseFloat(hist.total_cloture) || 0 : 0,
-        totalClotureEspece: hist ? parseFloat(hist.total_coupures) || 0 : 0,
-        totalClotureVersement: hist ? parseFloat(hist.total_ver) || 0 : 0,
-        nbClotures: hist ? parseInt(hist.nb_clotures, 10) || 0 : 0,
+        totalCloture: hist ? hist.total_cloture : 0,
+        totalClotureEspece: hist ? hist.total_coupures : 0,
+        totalClotureVersement: hist ? hist.total_ver : 0,
+        nbClotures: hist ? hist.nb_clotures : 0,
       };
     });
 
@@ -409,24 +460,41 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Save transactions for this caisse account
+    // 2. Save transactions for this caisse account (main + dedicated DB if any)
     if (Array.isArray(transactions)) {
       const txnIds = transactions.map((t) => t.id).filter(Boolean);
-      if (txnIds.length === 0) {
-        await targetPool.query('DELETE FROM caisse_transactions WHERE account_id = $1', [
-          session.id,
-        ]);
-      } else {
-        await targetPool.query(
-          'DELETE FROM caisse_transactions WHERE account_id = $1 AND NOT (id = ANY($2::text[]))',
-          [session.id, txnIds]
-        );
+      const txnPools = [targetPool];
+      if (account.custom_db_url && targetPool !== mainPool) {
+        txnPools.push(mainPool);
+      }
+
+      for (const pool of txnPools) {
+        if (txnIds.length === 0) {
+          await pool.query('DELETE FROM caisse_transactions WHERE account_id = $1', [session.id]);
+        } else {
+          await pool.query(
+            'DELETE FROM caisse_transactions WHERE account_id = $1 AND NOT (id = ANY($2::text[]))',
+            [session.id, txnIds]
+          );
+        }
       }
 
       for (const t of transactions) {
         const txnDate = t.date || new Date().toISOString();
-        await targetPool.query(
-          `INSERT INTO caisse_transactions (id, account_id, date, code_chauffeur, nom_chauffeur, recette, t_payer, res_a_payer, versement, status, raw_data)
+        const txnParams = [
+          t.id,
+          session.id,
+          txnDate,
+          t.codeChauffeur,
+          t.nomChauffeur,
+          t.recette,
+          t.tPayer,
+          t.resAPayer,
+          t.versement,
+          t.status,
+          t.rawData ? JSON.stringify(t.rawData) : null,
+        ];
+        const upsertSql = `INSERT INTO caisse_transactions (id, account_id, date, code_chauffeur, nom_chauffeur, recette, t_payer, res_a_payer, versement, status, raw_data)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            ON CONFLICT (account_id, id) DO UPDATE SET
              date = EXCLUDED.date,
@@ -437,21 +505,10 @@ export async function POST(req: NextRequest) {
              res_a_payer = EXCLUDED.res_a_payer,
              versement = EXCLUDED.versement,
              status = EXCLUDED.status,
-             raw_data = EXCLUDED.raw_data`,
-          [
-            t.id,
-            session.id,
-            txnDate,
-            t.codeChauffeur,
-            t.nomChauffeur,
-            t.recette,
-            t.tPayer,
-            t.resAPayer,
-            t.versement,
-            t.status,
-            t.rawData ? JSON.stringify(t.rawData) : null,
-          ]
-        );
+             raw_data = EXCLUDED.raw_data`;
+        for (const pool of txnPools) {
+          await pool.query(upsertSql, txnParams);
+        }
 
         // Liaison automatique inter-modules : uniquement si la transaction est plus récente que le programme du jour du chauffeur
         if (t.status === 'PAYE' && t.codeChauffeur && !Array.isArray(drivers)) {
