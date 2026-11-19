@@ -9,7 +9,9 @@ import PrintReceiptModal, { ReceiptData } from '@/components/PrintReceiptModal';
 import { BilletterieHistoryEntry, CashTransaction } from '@/types/caisse';
 import {
   IconCalendar,
+  IconClose,
   IconDownload,
+  IconEdit,
   IconHistory,
   IconPrinter,
   IconReceipt,
@@ -23,10 +25,12 @@ export default function JournalPage() {
   const activeTransactions = useCaisseStore((state) => state.transactions);
   const allTransactions = useCaisseStore((state) => state.allTransactions);
   const fetchAccountData = useCaisseStore((state) => state.fetchAccountData);
+  const updateJournalTransaction = useCaisseStore((state) => state.updateJournalTransaction);
   const isSyncing = useCaisseStore((state) => state.isSyncing);
 
-  const isSupervisorOrAdmin =
-    currentUser?.role === 'superviseur' || currentUser?.role === 'admin';
+  const isSuperviseur = currentUser?.role === 'superviseur';
+  const isSupervisorOrAdmin = isSuperviseur || currentUser?.role === 'admin';
+  const canEditJournal = !isSuperviseur;
 
   const [activeTab, setActiveTab] = useState<'ACTIF' | 'ARCHIVES'>('ACTIF');
   const [caisseFilter, setCaisseFilter] = useState<'ALL' | 'CRNU' | 'CRSF' | 'CRTN'>('ALL');
@@ -35,6 +39,61 @@ export default function JournalPage() {
   const [selectedClosingId, setSelectedClosingId] = useState<string>('ALL');
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [editingTx, setEditingTx] = useState<CashTransaction | null>(null);
+  const [editRecette, setEditRecette] = useState('');
+  const [editEspece, setEditEspece] = useState('');
+  const [editVersement, setEditVersement] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const parseAmount = (raw: string) => {
+    const n = parseFloat(raw.replace(/\s/g, '').replace(',', '.'));
+    return Number.isFinite(n) ? Math.round(n * 1000) / 1000 : Number.NaN;
+  };
+
+  const openEdit = (t: CashTransaction) => {
+    const mtEsp =
+      typeof t.mtEspece === 'number'
+        ? t.mtEspece
+        : Math.round((t.tPayer - (t.versement || 0)) * 1000) / 1000;
+    setEditingTx(t);
+    setEditRecette(t.recette.toFixed(3));
+    setEditEspece(mtEsp.toFixed(3));
+    setEditVersement((t.versement || 0).toFixed(3));
+    setEditError(null);
+  };
+
+  const previewEspece = parseAmount(editEspece);
+  const previewVersement = parseAmount(editVersement);
+  const previewRecette = parseAmount(editRecette);
+  const previewTotal =
+    Number.isFinite(previewEspece) && Number.isFinite(previewVersement)
+      ? Math.round((previewEspece + previewVersement) * 1000) / 1000
+      : Number.NaN;
+  const previewEcart =
+    Number.isFinite(previewTotal) && Number.isFinite(previewRecette)
+      ? Math.round((previewTotal - previewRecette) * 1000) / 1000
+      : Number.NaN;
+
+  const saveEdit = async () => {
+    if (!editingTx) return;
+    const recette = parseAmount(editRecette);
+    const mtEspece = parseAmount(editEspece);
+    const versement = parseAmount(editVersement);
+    if (![recette, mtEspece, versement].every((n) => Number.isFinite(n) && n >= 0)) {
+      setEditError('Saisissez des montants valides (0 ou plus).');
+      return;
+    }
+    setEditSaving(true);
+    setEditError(null);
+    const result = await updateJournalTransaction(editingTx, { recette, mtEspece, versement });
+    setEditSaving(false);
+    if (!result.ok) {
+      setEditError(result.error || 'Modification impossible.');
+      return;
+    }
+    setEditingTx(null);
+  };
 
   const fetchHistory = async () => {
     setLoadingHistory(true);
@@ -164,6 +223,89 @@ export default function JournalPage() {
     <>
       {receiptData && (
         <PrintReceiptModal data={receiptData} onClose={() => setReceiptData(null)} />
+      )}
+
+      {editingTx && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 sm:items-center sm:p-4">
+          <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl sm:p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Modifier la ligne</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {editingTx.caisseCode || 'CAISSE'} · TR {editingTx.codeChauffeur} · {editingTx.nomChauffeur}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingTx(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                title="Fermer"
+              >
+                <IconClose className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block text-xs font-bold text-slate-600">
+                Recette attendue (TND)
+                <input
+                  value={editRecette}
+                  onChange={(e) => setEditRecette(e.target.value)}
+                  inputMode="decimal"
+                  className="input mt-1 w-full"
+                />
+              </label>
+              <label className="block text-xs font-bold text-slate-600">
+                MT Espèce (TND)
+                <input
+                  value={editEspece}
+                  onChange={(e) => setEditEspece(e.target.value)}
+                  inputMode="decimal"
+                  className="input mt-1 w-full"
+                />
+              </label>
+              <label className="block text-xs font-bold text-slate-600">
+                Versement (TND)
+                <input
+                  value={editVersement}
+                  onChange={(e) => setEditVersement(e.target.value)}
+                  inputMode="decimal"
+                  className="input mt-1 w-full"
+                />
+              </label>
+              <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                Total payé :{' '}
+                <strong className="text-slate-900">
+                  {Number.isFinite(previewTotal) ? previewTotal.toFixed(3) : '—'} TND
+                </strong>
+                {' · '}
+                Écart :{' '}
+                <strong className={previewEcart >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                  {Number.isFinite(previewEcart) ? `${previewEcart > 0 ? '+' : ''}${previewEcart.toFixed(3)}` : '—'} TND
+                </strong>
+              </div>
+              {editError && (
+                <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                  {editError}
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditingTx(null)} className="btn-ghost">
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={saveEdit}
+                disabled={editSaving}
+                className="btn-primary"
+              >
+                {editSaving ? 'Enregistrement...' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <PageHeader
@@ -338,21 +480,28 @@ export default function JournalPage() {
 
         <div className="card p-4 sm:p-5">
           <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-            Recette Attendue / Écart
+            {isSuperviseur ? 'Recette Attendue' : 'Recette Attendue / Écart'}
           </p>
-          <div className="mt-1 flex items-baseline justify-between gap-2">
-            <span className="num text-sm font-bold text-slate-700">
-              {formatMoney(totalRecette)} TND
-            </span>
-            <span
-              className={`num text-xs font-extrabold ${
-                totalEcart >= 0 ? 'text-emerald-600' : 'text-rose-600'
-              }`}
-            >
-              ({totalEcart > 0 ? '+' : ''}
-              {formatMoney(totalEcart)})
-            </span>
-          </div>
+          {isSuperviseur ? (
+            <p className="num mt-1 text-lg font-black text-slate-900 sm:text-xl">
+              {formatMoney(totalRecette)}{' '}
+              <span className="text-xs font-normal text-slate-500">TND</span>
+            </p>
+          ) : (
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              <span className="num text-sm font-bold text-slate-700">
+                {formatMoney(totalRecette)} TND
+              </span>
+              <span
+                className={`num text-xs font-extrabold ${
+                  totalEcart >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                }`}
+              >
+                ({totalEcart > 0 ? '+' : ''}
+                {formatMoney(totalEcart)})
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -447,14 +596,16 @@ export default function JournalPage() {
                     <div className="flex items-center justify-between pt-1 text-xs">
                       <span className="text-slate-400">{formatDateTime(t.date)}</span>
                       <div className="flex items-center gap-2">
-                        <span
-                          className={`num font-bold ${
-                            t.resAPayer >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                          }`}
-                        >
-                          Écart: {t.resAPayer > 0 ? '+' : ''}
-                          {formatMoney(t.resAPayer)} TND
-                        </span>
+                        {!isSuperviseur && (
+                          <span
+                            className={`num font-bold ${
+                              t.resAPayer >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                            }`}
+                          >
+                            Écart: {t.resAPayer > 0 ? '+' : ''}
+                            {formatMoney(t.resAPayer)} TND
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => openReceipt(t)}
@@ -463,6 +614,17 @@ export default function JournalPage() {
                         >
                           <IconPrinter className="h-3.5 w-3.5" />
                         </button>
+                        {canEditJournal && activeTab === 'ACTIF' && (
+                          <button
+                            type="button"
+                            onClick={() => openEdit(t)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-100"
+                            title="Modifier cette ligne"
+                          >
+                            <IconEdit className="h-3.5 w-3.5" />
+                            Modifier
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -483,9 +645,9 @@ export default function JournalPage() {
                     <th className="!text-right w-28">Versement</th>
                     <th className="!text-right w-32">Total Payé</th>
                     <th className="!text-right w-32">Recette</th>
-                    <th className="!text-right w-32">Écart</th>
+                    {!isSuperviseur && <th className="!text-right w-32">Écart</th>}
                     <th className="!text-center w-24">Statut</th>
-                    <th className="!text-center w-16 no-print">Reçu</th>
+                    <th className="!text-center w-36 no-print">Reçu</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -541,24 +703,39 @@ export default function JournalPage() {
                         <td className="text-right num text-slate-600">
                           {formatMoney(t.recette)} TND
                         </td>
-                        <td className="text-right num font-bold">
-                          <span className={t.resAPayer >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                            {t.resAPayer > 0 ? '+' : ''}
-                            {formatMoney(t.resAPayer)} TND
-                          </span>
-                        </td>
+                        {!isSuperviseur && (
+                          <td className="text-right num font-bold">
+                            <span className={t.resAPayer >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                              {t.resAPayer > 0 ? '+' : ''}
+                              {formatMoney(t.resAPayer)} TND
+                            </span>
+                          </td>
+                        )}
                         <td className="text-center">
                           <span className="badge-emerald">{t.status}</span>
                         </td>
                         <td className="text-center no-print">
-                          <button
-                            type="button"
-                            onClick={() => openReceipt(t)}
-                            className="btn-icon !h-8 !w-8 text-indigo-600 hover:bg-indigo-50 inline-flex items-center justify-center"
-                            title="Imprimer Reçu / Facture HD"
-                          >
-                            <IconPrinter className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openReceipt(t)}
+                              className="btn-icon !h-8 !w-8 text-indigo-600 hover:bg-indigo-50 inline-flex items-center justify-center"
+                              title="Imprimer Reçu / Facture HD"
+                            >
+                              <IconPrinter className="h-4 w-4" />
+                            </button>
+                            {canEditJournal && activeTab === 'ACTIF' && (
+                              <button
+                                type="button"
+                                onClick={() => openEdit(t)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-100"
+                                title="Modifier cette ligne"
+                              >
+                                <IconEdit className="h-3.5 w-3.5" />
+                                Modifier
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

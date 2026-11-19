@@ -1,6 +1,10 @@
 const { Pool } = require('pg');
 
-const url = 'postgresql://neondb_owner:npg_Z51pciXwaNoq@ep-small-hat-bea05mpr-pooler.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require';
+const url = process.env.DATABASE_URL;
+if (!url) {
+  console.error('DATABASE_URL est absent. Définissez-le dans .env.local, sans le committer.');
+  process.exit(1);
+}
 const pool = new Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
 
 async function init() {

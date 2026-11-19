@@ -760,12 +760,12 @@ export default function ChauffeursPage() {
 
       {/* Modal Création / Édition Chauffeur */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
           <div
             className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm"
             onClick={() => setModalOpen(false)}
           />
-          <div className="animate-scale-in relative w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+          <div className="relative flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:rounded-3xl">
             {/* Dark Executive Modal Header */}
             <div className="flex items-center justify-between bg-obsidian-mesh px-6 py-5 text-white">
               <div className="flex items-center gap-3">
@@ -790,7 +790,7 @@ export default function ChauffeursPage() {
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="space-y-4 p-6">
+            <form onSubmit={handleFormSubmit} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
               {formError && (
                 <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-700">
                   <IconAlert className="h-4 w-4 shrink-0 text-rose-500" />

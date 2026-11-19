@@ -17,10 +17,10 @@
   }
 
   body {
-    @apply overflow-x-hidden bg-[#F3F5FA] text-slate-900 antialiased selection:bg-indigo-600/20 selection:text-indigo-950;
+    @apply overflow-x-hidden bg-[#F6F4F1] text-slate-900 antialiased selection:bg-indigo-600/15 selection:text-indigo-950;
     background-image:
-      radial-gradient(ellipse 75% 42% at 50% -12%, rgba(99, 102, 241, 0.09), transparent),
-      radial-gradient(ellipse 45% 35% at 92% 0%, rgba(14, 165, 233, 0.06), transparent);
+      radial-gradient(ellipse 70% 38% at 50% -12%, rgba(142, 90, 78, 0.06), transparent),
+      radial-gradient(ellipse 42% 32% at 100% 0%, rgba(79, 70, 229, 0.05), transparent);
     background-attachment: fixed;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
@@ -98,60 +98,51 @@
 @layer components {
   /* ---------- Enterprise Surfaces ---------- */
   .card {
-    @apply rounded-2xl border border-slate-200/85 bg-white shadow-pro transition-all duration-200;
+    @apply rounded-lg border border-slate-200 bg-white shadow-sm;
   }
 
   .card-pro {
-    @apply rounded-2xl border border-slate-200/85 bg-white shadow-pro transition-all duration-200;
+    @apply rounded-lg border border-slate-200 bg-white shadow-sm;
   }
 
   .card-hover {
-    @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300/90 hover:shadow-pro-lg;
+    @apply transition-colors duration-150 hover:border-slate-300;
   }
 
   .card-dark {
-    @apply rounded-3xl border border-white/10 bg-obsidian-mesh text-white shadow-obsidian;
+    @apply rounded-lg border border-white/10 bg-obsidian-mesh text-white shadow-obsidian;
   }
 
   .card-header {
-    @apply flex flex-col items-start justify-between gap-2.5 border-b border-slate-100 bg-slate-50/55 px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-4;
+    @apply flex flex-col items-start justify-between gap-3 border-b border-slate-100 bg-white px-4 py-3 sm:flex-row sm:items-center sm:px-5;
   }
 
   .card-title {
-    @apply text-[15px] font-bold tracking-tight text-slate-900;
+    @apply text-sm font-semibold leading-5 tracking-tight text-slate-900;
   }
 
   /* ---------- Tactile Enterprise Buttons ---------- */
   .btn {
-    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5
-           text-sm font-semibold tracking-tight transition-all duration-150 active:scale-[0.98]
-           focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 focus-visible:ring-offset-2
+    @apply inline-flex h-9 select-none items-center justify-center gap-2 whitespace-nowrap rounded-md px-3
+           text-sm font-medium leading-none transition-colors duration-150
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 focus-visible:ring-offset-1
            disabled:pointer-events-none disabled:opacity-50;
   }
 
   .btn-primary {
-    @apply btn bg-gradient-to-b from-indigo-500 to-indigo-600 text-white
-           shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_2px_8px_-1px_rgba(79,70,229,0.4)]
-           hover:from-indigo-500 hover:to-indigo-700 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_6px_16px_-2px_rgba(79,70,229,0.45)]
-           active:from-indigo-600 active:to-indigo-800;
+    @apply btn bg-indigo-600 text-white hover:bg-indigo-700;
   }
 
   .btn-success {
-    @apply btn bg-gradient-to-b from-emerald-500 to-emerald-600 text-white
-           shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_2px_8px_-1px_rgba(16,185,129,0.38)]
-           hover:from-emerald-500 hover:to-emerald-700 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_6px_16px_-2px_rgba(16,185,129,0.45)];
+    @apply btn bg-emerald-600 text-white hover:bg-emerald-700;
   }
 
   .btn-danger {
-    @apply btn bg-gradient-to-b from-rose-500 to-rose-600 text-white
-           shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_2px_8px_-1px_rgba(225,29,72,0.35)]
-           hover:from-rose-500 hover:to-rose-700;
+    @apply btn bg-rose-700 text-white hover:bg-rose-800;
   }
 
   .btn-amber {
-    @apply btn bg-gradient-to-b from-amber-400 to-amber-500 text-slate-950 font-bold
-           shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_8px_-1px_rgba(245,158,11,0.35)]
-           hover:from-amber-400 hover:to-amber-600 hover:text-white;
+    @apply btn bg-amber-500 text-slate-950 hover:bg-amber-600;
   }
 
   .btn-dark {
@@ -180,11 +171,10 @@
   }
 
   .input {
-    @apply min-h-11 w-full rounded-xl border border-slate-200/95 bg-white px-3.5 py-2.5 text-base text-slate-900
-           shadow-sm transition-all duration-150 placeholder:text-slate-400
+    @apply h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900
+           transition-colors duration-150 placeholder:text-slate-400
            hover:border-slate-300
-           focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10
-           sm:min-h-0 sm:text-sm;
+           focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/15;
   }
 
   .select {
@@ -196,19 +186,19 @@
 
   /* ---------- Status & Tag Badges ---------- */
   .badge {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold
-           leading-none tracking-tight ring-1 ring-inset;
+    @apply inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-md px-2 text-[11px] font-medium
+           leading-none ring-1 ring-inset;
   }
 
   .badge-slate   { @apply badge bg-slate-100/90 text-slate-700 ring-slate-200/90; }
   .badge-indigo  { @apply badge bg-indigo-50 text-indigo-700 ring-indigo-200/90; }
-  .badge-rose    { @apply badge bg-rose-50 text-rose-700 ring-rose-200/90; }
-  .badge-amber   { @apply badge bg-amber-50 text-amber-800 ring-amber-200/90; }
-  .badge-emerald { @apply badge bg-emerald-50 text-emerald-700 ring-emerald-200/90; }
-  .badge-sky     { @apply badge bg-sky-50 text-sky-700 ring-sky-200/90; }
-  .badge-solid-rose    { @apply badge bg-rose-600 text-white ring-rose-600 shadow-sm; }
-  .badge-solid-emerald { @apply badge bg-emerald-600 text-white ring-emerald-600 shadow-sm; }
-  .badge-solid-amber   { @apply badge bg-amber-500 text-white ring-amber-500 shadow-sm; }
+  .badge-rose    { @apply badge bg-rose-50 text-rose-800 ring-rose-200; }
+  .badge-amber   { @apply badge bg-amber-50 text-amber-900 ring-amber-200/90; }
+  .badge-emerald { @apply badge bg-emerald-50 text-emerald-800 ring-emerald-200/90; }
+  .badge-sky     { @apply badge bg-sky-50 text-sky-800 ring-sky-200/90; }
+  .badge-solid-rose    { @apply badge bg-rose-50 text-rose-800 ring-rose-200; }
+  .badge-solid-emerald { @apply badge bg-emerald-50 text-emerald-800 ring-emerald-200; }
+  .badge-solid-amber   { @apply badge bg-amber-50 text-amber-900 ring-amber-200; }
 
   /* ---------- Enterprise Data Tables ---------- */
   .table-wrap {
@@ -233,7 +223,7 @@
   }
 
   .row-alert {
-    @apply bg-rose-50/45 hover:bg-rose-50/85;
+    @apply bg-rose-50/70 hover:bg-rose-100/80;
   }
 
   .num {
@@ -242,8 +232,8 @@
 
   /* ---------- Obsidian Sidebar Navigation ---------- */
   .nav-link-dark {
-    @apply relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold
-           text-slate-400 transition-all duration-150 hover:bg-white/[0.06] hover:text-white;
+    @apply relative flex h-9 items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium
+           text-slate-400 transition-colors duration-150 hover:bg-white/[0.06] hover:text-white;
   }
 
   .nav-link-dark-active {
@@ -279,11 +269,10 @@
   aside,
   header,
   nav,
-  button,
   .no-print,
   .print\:hidden,
   [role="dialog"],
-  .fixed.inset-0 {
+  .fixed.inset-0:not(.printable-modal) {
     display: none !important;
   }
 
@@ -291,6 +280,11 @@
   body.has-printable-modal > *:not(.printable-modal),
   body:has(.printable-modal) > *:not(.printable-modal) {
     display: none !important;
+  }
+
+  .printable-modal.fixed.inset-0 {
+    display: block !important;
+    visibility: visible !important;
   }
 
   body.has-printable-modal,
@@ -308,13 +302,22 @@
     position: static !important;
     inset: auto !important;
     display: block !important;
+    visibility: visible !important;
     width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
     overflow: visible !important;
     padding: 0 !important;
     margin: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
     border: none !important;
+  }
+
+  .printable-modal .overflow-y-auto,
+  .printable-modal .max-h-\[75vh\] {
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   .printable-modal > div {

@@ -8,19 +8,12 @@ import {
   IconAlert,
   IconCalculator,
   IconCheck,
-  IconDatabase,
   IconLogout,
   IconMenu,
 } from './Icons';
 import { useCaisseStore } from '@/lib/store';
 
-export default function Topbar({
-  onOpenMenu,
-  onOpenDbModal,
-}: {
-  onOpenMenu: () => void;
-  onOpenDbModal?: () => void;
-}) {
+export default function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const currentUser = useCaisseStore((state) => state.currentUser);
@@ -33,7 +26,7 @@ export default function Topbar({
   const isSuperviseur = currentUser?.role === 'superviseur';
   const title =
     isSuperviseur && pathname === '/'
-      ? 'Tableau de Pilotage Superviseur (Temps Réel)'
+      ? 'Pilotage'
       : PAGE_TITLES[pathname] ?? 'CaissePro';
 
   const nonPayeCount = drivers.filter((d) => d.statut === 'NON PAYE').length;
@@ -59,32 +52,21 @@ export default function Topbar({
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-slate-200/80 bg-white/85 px-3 pt-[env(safe-area-inset-top)] shadow-[0_1px_3px_rgba(15,23,42,0.03)] backdrop-blur-xl sm:px-5 lg:px-8">
+    <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 pt-[env(safe-area-inset-top)] sm:px-5 lg:px-6">
       {/* Left: Hamburger & Breadcrumb Title */}
       <div className="flex min-w-0 items-center gap-2.5">
         <button
           type="button"
           onClick={onOpenMenu}
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 lg:hidden"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 lg:hidden"
           aria-label="Ouvrir le menu"
         >
           <IconMenu className="h-5 w-5" />
         </button>
 
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            <span className="hidden sm:inline text-indigo-600">CaissePro</span>
-            <span className="hidden sm:inline text-slate-300">/</span>
-            <span className="hidden sm:inline truncate">
-              {currentUser?.displayName || 'Espace Trésorerie'}
-            </span>
-            {isSuperviseur && (
-              <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-700">
-                CONSULTATION & CONTRÔLE
-              </span>
-            )}
-          </div>
-          <h1 className="truncate text-sm font-extrabold tracking-tight text-slate-900 sm:text-[15px]">
+          <p className="truncate text-[11px] text-slate-400">CaissePro</p>
+          <h1 className="truncate text-sm font-semibold leading-5 text-slate-900">
             {title}
           </h1>
         </div>
@@ -95,7 +77,7 @@ export default function Topbar({
         {/* Live Treasury Pill */}
         <Link
           href="/journal"
-          className="hidden items-center gap-2 rounded-xl border border-slate-200/90 bg-slate-50/90 px-3 py-1.5 text-xs transition-colors hover:border-indigo-300 hover:bg-white md:inline-flex"
+          className="hidden h-8 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 text-xs hover:bg-white md:inline-flex"
           title="Total encaissé enregistré dans le journal"
         >
           <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
@@ -109,7 +91,7 @@ export default function Topbar({
         {/* Unpaid Alerts Pill */}
         <Link
           href={isSuperviseur ? '/' : '/chauffeurs'}
-          className={`hidden items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition-all sm:inline-flex ${
+          className={`hidden h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium sm:inline-flex ${
             nonPayeCount > 0
               ? 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
               : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
@@ -145,14 +127,11 @@ export default function Topbar({
           </Link>
         )}
 
-        {/* Account & DB Config */}
         {currentUser && (
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onOpenDbModal}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200/95 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-800 shadow-sm transition-all hover:border-indigo-300 hover:bg-indigo-50/40"
-              title="Informations du compte & synchronisation"
+            <span
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800"
+              title={currentUser.displayName}
             >
               <span
                 className={`h-2 w-2 rounded-full ${
@@ -162,13 +141,12 @@ export default function Topbar({
               <span className="max-w-[110px] truncate sm:max-w-[150px]">
                 {currentUser.displayName}
               </span>
-              <IconDatabase className="h-3.5 w-3.5 text-indigo-500" />
-            </button>
+            </span>
 
             <button
               type="button"
               onClick={handleLogout}
-              className="hidden h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 sm:inline-flex"
+              className="hidden h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800 sm:inline-flex"
               title="Se déconnecter"
             >
               <IconLogout className="h-3.5 w-3.5" />

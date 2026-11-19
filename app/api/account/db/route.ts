@@ -37,8 +37,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Configuration de la base de données enregistrée avec succès.',
-      customDbUrl: customDbUrl && customDbUrl.trim().length > 0 ? customDbUrl.trim() : null,
+      message: 'Configuration enregistrée.',
     });
   } catch (error: any) {
     return NextResponse.json(

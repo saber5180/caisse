@@ -115,6 +115,10 @@ interface CaisseStore {
   selectDriverById: (id: string | null) => Driver | null;
   validateCurrentSale: (targetEntryId?: string) => CashTransaction | null;
   resetDesk: () => void;
+  updateJournalTransaction: (
+    tx: CashTransaction,
+    patch: { recette: number; mtEspece: number; versement: number }
+  ) => Promise<{ ok: boolean; error?: string }>;
   clearFeedback: () => void;
 
   // Actions - Drivers
@@ -741,6 +745,100 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       triggerImmediateSync(false);
     },
 
+    updateJournalTransaction: async (tx, patch) => {
+      const round3 = (n: number) => Math.round(n * 1000) / 1000;
+      const recette = round3(Math.max(0, patch.recette));
+      const mtEspece = round3(Math.max(0, patch.mtEspece));
+      const versement = round3(Math.max(0, patch.versement));
+      const tPayer = round3(mtEspece + versement);
+      const resAPayer = round3(tPayer - recette);
+      const status = resAPayer >= 0 ? 'PAYE' : 'NON PAYE';
+      const ownerId = tx.accountId || get().currentUser?.id || '';
+
+      const applyLocal = (t: CashTransaction): CashTransaction => {
+        if (t.id !== tx.id) return t;
+        if ((t.accountId || '') !== (tx.accountId || '') && t.accountId && tx.accountId) return t;
+        return {
+          ...t,
+          recette,
+          mtEspece,
+          versement,
+          tPayer,
+          resAPayer,
+          status,
+          rawData: {
+            ...(t.rawData || {}),
+            recette,
+            versement,
+          },
+        };
+      };
+
+      const previous = get().transactions;
+      const previousAll = get().allTransactions;
+      set((state) => ({
+        transactions: state.transactions.map(applyLocal),
+        allTransactions: state.allTransactions.map(applyLocal),
+      }));
+
+      try {
+        const res = await fetch('/api/caisse/transactions', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: tx.id,
+            accountId: ownerId,
+            recette,
+            mtEspece,
+            versement,
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          set({
+            transactions: previous,
+            allTransactions: previousAll,
+            feedbackMessage: {
+              type: 'error',
+              text: json.error || 'Modification impossible.',
+            },
+          });
+          return { ok: false, error: json.error || 'Modification impossible.' };
+        }
+
+        const isOwn = !tx.accountId || tx.accountId === get().currentUser?.id;
+        if (isOwn) {
+          const deltaVer = versement - (tx.versement || 0);
+          const deltaRecette = recette - (tx.recette || 0);
+          set((state) => ({
+            ver: Math.max(0, round3((state.ver || 0) + deltaVer)),
+            recettePhysiqueTheorique: Math.max(
+              0,
+              round3((state.recettePhysiqueTheorique || 0) + deltaRecette)
+            ),
+          }));
+        }
+
+        set({
+          feedbackMessage: {
+            type: 'success',
+            text: `Ligne ${tx.codeChauffeur || tx.id} mise à jour (${tPayer.toFixed(3)} TND).`,
+          },
+        });
+        return { ok: true };
+      } catch (e: any) {
+        set({
+          transactions: previous,
+          allTransactions: previousAll,
+          feedbackMessage: {
+            type: 'error',
+            text: e?.message || 'Erreur réseau lors de la modification.',
+          },
+        });
+        return { ok: false, error: e?.message || 'Erreur réseau' };
+      }
+    },
+
     clearFeedback: () => set({ feedbackMessage: null }),
 
     // Drivers Actions
@@ -889,6 +987,8 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           const hasCircuit =
             prog.length > 0 && prog.toUpperCase() !== 'STAND-BY' && prog.toUpperCase() !== 'STANDBY';
 
+          const isNonPaye = d.statut === 'NON PAYE';
+
           if (hasCircuit) {
             const wasPaid = d.statut === 'PAYE';
             history.unshift({
@@ -896,6 +996,13 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
               date: wasPaid ? d.programmeDate || d.dateDerniere || nowStr : pastDate,
               circuit: prog,
               paid: wasPaid,
+            });
+          } else if (isNonPaye && history.filter((h) => !h.paid).length === 0) {
+            history.unshift({
+              id: generateId('PRG-BASC'),
+              date: pastDate,
+              circuit: 'STAND-BY',
+              paid: false,
             });
           }
 
@@ -920,7 +1027,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           drivers: updated,
           feedbackMessage: {
             type: 'success',
-            text: 'Bascule de 12:30 exécutée : les programmes actifs ont été archivés dans l’historique et les caisses non payées conservées !',
+            text: 'Bascule de 12:30 exécutée : les NON PAYÉ et STAND-BY NON PAYÉ sont dans l’historique. Le programme du jour est vide.',
           },
         };
       });
@@ -970,7 +1077,17 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         drivers: state.drivers.map((d) => {
           if (d.id !== driverId) return d;
           let next: Driver;
-          if (entryId === 'CURRENT') {
+          if (entryId === 'STANDBY-UNPAID' || entryId === 'PREV-UNPAID') {
+            const unpaidHist = (d.programmeHistorique || []).filter((e) => !e.paid).length;
+            next = {
+              ...d,
+              programmeJour: unpaidHist > 0 ? d.programmeJour : 'STAND-BY',
+              circuitActuel: unpaidHist > 0 ? d.circuitActuel : 'STAND-BY',
+              programmeDate: unpaidHist > 0 ? d.programmeDate : undefined,
+              statut: unpaidHist > 0 ? 'NON PAYE' : 'PAS DE CAISSE',
+              caissesDues: unpaidHist,
+            };
+          } else if (entryId === 'CURRENT') {
             const unpaidHist = (d.programmeHistorique || []).filter((e) => !e.paid).length;
             next = {
               ...d,
@@ -1006,7 +1123,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       set((state) => ({
         drivers: state.drivers.map((d) => {
           if (d.id !== driverId) return d;
-          if (entryId === 'CURRENT') {
+          if (entryId === 'STANDBY-UNPAID' || entryId === 'PREV-UNPAID' || entryId === 'CURRENT') {
             const unpaidHist = (d.programmeHistorique || []).filter((e) => !e.paid).length;
             const u: Driver = {
               ...d,

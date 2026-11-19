@@ -10,9 +10,7 @@ import {
   IconCheck,
   IconClose,
   IconCoins,
-  IconDatabase,
   IconLogout,
-  IconShield,
 } from './Icons';
 import { useCaisseStore } from '@/lib/store';
 
@@ -21,12 +19,6 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [showDbModal, setShowDbModal] = useState(false);
-  const [customDbUrlInput, setCustomDbUrlInput] = useState('');
-  const [dbModalLoading, setDbModalLoading] = useState(false);
-  const [dbModalMsg, setDbModalMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(
-    null
-  );
 
   const totalDrivers = useCaisseStore((state) => state.drivers.length);
   const feedback = useCaisseStore((state) => state.feedbackMessage);
@@ -71,7 +63,6 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
               authCheckedForUserRef.current === data.user.id;
             authCheckedForUserRef.current = data.user.id;
             setCurrentUser(data.user);
-            setCustomDbUrlInput(data.user.customDbUrl || '');
             if (!alreadyLoaded) {
               await fetchAccountData();
             }
@@ -89,13 +80,6 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
       isMounted = false;
     };
   }, [pathname, currentUser, router, setCurrentUser, fetchAccountData]);
-
-  // Keep customDbUrlInput synced if user switches account
-  useEffect(() => {
-    if (currentUser) {
-      setCustomDbUrlInput(currentUser.customDbUrl || '');
-    }
-  }, [currentUser]);
 
   // Route guard for Superviseur restricted pages (Spécification 4)
   useEffect(() => {
@@ -146,37 +130,6 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  const handleSaveDbUrl = async (testOnly = false) => {
-    setDbModalLoading(true);
-    setDbModalMsg(null);
-    try {
-      const res = await fetch('/api/account/db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customDbUrl: customDbUrlInput.trim() || null,
-          testOnly,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Échec de la connexion');
-      }
-      setDbModalMsg({ type: 'success', text: data.message });
-      if (!testOnly && currentUser) {
-        setCurrentUser({
-          ...currentUser,
-          customDbUrl: customDbUrlInput.trim() || null,
-        });
-        fetchAccountData();
-      }
-    } catch (err: any) {
-      setDbModalMsg({ type: 'error', text: err.message || 'Erreur réseau' });
-    } finally {
-      setDbModalLoading(false);
-    }
-  };
-
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
@@ -193,7 +146,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <Sidebar onOpenDbModal={() => setShowDbModal(true)} />
+      <Sidebar />
 
       {/* Mobile Obsidian Drawer */}
       {menuOpen && (
@@ -234,20 +187,9 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
                       {currentUser.displayName}
                     </p>
                     <p className="font-mono text-[10px] text-slate-400">
-                      @{currentUser.username} · {currentUser.customDbUrl ? 'DB Dédiée' : 'Neon Cloud'}
+                      @{currentUser.username}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setShowDbModal(true);
-                    }}
-                    className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10"
-                  >
-                    <IconDatabase className="h-3.5 w-3.5 text-indigo-400" />
-                    BD
-                  </button>
                 </div>
               </div>
             )}
@@ -276,10 +218,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area */}
       <div id="app-chrome-content" className="lg:pl-[17.5rem]">
-        <Topbar
-          onOpenMenu={() => setMenuOpen(true)}
-          onOpenDbModal={() => setShowDbModal(true)}
-        />
+        <Topbar onOpenMenu={() => setMenuOpen(true)} />
 
         {/* Global Floating Toast Feedback */}
         {feedback && (
@@ -325,97 +264,6 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Account & Database Isolation Modal */}
-      {showDbModal && currentUser && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm"
-            onClick={() => setShowDbModal(false)}
-          />
-          <div className="animate-scale-in relative w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 bg-obsidian-mesh px-6 py-5 text-white">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/25 text-indigo-300 ring-1 ring-indigo-400/30">
-                  <IconDatabase className="h-5 w-5" />
-                </span>
-                <div>
-                  <h3 className="text-base font-extrabold text-white">
-                    Architecture & Isolation Base de Données
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Compte actif : <strong className="text-white">{currentUser.displayName}</strong> (@{currentUser.username})
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowDbModal(false)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
-              >
-                <IconClose className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 p-6">
-              <div className="flex items-start gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3.5 text-xs text-indigo-950">
-                <IconShield className="mt-0.5 h-5 w-5 shrink-0 text-indigo-600" />
-                <div>
-                  <p className="font-bold">Étanchéité Multi-Comptes Garantie</p>
-                  <p className="mt-0.5 leading-relaxed text-indigo-800/85">
-                    Les chauffeurs, encaissements et billetteries de ce compte sont strictement isolés sur PostgreSQL. Vous pouvez également relier une instance PostgreSQL / Neon externe dédiée.
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <label className="label">URL PostgreSQL / Neon Dédiée (Optionnel)</label>
-                <input
-                  type="text"
-                  value={customDbUrlInput}
-                  onChange={(e) => setCustomDbUrlInput(e.target.value)}
-                  placeholder="postgresql://neondb_owner:...@ep-xyz.neon.tech/neondb?sslmode=require"
-                  className="input font-mono !text-xs"
-                />
-                <p className="mt-1.5 text-[11px] text-slate-400">
-                  Laissez vide pour utiliser la partition isolée haute performance par défaut.
-                </p>
-              </div>
-
-              {dbModalMsg && (
-                <div
-                  className={`rounded-xl border p-3 text-xs font-semibold ${
-                    dbModalMsg.type === 'success'
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                      : 'border-rose-200 bg-rose-50 text-rose-800'
-                  }`}
-                >
-                  {dbModalMsg.text}
-                </div>
-              )}
-
-              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
-                {customDbUrlInput.trim() && (
-                  <button
-                    type="button"
-                    disabled={dbModalLoading}
-                    onClick={() => handleSaveDbUrl(true)}
-                    className="btn-ghost !py-2 !text-xs"
-                  >
-                    Tester la Connexion
-                  </button>
-                )}
-                <button
-                  type="button"
-                  disabled={dbModalLoading}
-                  onClick={() => handleSaveDbUrl(false)}
-                  className="btn-primary !py-2 !text-xs"
-                >
-                  {dbModalLoading ? 'Application...' : 'Enregistrer la Configuration'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

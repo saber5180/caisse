@@ -217,6 +217,34 @@ function parseProgrammeWorkbook(wb: XLSX.WorkBook): {
   return rows;
 }
 
+function isSameLocalDay(iso?: string | null, ref = new Date()): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  return (
+    d.getFullYear() === ref.getFullYear() &&
+    d.getMonth() === ref.getMonth() &&
+    d.getDate() === ref.getDate()
+  );
+}
+
+function isStandbyCircuit(value?: string | null): boolean {
+  const prog = (value || '').trim().toUpperCase();
+  return !prog || prog === 'STAND-BY' || prog === 'STANDBY';
+}
+
+/** Circuit encore affiché dans le tableau du jour. Un programme daté avant aujourd'hui n'y reste pas. */
+function isLiveDayProgramme(d: {
+  programmeJour?: string;
+  circuitActuel?: string;
+  programmeDate?: string;
+}): boolean {
+  const prog = (d.programmeJour || d.circuitActuel || '').trim();
+  if (isStandbyCircuit(prog)) return false;
+  if (!d.programmeDate) return true;
+  return isSameLocalDay(d.programmeDate);
+}
+
 export default function ProgrammePage() {
   const drivers = useCaisseStore((state) => state.drivers);
   const assignCircuit = useCaisseStore((state) => state.assignCircuit);
@@ -250,15 +278,13 @@ export default function ProgrammePage() {
     return [...arr, 'STAND-BY'];
   }, [drivers]);
 
-  // Compteurs du programme du jour
-  const activeProgrammeDrivers = useMemo(
-    () =>
-      drivers.filter((d) => {
-        const p = (d.programmeJour || '').trim().toUpperCase();
-        return p && p !== 'STAND-BY';
-      }),
+  // Programme du jour uniquement : pas les STAND-BY, pas les programmes des jours précédents
+  const dayDrivers = useMemo(
+    () => drivers.filter((d) => isLiveDayProgramme(d)),
     [drivers]
   );
+
+  const activeProgrammeDrivers = dayDrivers;
 
   const standbyDrivers = useMemo(
     () =>
@@ -269,15 +295,13 @@ export default function ProgrammePage() {
     [drivers]
   );
 
-  // Filtrage de la liste du Programme du Jour
+  // Filtrage de la liste du Programme du Jour (jamais les stand-by ni les jours précédents)
   const filteredDrivers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return drivers.filter((d) => {
+    return dayDrivers.filter((d) => {
       const prog = (d.programmeJour || d.circuitActuel || 'STAND-BY').trim().toUpperCase();
-      const matchCircuit = !filterCircuit
+      const matchCircuit = !filterCircuit || filterCircuit === '__ACTIVE__'
         ? true
-        : filterCircuit === '__ACTIVE__'
-        ? prog !== 'STAND-BY'
         : prog === filterCircuit;
       const matchSearch = !q
         ? true
@@ -286,7 +310,7 @@ export default function ProgrammePage() {
           prog.toLowerCase().includes(q);
       return matchCircuit && matchSearch;
     });
-  }, [drivers, filterCircuit, searchQuery]);
+  }, [dayDrivers, filterCircuit, searchQuery]);
 
   // Liste aplatie de l'historique des anciens programmes et des caisses non payées
   const historyRows = useMemo(() => {
@@ -323,24 +347,26 @@ export default function ProgrammePage() {
         });
       });
 
-      // 2. Si le programme actuel est déjà en retard (après 12:30 demain) ou non payé
-      const prog = (d.programmeJour || 'STAND-BY').trim().toUpperCase();
-      if (d.statut === 'NON PAYE' && prog !== 'STAND-BY') {
+      // Le programme du jour reste dans le tableau 1. Ici : uniquement les impayés antérieurs
+      // et les STAND-BY NON PAYÉ qui n'ont pas encore de ligne d'historique.
+      const liveToday = isLiveDayProgramme(d);
+      const unpaidHist = (d.programmeHistorique || []).some((h) => !h.paid);
+      if (d.statut === 'NON PAYE' && !liveToday && !unpaidHist) {
+        const prog = (d.programmeJour || d.circuitActuel || '').trim();
+        const standby = isStandbyCircuit(prog);
         const refDate = d.programmeDate || d.dateDerniere;
         const retard = calculateRetardFrom1230(refDate);
         list.push({
-          key: `${d.id}-CURRENT`,
+          key: `${d.id}-PREV-UNPAID`,
           driverId: d.id,
-          entryId: 'CURRENT',
+          entryId: standby ? 'STANDBY-UNPAID' : 'PREV-UNPAID',
           tr: d.tr,
           nom: d.nom,
-          circuit: prog,
+          circuit: standby ? 'STAND-BY' : prog || 'ANCIENNE CAISSE',
           date: refDate,
           paid: false,
-          isCurrent: true,
-          retardText: retard.isOverdue
-            ? `Retard : ${retard.text}`
-            : `Programme du jour (${retard.text})`,
+          isCurrent: false,
+          retardText: retard.isOverdue ? `Retard : ${retard.text}` : retard.text,
           isOverdue: retard.isOverdue,
         });
       }
@@ -443,7 +469,7 @@ export default function ProgrammePage() {
   const handleBascule = () => {
     if (
       confirm(
-        '⚠️ Confirmation de la BASCULE DE 12:30 :\n\n- Toutes les tournées en cours non payées passeront en retard / dette formelle (Statut "NON PAYÉ").\n- Les chauffeurs payés seront libérés en "PAS DE CAISSE".\n\nVoulez-vous continuer ?'
+        '⚠️ Confirmation de la BASCULE DE 12:30 :\n\n- Les chauffeurs NON PAYÉ et STAND-BY NON PAYÉ passent dans l\'historique des caisses non payées.\n- Le programme du jour est vidé pour la nouvelle journée.\n- Les chauffeurs déjà payés sont libérés en "PAS DE CAISSE".\n\nVoulez-vous continuer ?'
       )
     ) {
       executeBascule1230();
@@ -607,10 +633,10 @@ export default function ProgrammePage() {
           }`}
         >
           <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-            Total Liste Programme
+            Programme du jour
           </span>
-          <p className="mt-1 font-mono text-2xl font-black text-slate-900">{drivers.length}</p>
-          <p className="mt-0.5 text-[11px] text-slate-400">Chauffeurs &amp; lignes du jour</p>
+          <p className="mt-1 font-mono text-2xl font-black text-slate-900">{dayDrivers.length}</p>
+          <p className="mt-0.5 text-[11px] text-slate-400">Lignes du tableau principal</p>
         </button>
 
         <button
@@ -629,21 +655,15 @@ export default function ProgrammePage() {
           <p className="mt-0.5 text-[11px] text-slate-400">Échéance demain 12:30</p>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setFilterCircuit('STAND-BY')}
-          className={`card p-4 text-left transition-all hover:shadow-md ${
-            filterCircuit === 'STAND-BY' ? 'ring-2 ring-amber-500 bg-amber-50/40' : ''
-          }`}
-        >
+        <div className="card p-4 text-left border-amber-200 bg-amber-50/40">
           <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-700">
             En Stand-By
           </span>
           <p className="mt-1 font-mono text-2xl font-black text-amber-700">
             {standbyDrivers.length}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-400">Sans tournée du jour</p>
-        </button>
+          <p className="mt-0.5 text-[11px] text-amber-800/80">Les stand-by non payés sont dans l&apos;historique</p>
+        </div>
 
         <div className="card p-4 text-left border-rose-200 bg-rose-50/40">
           <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-700">
@@ -663,10 +683,10 @@ export default function ProgrammePage() {
         <div className="card-header flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white border-b border-slate-100">
           <div>
             <h2 className="card-title text-sm sm:text-base font-extrabold text-slate-900">
-              1. Liste du Programme du Jour ({filteredDrivers.length} sur {drivers.length} chauffeurs)
+              1. Liste du Programme du Jour ({filteredDrivers.length} sur {dayDrivers.length} chauffeurs)
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Tous les programmes et chauffeurs importés du fichier Excel · Retard calculé automatiquement après 12:30 demain
+              Uniquement le programme de la journée en cours. Après la bascule de 12:30, cette liste reste vide jusqu&apos;au prochain import.
             </p>
           </div>
 
@@ -676,9 +696,8 @@ export default function ProgrammePage() {
               onChange={(e) => setFilterCircuit(e.target.value)}
               className="select !min-h-10 !py-1.5 !text-xs font-bold sm:w-52 bg-slate-50/80"
             >
-              <option value="">Tous les programmes ({drivers.length})</option>
+              <option value="">Programme du jour ({dayDrivers.length})</option>
               <option value="__ACTIVE__">Tournées actives ({activeProgrammeDrivers.length})</option>
-              <option value="STAND-BY">STAND-BY ({standbyDrivers.length})</option>
               {allCircuits
                 .filter((c) => c !== 'STAND-BY')
                 .map((c) => (
@@ -713,8 +732,8 @@ export default function ProgrammePage() {
         {filteredDrivers.length === 0 ? (
           <EmptyState
             icon={<IconCalendar className="h-6 w-6 text-sky-500" />}
-            title="Aucun chauffeur trouvé pour ce filtre"
-            description="Importez votre fichier Excel ou modifiez le filtre de recherche."
+            title="Aucun programme pour cette journée"
+            description="La liste du jour est vide. Elle se remplit à l'import Excel et redevient vide après la bascule de 12:30."
           />
         ) : (
           <>
@@ -925,7 +944,7 @@ export default function ProgrammePage() {
               <span>2. Historique des Programmes &amp; Caisses Non Payées ({historyRows.length})</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Anciens programmes regroupés par Code TR avec les caisses non payées et calcul du retard après 12:30
+              Programmes antérieurs non payés et stand-by non payés. Le programme du jour n&apos;apparaît pas dans ce tableau.
             </p>
           </div>
 
@@ -973,7 +992,7 @@ export default function ProgrammePage() {
           <>
             {/* Mobile / Tablet Cards for History (lg:hidden) */}
 <div className="max-h-[520px] space-y-4 overflow-y-auto bg-rose-50/10 p-3.5 sm:p-4 lg:hidden">
-{historyGroups.map((g) => (<div key={g.day}><div className="mb-2 flex items-center justify-between rounded-xl bg-slate-900 px-3.5 py-2 text-white"><span className="text-xs font-extrabold uppercase tracking-wider">📅 {g.label}</span><span className="text-[11px] font-bold text-slate-300">{g.rows.length} ligne(s) · {g.unpaid} non payée(s)</span></div><div className="grid grid-cols-1 gap-3 md:grid-cols-2">{g.rows.map((row) => (
+{historyGroups.map((g) => (<div key={g.day}><div className="mb-2 flex flex-col gap-1 rounded-xl bg-slate-900 px-3.5 py-2 text-white sm:flex-row sm:items-center sm:justify-between"><span className="text-xs font-extrabold uppercase tracking-wider">{g.label}</span><span className="text-[11px] font-bold text-slate-300">{g.rows.length} ligne(s) · {g.unpaid} non payée(s)</span></div><div className="grid grid-cols-1 gap-3 md:grid-cols-2">{g.rows.map((row) => (
                 <div
                   key={row.key}
                   className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-2.5"

@@ -609,12 +609,12 @@ export default function BilletteriePage() {
 
         {/* Confirmation Modal for Clôture de Journée */}
         {showConfirmModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
             <div
               className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
               onClick={() => setShowConfirmModal(false)}
             />
-            <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl z-10">
+            <div className="relative z-10 max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-6">
               <h3 className="text-base font-bold text-slate-900 mb-2">
                 Confirmer la Clôture de Journée
               </h3>

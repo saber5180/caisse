@@ -54,7 +54,6 @@ export async function POST(req: NextRequest) {
       role: account.role,
       caisseCode: account.caisse_code || '',
       isBlocked: Boolean(account.is_blocked),
-      customDbUrl: account.custom_db_url,
     };
 
     const token = signToken(user);

@@ -230,49 +230,125 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function DELETE(req: NextRequest) {
+async function requireSuperviseur() {
+  await ensureDefaultAccountsAndSeed();
+  const session = await getSessionUser();
+  if (!session) {
+    return { error: NextResponse.json({ error: 'Non authentifié' }, { status: 401 }) };
+  }
+  const mainPool = getPool();
+  const accRes = await mainPool.query(
+    'SELECT id, role FROM caisse_accounts WHERE id = $1',
+    [session.id]
+  );
+  if (accRes.rows.length === 0 || accRes.rows[0].role !== 'superviseur') {
+    return {
+      error: NextResponse.json(
+        { error: 'Réservé au Superviseur Général.' },
+        { status: 403 }
+      ),
+    };
+  }
+  return { mainPool };
+}
+
+function round3(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
+
+export async function PATCH(req: NextRequest) {
   try {
-    const session = await getSessionUser();
-    if (!session) {
-      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+    const auth = await requireSuperviseur();
+    if (auth.error || !auth.mainPool) return auth.error!;
+    const mainPool = auth.mainPool;
+
+    const body = await req.json();
+    const id = String(body.id || '').trim();
+    const accountId = String(body.accountId || '').trim();
+    const totalCoupures = round3(Number(body.totalCoupures));
+    const srfMoins = round3(Number(body.srfMoins));
+    const ver = round3(Number(body.ver));
+    const recetteTheorique = round3(Number(body.recetteTheorique));
+    const notes = String(body.notes || '');
+
+    if (!id || !accountId) {
+      return NextResponse.json({ error: 'Clôture introuvable.' }, { status: 400 });
+    }
+    if (![totalCoupures, srfMoins, ver, recetteTheorique].every((n) => Number.isFinite(n))) {
+      return NextResponse.json({ error: 'Montants invalides.' }, { status: 400 });
     }
 
-    if (session.role === 'superviseur') {
-      return NextResponse.json(
-        { error: 'Le compte Superviseur est en mode consultation uniquement.' },
-        { status: 403 }
-      );
+    const ttPhysique = round3(totalCoupures + srfMoins + ver);
+    const ecartReste = round3(ttPhysique - recetteTheorique);
+
+    const ownerRes = await mainPool.query(
+      'SELECT custom_db_url FROM caisse_accounts WHERE id = $1',
+      [accountId]
+    );
+    const ownerUrl = ownerRes.rows[0]?.custom_db_url as string | null;
+    const ownerPool = ownerUrl ? getPool(ownerUrl) : mainPool;
+
+    const sql = `UPDATE caisse_billetterie_history
+       SET total_coupures = $1, srf_moins = $2, ver = $3, tt_physique = $4,
+           recette_theorique = $5, ecart_reste = $6, notes = $7
+       WHERE id = $8 AND account_id = $9`;
+    const params = [totalCoupures, srfMoins, ver, ttPhysique, recetteTheorique, ecartReste, notes, id, accountId];
+    const updated = await mainPool.query(sql, params);
+    if (ownerPool !== mainPool) {
+      await ownerPool.query(sql, params);
     }
+    if ((updated.rowCount || 0) === 0) {
+      return NextResponse.json({ error: 'Clôture introuvable.' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      entry: { id, accountId, totalCoupures, srfMoins, ver, ttPhysique, recetteTheorique, ecartReste, notes },
+    });
+  } catch (error: any) {
+    console.error('Billetterie history PATCH error:', error);
+    return NextResponse.json(
+      { error: error?.message || 'Erreur lors de la modification' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const auth = await requireSuperviseur();
+    if (auth.error || !auth.mainPool) return auth.error!;
+    const mainPool = auth.mainPool;
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
-    if (!id) {
+    const accountId = searchParams.get('accountId');
+    if (!id || !accountId) {
       return NextResponse.json({ error: 'Identifiant requis' }, { status: 400 });
     }
 
-    const mainPool = getPool();
-    const accRes = await mainPool.query(
-      'SELECT id, role, custom_db_url FROM caisse_accounts WHERE id = $1',
-      [session.id]
+    const ownerRes = await mainPool.query(
+      'SELECT custom_db_url FROM caisse_accounts WHERE id = $1',
+      [accountId]
     );
+    const ownerUrl = ownerRes.rows[0]?.custom_db_url as string | null;
+    const ownerPool = ownerUrl ? getPool(ownerUrl) : mainPool;
 
-    if (accRes.rows.length === 0) {
-      return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
-    }
-
-    const account = accRes.rows[0];
-    const targetPool = account.custom_db_url ? getPool(account.custom_db_url) : mainPool;
-
-    if (account.role === 'admin') {
-      await targetPool.query('DELETE FROM caisse_billetterie_history WHERE id = $1', [id]);
-    } else {
-      await targetPool.query(
-        'DELETE FROM caisse_billetterie_history WHERE account_id = $1 AND id = $2',
-        [session.id, id]
+    const deleted = await mainPool.query(
+      'DELETE FROM caisse_billetterie_history WHERE id = $1 AND account_id = $2',
+      [id, accountId]
+    );
+    if (ownerPool !== mainPool) {
+      await ownerPool.query(
+        'DELETE FROM caisse_billetterie_history WHERE id = $1 AND account_id = $2',
+        [id, accountId]
       );
     }
+    if ((deleted.rowCount || 0) === 0) {
+      return NextResponse.json({ error: 'Clôture introuvable.' }, { status: 404 });
+    }
 
-    return NextResponse.json({ success: true, message: 'Clôture supprimée avec succès' });
+    return NextResponse.json({ success: true, message: 'Clôture supprimée.' });
   } catch (error: any) {
     console.error('Billetterie history DELETE error:', error);
     return NextResponse.json(

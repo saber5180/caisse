@@ -3,9 +3,9 @@
 import { useRouter } from 'next/navigation';
 import NavLinks from './NavLinks';
 import { useCaisseStore } from '@/lib/store';
-import { IconCoins, IconDatabase, IconLogout } from './Icons';
+import { IconCoins, IconLogout } from './Icons';
 
-export default function Sidebar({ onOpenDbModal }: { onOpenDbModal?: () => void }) {
+export default function Sidebar() {
   const router = useRouter();
   const drivers = useCaisseStore((state) => state.drivers);
   const currentUser = useCaisseStore((state) => state.currentUser);
@@ -105,17 +105,9 @@ export default function Sidebar({ onOpenDbModal }: { onOpenDbModal?: () => void 
                   {currentUser.displayName}
                 </p>
                 <p className="truncate font-mono text-[10px] text-slate-400">
-                  @{currentUser.username} · {currentUser.customDbUrl ? 'DB Dédiée' : 'Neon Cloud'}
+                  @{currentUser.username}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={onOpenDbModal}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-300 transition-colors hover:border-indigo-400/40 hover:bg-indigo-500/20 hover:text-white"
-                title="Configuration Base de Données"
-              >
-                <IconDatabase className="h-3.5 w-3.5" />
-              </button>
             </div>
 
             <div className="mt-2.5 flex items-center justify-between border-t border-white/[0.07] pt-2 text-[10px]">
@@ -127,7 +119,7 @@ export default function Sidebar({ onOpenDbModal }: { onOpenDbModal?: () => void 
                       : 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
                   }`}
                 />
-                {isSyncing ? 'Sync en cours...' : lastSyncTime ? `Sync ${lastSyncTime}` : 'Connecté Neon'}
+                {isSyncing ? 'Sync en cours...' : lastSyncTime ? `Sync ${lastSyncTime}` : 'Connecté'}
               </span>
               <button
                 type="button"

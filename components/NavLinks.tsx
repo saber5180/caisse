@@ -94,7 +94,7 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
         <Link
           href={item.href}
           onClick={onNavigate}
-          className={`group nav-link-dark min-h-[42px] ${active ? 'nav-link-dark-active' : ''}`}
+          className={`group nav-link-dark ${active ? 'nav-link-dark-active' : ''}`}
         >
           {active && (
             <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-indigo-400 shadow-[0_0_10px_#818cf8]" />

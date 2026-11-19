@@ -122,10 +122,15 @@ function parseProgrammeWorkbook(wb: XLSX.WorkBook): {
 }
 
 export default function ExcelPage() {
+  const currentUser = useCaisseStore((state) => state.currentUser);
   const drivers = useCaisseStore((state) => state.drivers);
   const transactions = useCaisseStore((state) => state.transactions);
   const billetterieItems = useCaisseStore((state) => state.billetterieItems);
   const importProgramme = useCaisseStore((state) => state.importProgramme);
+  const canImportExcel =
+    currentUser?.role === 'admin' ||
+    (currentUser?.caisseCode || '').toUpperCase() === 'CRNU' ||
+    (currentUser?.username || '').toLowerCase() === 'crnu';
 
   const [uploading, setUploading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -222,12 +227,17 @@ export default function ExcelPage() {
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title="Import & Export Excel"
-        subtitle="Mise à jour des chauffeurs depuis votre fichier .xlsm ou exportation des rapports"
+        subtitle={
+          canImportExcel
+            ? 'Mise à jour des chauffeurs depuis votre fichier .xlsm ou exportation des rapports'
+            : 'Exportation des rapports. L’importation Excel est réservée aux comptes CRNU et Admin.'
+        }
         icon={<IconSheet className="h-5 w-5" />}
         accent="slate"
       />
 
-      {/* Zone Drag & Drop */}
+      {/* Zone Drag & Drop — CRNU et Admin uniquement */}
+      {canImportExcel && (
       <div className="card p-6">
         <h3 className="card-title text-sm mb-4">Importer un Fichier Excel (.xlsm ou .xlsx)</h3>
 
@@ -305,6 +315,7 @@ export default function ExcelPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Export Options */}
       <div className="card mt-6 p-6">

@@ -20,9 +20,9 @@ const accents = {
     dot: 'bg-indigo-500',
   },
   rose: {
-    chip: 'bg-rose-50 text-rose-600 ring-1 ring-rose-200/80',
-    glow: 'from-rose-500/12 via-rose-500/4 to-transparent',
-    bar: 'bg-rose-600',
+    chip: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',
+    glow: 'from-rose-400/10 via-rose-400/0 to-transparent',
+    bar: 'bg-rose-400',
     dot: 'bg-rose-500',
   },
   amber: {
@@ -69,53 +69,39 @@ export default function StatCard({
           onClick();
         }
       }}
-      className={`card card-hover relative overflow-hidden p-5 ${
-        onClick ? 'cursor-pointer hover:shadow-pro-lg hover:border-slate-300 transition-all select-none' : ''
+      className={`card card-hover relative flex h-full flex-col p-4 ${
+        onClick ? 'cursor-pointer select-none' : ''
       } ${className}`}
     >
-      {/* Subtle ambient corner glow */}
-      <div
-        className={`pointer-events-none absolute -right-6 -top-6 h-28 w-28 rounded-full bg-gradient-to-bl ${a.glow} blur-xl`}
-      />
-
-      <div className="relative flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-extrabold uppercase tracking-[0.07em] text-slate-500">
-            {label}
-          </p>
-          <div className="mt-3 flex items-baseline gap-1.5">
-            <span className="font-mono text-[26px] font-extrabold leading-none tracking-tight text-slate-900 tabular-nums sm:text-[28px]">
-              {value}
-            </span>
-            {unit && (
-              <span className="font-mono text-xs font-bold uppercase text-slate-400">
-                {unit}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm ${a.chip}`}
-        >
+      <div className="flex items-center justify-between gap-3">
+        <p className="truncate text-sm font-medium leading-5 text-slate-600">
+          {label}
+        </p>
+        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${a.chip}`}>
           {icon}
         </div>
       </div>
 
+      <div className="mt-2 flex items-baseline gap-1.5">
+        <span className="font-mono text-2xl font-semibold leading-none tabular-nums text-slate-900">
+          {value}
+        </span>
+        {unit && (
+          <span className="font-mono text-xs font-medium text-slate-400">{unit}</span>
+        )}
+      </div>
+
       {typeof progress === 'number' && (
-        <div className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+        <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-slate-100">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${a.bar}`}
+            className={`h-full rounded-full ${a.bar}`}
             style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
           />
         </div>
       )}
 
       {hint && (
-        <div className="mt-3 flex items-center gap-1.5 border-t border-slate-100 pt-2.5 text-xs font-medium text-slate-500">
-          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${a.dot}`} />
-          <span className="truncate">{hint}</span>
-        </div>
+        <p className="mt-2 truncate text-xs leading-5 text-slate-500">{hint}</p>
       )}
     </div>
   );

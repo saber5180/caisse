@@ -65,7 +65,6 @@ export async function GET() {
         role: account.role,
         caisseCode: account.caisse_code || '',
         isBlocked: Boolean(account.is_blocked),
-        customDbUrl: account.custom_db_url,
       },
     });
   } catch (error: any) {

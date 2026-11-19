@@ -72,7 +72,6 @@ export function signToken(user: UserAccount): string {
       displayName: user.displayName,
       role: user.role,
       caisseCode: user.caisseCode || '',
-      customDbUrl: user.customDbUrl || null,
       loginAt: Date.now(),
     },
     JWT_SECRET,

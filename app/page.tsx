@@ -12,6 +12,7 @@ import {
   calculateRetardFrom1230,
 } from '@/lib/utils';
 import StatCard from '@/components/StatCard';
+import SheetModal from '@/components/SheetModal';
 import EmptyState from '@/components/EmptyState';
 import PrintReceiptModal, { ReceiptData } from '@/components/PrintReceiptModal';
 import { CashTransaction, Driver } from '@/types/caisse';
@@ -21,7 +22,6 @@ import {
   IconBolt,
   IconCalculator,
   IconCheck,
-  IconClose,
   IconCoins,
   IconEdit,
   IconHistory,
@@ -64,7 +64,7 @@ function UnpaidCaissesSelect({
           window.location.href = `/caisse?tr=${encodeURIComponent(targetTr)}`;
         }
       }}
-      className="select !min-h-8 !w-full max-w-[230px] !rounded-xl !py-1 !pl-2.5 !pr-7 !text-[11px] font-extrabold text-rose-700 border-rose-200 bg-rose-50/90 hover:bg-rose-100/80 shadow-sm cursor-pointer truncate"
+      className="select !h-8 !w-full !max-w-full !rounded-md !py-1 !pl-2 !pr-7 !text-[11px] font-medium text-rose-800 border-rose-200 bg-rose-50 cursor-pointer"
       title="Liste des caisses non payées de ce Code TR"
     >
       <option value="">
@@ -101,6 +101,7 @@ export default function DashboardPage() {
   const [activeCategoryModal, setActiveCategoryModal] = useState<
     'NON_PAYES' | 'STANDBY_NON_PAYES' | 'PAYES' | 'PAS_DE_CAISSE' | 'VALIDES' | null
   >(null);
+  const [categoryQuery, setCategoryQuery] = useState('');
 
   // Modal d'inspection détaillée d'un chauffeur au clic sur la ligne
   const [selectedDriverDetails, setSelectedDriverDetails] = useState<Driver | null>(null);
@@ -289,6 +290,18 @@ export default function DashboardPage() {
   const cumulEcart = Math.round((cumulMouvements - cumulBordereaux) * 1000) / 1000;
   const ecartDiff = Math.round((cumulBordereaux - (parseFloat(ecartValeurInput) || 0)) * 1000) / 1000;
 
+  const superviseurCaisseRows = (['CRNU', 'CRSF', 'CRTN'] as const).map((code) => {
+    const found = caissesSummary.find((c) => c.caisseCode === code);
+    return {
+      code,
+      name: found?.displayName || `Caisse ${code}`,
+      bordereaux: found?.recetteAttendue || 0,
+      mouvements: found?.montantActuel || 0,
+    };
+  });
+  const superviseurTotalBordereaux = superviseurCaisseRows.reduce((sum, row) => sum + row.bordereaux, 0);
+  const superviseurTotalMouvements = superviseurCaisseRows.reduce((sum, row) => sum + row.mouvements, 0);
+
   const openTransactionReceipt = (t: CashTransaction) => {
     setReceiptData({
       receiptNo: t.id,
@@ -308,6 +321,13 @@ export default function DashboardPage() {
         ? t.caisseCode || currentUser?.username
         : currentUser?.username,
     });
+  };
+
+  const openCategoryModal = (
+    kind: 'NON_PAYES' | 'STANDBY_NON_PAYES' | 'PAYES' | 'PAS_DE_CAISSE' | 'VALIDES'
+  ) => {
+    setCategoryQuery('');
+    setActiveCategoryModal(kind);
   };
 
   const startEditDriver = (e: React.MouseEvent, d: Driver) => {
@@ -359,6 +379,83 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {isSuperviseur ? (
+            <section className="mt-5 rounded-2xl border border-white/10 bg-white/[0.05] p-4 sm:p-5">
+              <h2 className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
+                Cumuls Bordereaux &amp; Mouvements (en direct)
+              </h2>
+              <div className="mt-3 space-y-2 sm:hidden">
+                {superviseurCaisseRows.map((row) => (
+                  <div key={row.code} className="rounded-xl border border-white/10 bg-white/[0.06] p-3">
+                    <p className="text-sm font-black text-white">{row.code}</p>
+                    <p className="text-[11px] text-slate-400">{row.name}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Bordereaux</span>
+                        <strong className="font-mono text-sm font-black text-white">{formatMoney(row.bordereaux)}</strong>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-300">Mouvements</span>
+                        <strong className="font-mono text-sm font-black text-emerald-200">{formatMoney(row.mouvements)}</strong>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="rounded-xl border border-white/15 bg-white/[0.08] p-3">
+                  <p className="text-sm font-black uppercase text-white">Total global</p>
+                  <p className="text-[11px] text-slate-400">CRNU + CRSF + CRTN</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <strong className="font-mono text-sm font-black text-white">{formatMoney(superviseurTotalBordereaux)}</strong>
+                    <strong className="font-mono text-sm font-black text-emerald-200">{formatMoney(superviseurTotalMouvements)}</strong>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 hidden overflow-x-auto sm:block">
+                <table className="w-full border-separate border-spacing-0 text-left">
+                  <thead>
+                    <tr className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+                      <th className="border-b border-white/10 px-3 py-2.5">Caisse</th>
+                      <th className="border-b border-white/10 px-3 py-2.5 text-right">Bordereaux</th>
+                      <th className="border-b border-white/10 px-3 py-2.5 text-right">Mouvements</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {superviseurCaisseRows.map((row) => (
+                      <tr key={row.code}>
+                        <td className="border-b border-white/10 px-3 py-3 text-sm font-bold text-white">
+                          {row.name}
+                        </td>
+                        <td className="border-b border-white/10 px-3 py-3 text-right font-mono text-sm font-extrabold tabular-nums text-white">
+                          {formatMoney(row.bordereaux)} TND
+                        </td>
+                        <td className="border-b border-white/10 px-3 py-3 text-right font-mono text-sm font-extrabold tabular-nums text-emerald-200">
+                          {formatMoney(row.mouvements)} TND
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="bg-white/[0.06]">
+                      <td className="px-3 py-3.5">
+                        <span className="block text-sm font-black uppercase tracking-wide text-white">Total global</span>
+                        <span className="text-[11px] font-semibold text-slate-400">CRNU + CRSF + CRTN</span>
+                      </td>
+                      <td className="px-3 py-3.5 text-right">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Bordereaux global</span>
+                        <strong className="font-mono text-lg font-black tabular-nums text-white">
+                          {formatMoney(superviseurTotalBordereaux)} TND
+                        </strong>
+                      </td>
+                      <td className="px-3 py-3.5 text-right">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-300">Mouvement global</span>
+                        <strong className="font-mono text-lg font-black tabular-nums text-emerald-200">
+                          {formatMoney(superviseurTotalMouvements)} TND
+                        </strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : (
           <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-12">
             {/* Panneau Séries */}
             <section className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 sm:p-5 xl:col-span-5">
@@ -439,6 +536,7 @@ export default function DashboardPage() {
               </div>
             </section>
           </div>
+          )}
         </div>
       </div>
 
@@ -454,11 +552,11 @@ export default function DashboardPage() {
                 <IconCoins className="h-4 w-4" />
               </span>
               <div>
-                <h2 className="text-sm font-extrabold tracking-tight text-slate-900 sm:text-base">
-                  1. Suivi des Recettes des Caisses en Temps Réel (CRNU · CRSF · CRTN)
+                <h2 className="truncate text-sm font-semibold text-slate-900">
+                  Caisses en direct
                 </h2>
-                <p className="text-[11px] font-medium text-slate-500">
-                  Montant actuel en direct, détail MT Espèce / Versement et contrôle à distance des caissiers
+                <p className="truncate text-xs text-slate-500">
+                  CRNU, CRSF et CRTN
                 </p>
               </div>
             </div>
@@ -601,7 +699,7 @@ export default function DashboardPage() {
                       <button
                         type="button"
                         onClick={() => controlCaisse(caisse.accountId, 'unblock')}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-emerald-700"
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-2.5 text-xs font-medium text-white hover:bg-emerald-700"
                       >
                         <IconCheck className="h-3.5 w-3.5" />
                         Débloquer {caisse.caisseCode}
@@ -618,7 +716,7 @@ export default function DashboardPage() {
                             controlCaisse(caisse.accountId, 'block');
                           }
                         }}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100"
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-2.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
                       >
                         <IconAlert className="h-3.5 w-3.5" />
                         Bloquer Caisse
@@ -636,7 +734,7 @@ export default function DashboardPage() {
                           controlCaisse(caisse.accountId, 'force_logout');
                         }
                       }}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200"
+                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
                     >
                       <IconLogout className="h-3.5 w-3.5" />
                       Déconnecter
@@ -652,58 +750,51 @@ export default function DashboardPage() {
       {/* =========================================================================
           SPÉCIFICATION 2 : SUIVI DU STATUT DES CHAUFFEURS (4 STATUTS VISUELS CLIQUABLES)
       ========================================================================= */}
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
-            <IconTruck className="h-4 w-4" />
-          </span>
-          <h2 className="text-sm font-extrabold tracking-tight text-slate-900 sm:text-base">
-            {isSupervisorOrAdmin
-              ? '2. Suivi du Statut des Chauffeurs (Synchronisation Temps Réel)'
-              : 'Statut de la Flotte Chauffeurs (Synchronisation Temps Réel)'}
-          </h2>
-        </div>
-        <span className="rounded-xl bg-white px-3 py-1 text-xs font-bold text-slate-600 shadow-sm ring-1 ring-slate-200/80">
-          Flotte : <strong className="font-mono text-slate-900">{totalDrivers}</strong> chauffeurs
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="truncate text-sm font-semibold text-slate-900">
+          Statut de la flotte
+        </h2>
+        <span className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500">
+          {totalDrivers} chauffeurs
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard
-          label="Chauffeur Non Payé"
+          label="Non payé"
           value={nonPayesActifs.length}
-          icon={<IconAlert className="h-5 w-5" />}
+          icon={<IconAlert className="h-4 w-4" />}
           accent="rose"
           progress={totalDrivers > 0 ? (nonPayesActifs.length / totalDrivers) * 100 : 0}
-          hint="👉 Tournées actives non réglées (Cliquer)"
-          onClick={() => setActiveCategoryModal('NON_PAYES')}
+          hint="Tournées actives encore à régler"
+          onClick={() => openCategoryModal('NON_PAYES')}
         />
         <StatCard
-          label="Chauffeur Stand-by / Non Payé"
+          label="Stand-by"
           value={standbyNonPayes.length}
-          icon={<IconBolt className="h-5 w-5" />}
+          icon={<IconBolt className="h-4 w-4" />}
           accent="amber"
           progress={totalDrivers > 0 ? (standbyNonPayes.length / totalDrivers) * 100 : 0}
-          hint="👉 En Stand-by avec caisse non payée (Cliquer)"
-          onClick={() => setActiveCategoryModal('STANDBY_NON_PAYES')}
+          hint="En attente, caisse non réglée"
+          onClick={() => openCategoryModal('STANDBY_NON_PAYES')}
         />
         <StatCard
-          label="Chauffeur Payé"
+          label="Payé"
           value={payes.length}
-          icon={<IconCheck className="h-5 w-5" />}
+          icon={<IconCheck className="h-4 w-4" />}
           accent="emerald"
           progress={totalDrivers > 0 ? (payes.length / totalDrivers) * 100 : 0}
-          hint="👉 Recette validée en caisse (Cliquer)"
-          onClick={() => setActiveCategoryModal('PAYES')}
+          hint="Recette déjà validée"
+          onClick={() => openCategoryModal('PAYES')}
         />
         <StatCard
-          label="Chauffeur Sans Caisse"
+          label="Sans caisse"
           value={pasDeCaisse.length}
-          icon={<IconTruck className="h-5 w-5" />}
+          icon={<IconTruck className="h-4 w-4" />}
           accent="indigo"
           progress={totalDrivers > 0 ? (pasDeCaisse.length / totalDrivers) * 100 : 0}
-          hint="👉 Chauffeurs sans caisse / repos (Cliquer)"
-          onClick={() => setActiveCategoryModal('PAS_DE_CAISSE')}
+          hint="Repos ou sans caisse"
+          onClick={() => openCategoryModal('PAS_DE_CAISSE')}
         />
       </div>
 
@@ -719,7 +810,7 @@ export default function DashboardPage() {
             <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
               <button
                 type="button"
-                onClick={() => setActiveCategoryModal('NON_PAYES')}
+                onClick={() => openCategoryModal('NON_PAYES')}
                 className="flex items-center gap-1.5 text-rose-700 hover:underline"
               >
                 <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
@@ -727,7 +818,7 @@ export default function DashboardPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveCategoryModal('STANDBY_NON_PAYES')}
+                onClick={() => openCategoryModal('STANDBY_NON_PAYES')}
                 className="flex items-center gap-1.5 text-amber-700 hover:underline"
               >
                 <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
@@ -735,7 +826,7 @@ export default function DashboardPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveCategoryModal('PAYES')}
+                onClick={() => openCategoryModal('PAYES')}
                 className="flex items-center gap-1.5 text-emerald-700 hover:underline"
               >
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
@@ -743,7 +834,7 @@ export default function DashboardPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveCategoryModal('PAS_DE_CAISSE')}
+                onClick={() => openCategoryModal('PAS_DE_CAISSE')}
                 className="flex items-center gap-1.5 text-indigo-700 hover:underline"
               >
                 <span className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
@@ -757,15 +848,15 @@ export default function DashboardPage() {
               <div
                 className="bg-emerald-500 transition-all duration-500 cursor-pointer"
                 style={{ width: `${(payes.length / totalDrivers) * 100}%` }}
-                onClick={() => setActiveCategoryModal('PAYES')}
+                onClick={() => openCategoryModal('PAYES')}
                 title="Chauffeur Payé"
               />
             )}
             {nonPayesActifs.length > 0 && (
               <div
-                className="bg-rose-500 transition-all duration-500 cursor-pointer"
+                className="bg-rose-400 transition-all duration-500 cursor-pointer"
                 style={{ width: `${(nonPayesActifs.length / totalDrivers) * 100}%` }}
-                onClick={() => setActiveCategoryModal('NON_PAYES')}
+                onClick={() => openCategoryModal('NON_PAYES')}
                 title="Chauffeur Non Payé"
               />
             )}
@@ -773,7 +864,7 @@ export default function DashboardPage() {
               <div
                 className="bg-amber-500 transition-all duration-500 cursor-pointer"
                 style={{ width: `${(standbyNonPayes.length / totalDrivers) * 100}%` }}
-                onClick={() => setActiveCategoryModal('STANDBY_NON_PAYES')}
+                onClick={() => openCategoryModal('STANDBY_NON_PAYES')}
                 title="Chauffeur Stand-by / Non Payé"
               />
             )}
@@ -781,7 +872,7 @@ export default function DashboardPage() {
               <div
                 className="bg-indigo-400 transition-all duration-500 cursor-pointer"
                 style={{ width: `${(pasDeCaisse.length / totalDrivers) * 100}%` }}
-                onClick={() => setActiveCategoryModal('PAS_DE_CAISSE')}
+                onClick={() => openCategoryModal('PAS_DE_CAISSE')}
                 title="Chauffeur Sans Caisse"
               />
             )}
@@ -852,7 +943,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setTableFilter('ALL')}
-              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+              className={`h-8 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors ${
                 tableFilter === 'ALL'
                   ? 'bg-slate-900 text-white shadow-sm'
                   : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-100'
@@ -863,7 +954,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setTableFilter('NON_PAYE_ACTIF')}
-              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+              className={`h-8 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors ${
                 tableFilter === 'NON_PAYE_ACTIF'
                   ? 'bg-rose-600 text-white shadow-sm'
                   : 'bg-rose-50 text-rose-700 border border-rose-200/60 hover:bg-rose-100'
@@ -874,18 +965,18 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setTableFilter('STANDBY_NON_PAYE')}
-              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+              className={`h-8 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors ${
                 tableFilter === 'STANDBY_NON_PAYE'
                   ? 'bg-amber-500 text-white shadow-sm'
                   : 'bg-amber-50 text-amber-800 border border-amber-200/60 hover:bg-amber-100'
               }`}
             >
-              Stand-by / Non Payé ({standbyNonPayes.length})
+              Stand-by ({standbyNonPayes.length})
             </button>
             <button
               type="button"
               onClick={() => setTableFilter('PAYE')}
-              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+              className={`h-8 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors ${
                 tableFilter === 'PAYE'
                   ? 'bg-emerald-600 text-white shadow-sm'
                   : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60 hover:bg-emerald-100'
@@ -896,7 +987,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setTableFilter('PAS DE CAISSE')}
-              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+              className={`h-8 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors ${
                 tableFilter === 'PAS DE CAISSE'
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'bg-indigo-50 text-indigo-700 border border-indigo-200/60 hover:bg-indigo-100'
@@ -936,24 +1027,24 @@ export default function DashboardPage() {
                   <div
                     key={d.id}
                     onClick={() => setSelectedDriverDetails(d)}
-                    className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3"
+                    className="cursor-pointer rounded-lg border border-slate-200 bg-white p-3 transition-colors hover:border-slate-300"
                   >
                     <div>
-                      <div className="flex items-start justify-between gap-2 mb-2.5">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="shrink-0 rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-black text-white">
-                            TR {d.tr}
-                          </span>
-                          <p className="truncate text-sm font-extrabold text-slate-900" title={d.nom}>
-                            {d.nom}
-                          </p>
-                        </div>
-                        <span className={`${getStatusBadge(d.statut)} shrink-0`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-medium text-slate-900" title={d.nom}>
+                          {d.nom}
+                        </p>
+                        <span className="shrink-0 font-mono text-xs text-slate-400">TR {d.tr}</span>
+                      </div>
+                      <div className="mt-2">
+                        <span className={getStatusBadge(d.statut)}>
                           {d.statut === 'NON PAYE' && isStandby
-                            ? 'STAND-BY / IMPAYÉ'
+                            ? 'Stand-by'
                             : d.statut === 'PAS DE CAISSE'
-                            ? 'SANS CAISSE'
-                            : d.statut}
+                            ? 'Sans caisse'
+                            : d.statut === 'NON PAYE'
+                            ? 'Non payé'
+                            : 'Payé'}
                         </span>
                       </div>
 
@@ -997,8 +1088,8 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2.5 text-xs">
-                      <div className="flex items-center gap-3">
+                    <div className="mt-3 border-t border-slate-100 pt-3 text-xs">
+                      <div className="grid grid-cols-3 gap-2">
                         <div>
                           <span className="text-[10px] text-slate-400 uppercase font-bold block">Bordereau</span>
                           <strong className="num text-slate-900">{formatMoney(d.montantBordereau)}</strong>
@@ -1025,20 +1116,12 @@ export default function DashboardPage() {
                       </div>
 
                       {!isSuperviseur && (
-                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={(e) => startEditDriver(e, d)}
-                            className="btn-ghost !py-1.5 !px-2.5 text-xs font-semibold"
-                            title="Modifier Bordereau"
-                          >
-                            <IconEdit className="h-3.5 w-3.5" />
-                          </button>
+                        <div className="mt-3" onClick={(e) => e.stopPropagation()}>
                           <Link
                             href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                            className="btn-primary !py-1.5 !px-3 text-xs font-bold"
+                            className="btn-primary w-full"
                           >
-                            Encaisser →
+                            Encaisser
                           </Link>
                         </div>
                       )}
@@ -1049,19 +1132,19 @@ export default function DashboardPage() {
             </div>
 
             {/* Desktop Pro Table View (hidden xl:block) */}
-            <div className="table-wrap hidden max-h-[560px] overflow-y-auto xl:block">
-              <table className="data-table">
-                <thead className="sticky top-0 z-10 bg-slate-50/95 shadow-[0_1px_0_rgba(226,232,240,1)]">
+            <div className="hidden max-h-[560px] overflow-x-hidden overflow-y-auto xl:block">
+              <table className="data-table w-full table-fixed">
+                <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_rgba(226,232,240,1)]">
                   <tr>
-                    <th className="w-24">Code TR</th>
-                    <th className="min-w-[180px]">Chauffeur</th>
-                    <th className="w-56">Programme du Jour &amp; Échéance 12:30</th>
-                    <th className="w-60">Caisses Non Payées (Listbox)</th>
-                    <th className="!text-right w-28">Bordereau</th>
-                    <th className="!text-right w-28">Mvt Caisse</th>
-                    <th className="!text-right w-28">Écart</th>
-                    <th className="w-36">Statut</th>
-                    {!isSuperviseur && <th className="!text-right w-28">Actions</th>}
+                    <th className="w-[5.75rem] !whitespace-nowrap">Code TR</th>
+                    <th>Chauffeur</th>
+                    <th className="w-[18%] !whitespace-normal">Programme</th>
+                    <th className="w-[16%] !whitespace-normal">Impayés</th>
+                    <th className="w-[6.25rem] !text-right">Bordereau</th>
+                    <th className="w-[6.25rem] !text-right">Mouvement</th>
+                    <th className="w-[5.5rem] !text-right">Écart</th>
+                    <th className="w-[6.5rem] !whitespace-normal">Statut</th>
+                    {!isSuperviseur && <th className="w-[8.25rem] !text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1075,23 +1158,23 @@ export default function DashboardPage() {
                         className="cursor-pointer hover:bg-indigo-50/35 transition-colors group"
                         title="Cliquez pour afficher la fiche détaillée du chauffeur"
                       >
-                        <td className="!py-3">
-                          <span className="inline-flex rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-extrabold text-white shadow-sm">
+                        <td className="!py-2.5 whitespace-nowrap">
+                          <span className="whitespace-nowrap font-mono text-xs font-semibold text-slate-900">
                             TR {d.tr}
                           </span>
                         </td>
-                        <td className="!py-3">
-                          <p className="font-extrabold text-slate-900 text-xs sm:text-[13px] truncate max-w-[220px]" title={d.nom}>
+                        <td className="!py-2.5">
+                          <p className="truncate text-[13px] font-medium text-slate-900" title={d.nom}>
                             {d.nom}
                           </p>
                         </td>
                         <td className="!py-3">
-                          <div className="flex flex-col items-start gap-1">
+                          <div className="flex min-w-0 flex-col items-start gap-1">
                             <span
-                              className={`inline-flex rounded-lg px-2.5 py-0.5 font-mono text-[11px] font-extrabold ${
+                              className={`block max-w-full truncate rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold ${
                                 isStandby
-                                  ? 'bg-amber-50 text-amber-800 border border-amber-200/80'
-                                  : 'bg-sky-50 text-sky-900 border border-sky-200/80'
+                                  ? 'bg-amber-50 text-amber-800'
+                                  : 'bg-sky-50 text-sky-900'
                               }`}
                             >
                               {d.programmeJour || 'STAND-BY'}
@@ -1142,10 +1225,12 @@ export default function DashboardPage() {
                           <div className="flex flex-col items-start gap-0.5">
                             <span className={getStatusBadge(d.statut)}>
                               {d.statut === 'NON PAYE' && isStandby
-                                ? 'STAND-BY / IMPAYÉ'
+                                ? 'Stand-by'
                                 : d.statut === 'PAS DE CAISSE'
-                                ? 'SANS CAISSE'
-                                : d.statut}
+                                ? 'Sans caisse'
+                                : d.statut === 'NON PAYE'
+                                ? 'Non payé'
+                                : 'Payé'}
                             </span>
                             {isSupervisorOrAdmin && d.paidCaisseCode && d.statut === 'PAYE' && (
                               <span className="font-mono text-[9px] font-bold text-emerald-700">
@@ -1156,18 +1241,18 @@ export default function DashboardPage() {
                         </td>
                         {!isSuperviseur && (
                           <td className="!py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1">
                               <button
                                 type="button"
                                 onClick={(e) => startEditDriver(e, d)}
-                                className="btn-ghost !p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                                className="btn-ghost !h-8 !w-8 !px-0 text-slate-500"
                                 title="Modifier Série / Sous-série / Bordereau"
                               >
                                 <IconEdit className="h-3.5 w-3.5" />
                               </button>
                               <Link
                                 href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                                className="btn-primary !px-2.5 !py-1 !text-xs font-bold"
+                                className="btn-primary !h-8 !px-2.5 !text-xs"
                                 title="Ouvrir au Guichet POS Caisse"
                               >
                                 Encaisser
@@ -1562,201 +1647,186 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* =========================================================================
-          MODAL 1 : LES 4 STATUTS CHAUFFEURS & OPÉRATIONS VALIDÉES
-      ========================================================================= */}
       {activeCategoryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-hidden no-print">
-          <div
-            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"
-            onClick={() => setActiveCategoryModal(null)}
-          />
-
-          <div className="relative w-full max-w-3xl rounded-3xl bg-white shadow-2xl z-10 overflow-hidden flex flex-col max-h-[85vh] border border-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/90 px-5 py-4">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  {activeCategoryModal === 'NON_PAYES' &&
-                    '🔴 Chauffeur Non Payé (Circuits Actifs)'}
-                  {activeCategoryModal === 'STANDBY_NON_PAYES' &&
-                    '🟠 Chauffeur Stand-by / Non Payé'}
-                  {activeCategoryModal === 'PAYES' &&
-                    '🟢 Chauffeur Payé (Recettes Validées)'}
-                  {activeCategoryModal === 'PAS_DE_CAISSE' &&
-                    '🔵 Chauffeur Sans Caisse'}
-                  {activeCategoryModal === 'VALIDES' &&
-                    '📄 Opérations de Caisse Validées'}
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Synchronisé en temps réel
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveCategoryModal(null)}
-                className="btn-icon !h-8 !w-8 hover:bg-slate-200"
-              >
-                <IconClose className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-3">
-              {activeCategoryModal === 'VALIDES' ? (
-                transactions.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-slate-400">
-                    Aucune transaction validée pour le moment.
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden">
-                    {transactions.map((t) => (
-                      <div
-                        key={t.id}
-                        className="flex items-center justify-between p-3.5 hover:bg-slate-50 transition-colors text-xs"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            {isSupervisorOrAdmin && (
-                              <span className="badge-indigo font-mono font-bold">
-                                {t.caisseCode || 'CAISSE'}
-                              </span>
-                            )}
-                            <span className="badge-slate font-mono font-bold">
-                              TR {t.codeChauffeur}
-                            </span>
-                            <span className="font-bold text-slate-900">{t.nomChauffeur}</span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5">{formatDateTime(t.date)}</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right font-mono">
-                            <span className="font-bold text-emerald-700 block">
-                              +{formatMoney(t.tPayer)} TND
-                            </span>
-                            <span className="text-[10px] text-slate-400">
-                              Att: {formatMoney(t.recette)}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => openTransactionReceipt(t)}
-                            className="btn-ghost !p-2 text-indigo-600 hover:bg-indigo-50"
-                            title="Imprimer"
-                          >
-                            <IconPrinter className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              ) : (
-                (() => {
-                  const targetList =
-                    activeCategoryModal === 'NON_PAYES'
-                      ? nonPayesActifs
-                      : activeCategoryModal === 'STANDBY_NON_PAYES'
-                      ? standbyNonPayes
-                      : activeCategoryModal === 'PAYES'
-                      ? payes
-                      : pasDeCaisse;
-
-                  if (targetList.length === 0) {
-                    return (
-                      <div className="p-8 text-center text-xs text-slate-400">
-                        Aucun chauffeur dans cette catégorie.
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden">
-                      {targetList.map((d) => (
-                        <div
-                          key={d.id}
-                          className="flex items-center justify-between p-3.5 hover:bg-slate-50 transition-colors text-xs"
-                        >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-md bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-white">
-                                #{d.tr}
-                              </span>
-                              <span className="font-bold text-slate-900">{d.nom}</span>
-                              <span className="badge-slate text-[10px]">
-                                {d.programmeJour || 'STAND-BY'}
-                              </span>
-                            </div>
-                            {d.reclamation && (
-                              <p className="text-[11px] text-rose-600 font-semibold mt-1">
-                                {d.reclamation}
-                              </p>
-                            )}
-                          </div>
-                          {!isSuperviseur && (
-                            <div className="flex items-center gap-2">
-                              <Link
-                                href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                                onClick={() => setActiveCategoryModal(null)}
-                                className="btn-primary !py-1.5 !px-3 text-xs font-bold"
-                              >
-                                Encaisser
-                              </Link>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+        <SheetModal
+          size="lg"
+          title={
+            activeCategoryModal === 'NON_PAYES'
+              ? 'Chauffeur Non Payé'
+              : activeCategoryModal === 'STANDBY_NON_PAYES'
+              ? 'Stand-by / Non Payé'
+              : activeCategoryModal === 'PAYES'
+              ? 'Chauffeur Payé'
+              : activeCategoryModal === 'PAS_DE_CAISSE'
+              ? 'Chauffeur Sans Caisse'
+              : 'Opérations validées'
+          }
+          subtitle="Liste synchronisée en temps réel"
+          onClose={() => setActiveCategoryModal(null)}
+          footer={
+            <button
+              type="button"
+              onClick={() => setActiveCategoryModal(null)}
+              className="btn-primary w-full sm:ml-auto sm:w-auto"
+            >
+              Fermer
+            </button>
+          }
+        >
+          {activeCategoryModal === 'VALIDES' ? (
+            transactions.length === 0 ? (
+              <p className="py-10 text-center text-sm text-slate-400">Aucune transaction validée pour le moment.</p>
+            ) : (
+              <ul className="space-y-2">
+                {transactions.map((t) => (
+                  <li key={t.id} className="rounded-2xl border border-slate-200 bg-white p-3.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isSupervisorOrAdmin && (
+                        <span className="badge-indigo font-mono">{t.caisseCode || 'CAISSE'}</span>
+                      )}
+                      <span className="rounded-lg bg-slate-900 px-2 py-0.5 font-mono text-xs font-black text-white">
+                        TR {t.codeChauffeur}
+                      </span>
+                      <span className="min-w-0 text-sm font-extrabold leading-snug text-slate-900">{t.nomChauffeur}</span>
                     </div>
-                  );
-                })()
-              )}
-            </div>
+                    <p className="mt-1 text-[11px] text-slate-400">{formatDateTime(t.date)}</p>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-mono text-sm font-extrabold text-emerald-700">+{formatMoney(t.tPayer)} TND</p>
+                        <p className="font-mono text-[11px] text-slate-400">Attendu {formatMoney(t.recette)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openTransactionReceipt(t)}
+                        className="btn-ghost !px-3 !py-2 text-xs font-bold text-indigo-700"
+                      >
+                        <IconPrinter className="h-4 w-4" />
+                        Reçu
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : (
+            (() => {
+              const source =
+                activeCategoryModal === 'NON_PAYES'
+                  ? nonPayesActifs
+                  : activeCategoryModal === 'STANDBY_NON_PAYES'
+                  ? standbyNonPayes
+                  : activeCategoryModal === 'PAYES'
+                  ? payes
+                  : pasDeCaisse;
+              const q = categoryQuery.trim().toLowerCase();
+              const targetList = q
+                ? source.filter(
+                    (d) =>
+                      d.nom.toLowerCase().includes(q) ||
+                      d.tr.toLowerCase().includes(q) ||
+                      (d.programmeJour || '').toLowerCase().includes(q)
+                  )
+                : source;
 
-            <div className="flex items-center justify-end border-t border-slate-100 bg-slate-50/90 px-5 py-3">
-              <button
-                type="button"
-                onClick={() => setActiveCategoryModal(null)}
-                className="btn-primary !py-1.5 text-xs font-bold"
-              >
-                Fermer
-              </button>
-            </div>
-          </div>
-        </div>
+              return (
+                <>
+                  <div className="sticky top-0 z-10 -mx-4 mb-3 border-b border-slate-100 bg-white px-4 pb-3 sm:-mx-5 sm:px-5">
+                    <div className="relative">
+                      <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="search"
+                        value={categoryQuery}
+                        onChange={(e) => setCategoryQuery(e.target.value)}
+                        placeholder="Nom, TR ou circuit"
+                        className="input !pl-9"
+                      />
+                    </div>
+                    <p className="mt-2 text-[11px] font-semibold text-slate-400">
+                      {targetList.length} chauffeur{targetList.length > 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  {targetList.length === 0 ? (
+                    <p className="py-10 text-center text-sm text-slate-400">Aucun chauffeur dans cette liste.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {targetList.map((d) => (
+                        <li key={d.id} className="rounded-2xl border border-slate-200 bg-slate-50/40 p-3.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-lg bg-slate-900 px-2 py-0.5 font-mono text-xs font-black text-white">
+                              TR {d.tr}
+                            </span>
+                            <span className="min-w-0 text-sm font-extrabold leading-snug text-slate-900">{d.nom}</span>
+                          </div>
+                          <p className="mt-2 inline-flex max-w-full rounded-lg bg-white px-2 py-1 text-[11px] font-bold text-slate-700 ring-1 ring-slate-200">
+                            {d.programmeJour || 'STAND-BY'}
+                          </p>
+                          {d.reclamation ? (
+                            <p className="mt-2 text-xs font-semibold leading-snug text-rose-600">{d.reclamation}</p>
+                          ) : null}
+                          {!isSuperviseur && (
+                            <Link
+                              href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
+                              onClick={() => setActiveCategoryModal(null)}
+                              className="btn-primary mt-3 w-full sm:w-auto"
+                            >
+                              Encaisser
+                            </Link>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              );
+            })()
+          )}
+        </SheetModal>
       )}
 
       {/* =========================================================================
           MODAL 2 : DÉTAIL DU CHAUFFEUR AU CLIC SUR LA LIGNE DU TABLEAU
       ========================================================================= */}
       {selectedDriverDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-hidden no-print">
-          <div
-            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"
-            onClick={() => setSelectedDriverDetails(null)}
-          />
-
-          <div className="relative w-full max-w-lg rounded-3xl bg-white shadow-2xl z-10 overflow-hidden flex flex-col border border-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/90 px-5 py-4">
-              <div className="flex items-center gap-2.5">
-                <span className="rounded-xl bg-slate-900 px-2.5 py-1 font-mono text-sm font-extrabold text-white">
-                  TR {selectedDriverDetails.tr}
-                </span>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">{selectedDriverDetails.nom}</h3>
-                  <span className={getStatusBadge(selectedDriverDetails.statut)}>
-                    {selectedDriverDetails.statut}
-                  </span>
-                </div>
+        <SheetModal
+          title={`${selectedDriverDetails.nom}`}
+          subtitle={`TR ${selectedDriverDetails.tr} · ${selectedDriverDetails.statut}`}
+          onClose={() => setSelectedDriverDetails(null)}
+          footer={
+            !isSuperviseur ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    const d = selectedDriverDetails;
+                    setSelectedDriverDetails(null);
+                    startEditDriver(e, d);
+                  }}
+                  className="btn-ghost w-full sm:w-auto"
+                >
+                  <IconEdit className="h-4 w-4" />
+                  Modifier
+                </button>
+                <Link
+                  href={`/caisse?tr=${encodeURIComponent(selectedDriverDetails.tr)}`}
+                  onClick={() => setSelectedDriverDetails(null)}
+                  className="btn-primary w-full sm:w-auto"
+                >
+                  <IconCalculator className="h-4 w-4" />
+                  Encaisser
+                </Link>
               </div>
+            ) : (
               <button
                 type="button"
                 onClick={() => setSelectedDriverDetails(null)}
-                className="btn-icon !h-8 !w-8 hover:bg-slate-200"
+                className="btn-primary w-full sm:ml-auto sm:w-auto"
               >
-                <IconClose className="h-4 w-4" />
+                Fermer
               </button>
-            </div>
-
-            <div className="p-5 space-y-4 text-xs">
-              <div className="grid grid-cols-3 gap-2 text-center">
+            )
+          }
+        >
+              <div className="grid grid-cols-1 gap-2 text-center sm:grid-cols-3">
                 <div className="rounded-2xl bg-slate-50 p-3 border border-slate-200">
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">
                     Bordereaux Saisis
@@ -1790,16 +1860,16 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 p-3.5 space-y-2 bg-slate-50/50">
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Circuit Affecté :</span>
+              <div className="mt-3 space-y-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 text-xs">
+                <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-slate-500 font-medium">Circuit</span>
                   <span className="font-bold text-slate-800">
                     {selectedDriverDetails.programmeJour || 'STAND-BY'}
                   </span>
                 </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-500 font-medium">Caisses non payées :</span>
-                  <span className="font-mono font-bold text-rose-700 text-right">
+                <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                  <span className="shrink-0 text-slate-500 font-medium">Caisses non payées</span>
+                  <span className="font-mono font-bold text-rose-700 sm:text-right">
                     {getUnpaidCaisses(selectedDriverDetails).length === 0
                       ? 'Aucune'
                       : getUnpaidCaisses(selectedDriverDetails)
@@ -1815,72 +1885,19 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
-            </div>
-
-            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/90 px-5 py-3">
-              {!isSuperviseur ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      const d = selectedDriverDetails;
-                      setSelectedDriverDetails(null);
-                      startEditDriver(e, d);
-                    }}
-                    className="btn-ghost !py-2 text-xs font-bold"
-                  >
-                    <IconEdit className="h-4 w-4" />
-                    Modifier Série / Bordereau
-                  </button>
-
-                  <Link
-                    href={`/caisse?tr=${encodeURIComponent(selectedDriverDetails.tr)}`}
-                    onClick={() => setSelectedDriverDetails(null)}
-                    className="btn-primary !py-2 text-xs font-bold shadow-md"
-                  >
-                    <IconCalculator className="h-4 w-4" />
-                    Encaisser au Guichet
-                  </Link>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setSelectedDriverDetails(null)}
-                  className="btn-primary ml-auto !py-2 text-xs font-bold"
-                >
-                  Fermer
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        </SheetModal>
       )}
 
       {/* =========================================================================
           MODAL 3 : ÉDITION RAPIDE SÉRIE, SOUS-SÉRIE ET MONTANT BORDEREAU
       ========================================================================= */}
       {editingDriver && !isSuperviseur && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-hidden no-print">
-          <div
-            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"
-            onClick={() => setEditingDriver(null)}
-          />
-
-          <div className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl z-10 overflow-hidden flex flex-col border border-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/90 px-5 py-3.5">
-              <h3 className="text-sm font-bold text-slate-900">
-                Série & Bordereau · {editingDriver.nom} (TR {editingDriver.tr})
-              </h3>
-              <button
-                type="button"
-                onClick={() => setEditingDriver(null)}
-                className="btn-icon !h-8 !w-8 hover:bg-slate-200"
-              >
-                <IconClose className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveDriverEdit} className="p-5 space-y-4">
+        <SheetModal
+          title={`Série & bordereau`}
+          subtitle={`${editingDriver.nom} · TR ${editingDriver.tr}`}
+          onClose={() => setEditingDriver(null)}
+        >
+            <form onSubmit={handleSaveDriverEdit} className="space-y-4">
               <div>
                 <label className="label">Colonne Série</label>
                 <input
@@ -1919,24 +1936,23 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => setEditingDriver(null)}
-                  className="btn-ghost !py-2 text-xs"
+                  className="btn-ghost w-full sm:w-auto"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
-                  className="btn-primary !py-2 text-xs font-bold shadow-md"
+                  className="btn-primary w-full sm:w-auto"
                 >
                   Enregistrer
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </SheetModal>
       )}
     </>
   );
