@@ -9,8 +9,10 @@ type SheetModalProps = {
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
+  toolbar?: ReactNode;
   footer?: ReactNode;
   size?: 'md' | 'lg';
+  accent?: 'rose' | 'amber' | 'emerald' | 'indigo';
 };
 
 export default function SheetModal({
@@ -18,9 +20,19 @@ export default function SheetModal({
   subtitle,
   onClose,
   children,
+  toolbar,
   footer,
   size = 'md',
+  accent,
 }: SheetModalProps) {
+  const headerTone = accent
+    ? {
+        rose: 'bg-rose-800 text-white',
+        amber: 'bg-amber-700 text-white',
+        emerald: 'bg-emerald-800 text-white',
+        indigo: 'bg-indigo-800 text-white',
+      }[accent]
+    : 'border-b border-slate-200 text-slate-900';
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -49,31 +61,31 @@ export default function SheetModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative flex w-full max-h-[min(92dvh,920px)] flex-col overflow-hidden rounded-t-[1.6rem] border border-slate-200/90 bg-white shadow-2xl sm:rounded-3xl ${
-          size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-lg'
+        className={`relative flex w-full max-h-[min(92dvh,760px)] flex-col overflow-hidden rounded-t-lg border border-slate-200 bg-white shadow-xl sm:rounded-lg ${
+          size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-md'
         }`}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/90 px-4 py-3.5 sm:px-5">
+        <div className={`flex min-h-14 shrink-0 items-center justify-between gap-3 px-4 py-2.5 ${headerTone}`}>
           <div className="min-w-0">
-            <h3 className="text-[15px] font-extrabold leading-snug tracking-tight text-slate-900 sm:text-base">
-              {title}
-            </h3>
+            {accent ? <p className="text-[11px] font-medium text-white/70">Statut de la flotte</p> : null}
+            <h3 className="truncate text-base font-semibold leading-5">{title}</h3>
             {subtitle ? (
-              <p className="mt-0.5 text-xs font-medium text-slate-500">{subtitle}</p>
+              <p className={`truncate text-xs leading-4 ${accent ? 'text-white/75' : 'text-slate-500'}`}>{subtitle}</p>
             ) : null}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="btn-icon !h-9 !w-9 shrink-0 rounded-xl border border-slate-200 bg-white"
+            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
+              accent ? 'text-white/80 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-100'
+            }`}
             aria-label="Fermer"
           >
             <IconClose className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5 sm:py-4">
-          {children}
-        </div>
+        {toolbar ? <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3">{toolbar}</div> : null}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">{children}</div>
         {footer ? (
           <div className="border-t border-slate-100 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
             {footer}
