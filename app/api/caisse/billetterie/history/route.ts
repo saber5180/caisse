@@ -163,7 +163,7 @@ export async function GET() {
         byId.set(row.id, row);
       }
       const cashiers = await loadCashierAccounts(mainPool);
-      for (const acc of cashiers.values()) {
+      for (const acc of Array.from(cashiers.values())) {
         if (isMainPoolUrl(acc.custom_db_url)) continue;
         try {
           const extra = await fetchHistoryFromPool(getPool(acc.custom_db_url || undefined), acc.id);

@@ -118,7 +118,7 @@ export async function GET() {
       txnByKey.set(`${row.account_id}::${row.id}`, row);
     }
 
-    for (const acc of cashierAccounts.values()) {
+    for (const acc of Array.from(cashierAccounts.values())) {
       if (isMainPoolUrl(acc.custom_db_url)) continue;
       try {
         const extra = await fetchTransactionsFromPool(getPool(acc.custom_db_url || undefined), acc.id);
@@ -238,7 +238,7 @@ export async function GET() {
       addHistoryTotals(historyTotalsRes.rows);
     }
 
-    for (const acc of cashierAccounts.values()) {
+    for (const acc of Array.from(cashierAccounts.values())) {
       if (isMainPoolUrl(acc.custom_db_url)) continue;
       try {
         const extraHist = await getPool(acc.custom_db_url || undefined).query(
