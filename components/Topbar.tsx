@@ -4,13 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { PAGE_TITLES } from '@/lib/nav';
 import { formatMoney } from '@/lib/utils';
-import {
-  IconAlert,
-  IconCalculator,
-  IconCheck,
-  IconLogout,
-  IconMenu,
-} from './Icons';
+import { IconAlert, IconCalculator, IconCheck, IconLogout, IconMenu } from './Icons';
 import { useCaisseStore } from '@/lib/store';
 
 export default function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
@@ -25,18 +19,15 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
 
   const isSuperviseur = currentUser?.role === 'superviseur';
   const title =
-    isSuperviseur && pathname === '/'
-      ? 'Pilotage'
-      : PAGE_TITLES[pathname] ?? 'CaissePro';
+    isSuperviseur && pathname === '/' ? 'Pilotage' : PAGE_TITLES[pathname] ?? 'CaissePro';
 
   const nonPayeCount = drivers.filter((d) => d.statut === 'NON PAYE').length;
   const totalEncaisse = transactions.reduce((sum, t) => sum + t.tPayer, 0);
 
   const today = new Intl.DateTimeFormat('fr-FR', {
-    weekday: 'short',
+    weekday: 'long',
     day: 'numeric',
-    month: 'short',
-    year: 'numeric',
+    month: 'long',
   }).format(new Date());
 
   const handleLogout = async () => {
@@ -52,107 +43,109 @@ export default function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 pt-[env(safe-area-inset-top)] sm:px-5 lg:px-6">
-      {/* Left: Hamburger & Breadcrumb Title */}
-      <div className="flex min-w-0 items-center gap-2.5">
-        <button
-          type="button"
-          onClick={onOpenMenu}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 lg:hidden"
-          aria-label="Ouvrir le menu"
-        >
-          <IconMenu className="h-5 w-5" />
-        </button>
-
-        <div className="min-w-0">
-          <p className="truncate text-[11px] text-slate-400">CaissePro</p>
-          <h1 className="truncate text-sm font-semibold leading-5 text-slate-900">
-            {title}
-          </h1>
-        </div>
-      </div>
-
-      {/* Right: Live Financial Status Strip & Account */}
-      <div className="flex items-center gap-2">
-        {/* Live Treasury Pill */}
-        <Link
-          href="/journal"
-          className="hidden h-8 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 text-xs hover:bg-white md:inline-flex"
-          title="Total encaissé enregistré dans le journal"
-        >
-          <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-            {isSuperviseur ? 'Global Caisses' : 'Encaissé'}
-          </span>
-          <span className="font-mono text-xs font-extrabold text-slate-900 tabular-nums">
-            {formatMoney(totalEncaisse)} <span className="text-[10px] font-semibold text-slate-400">TND</span>
-          </span>
-        </Link>
-
-        {/* Unpaid Alerts Pill */}
-        <Link
-          href={isSuperviseur ? '/' : '/chauffeurs'}
-          className={`hidden h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium sm:inline-flex ${
-            nonPayeCount > 0
-              ? 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
-              : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-          }`}
-        >
-          {nonPayeCount > 0 ? (
-            <>
-              <IconAlert className="h-3.5 w-3.5 text-rose-500" />
-              <span>{nonPayeCount} impayé{nonPayeCount > 1 ? 's' : ''}</span>
-            </>
-          ) : (
-            <>
-              <IconCheck className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Flotte à jour</span>
-            </>
-          )}
-        </Link>
-
-        {/* Date pill (XL Desktop) */}
-        <span className="hidden items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-semibold capitalize text-slate-500 2xl:inline-flex">
-          <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
-          {today}
-        </span>
-
-        {/* Quick Guichet Button if not on /caisse and NOT superviseur */}
-        {!isSuperviseur && pathname !== '/caisse' && (
-          <Link
-            href="/caisse"
-            className="btn-primary hidden !px-3 !py-1.5 !text-xs xl:inline-flex"
+    <header className="no-print sticky top-0 z-20 border-b border-slate-200/70 bg-white/75 pt-[env(safe-area-inset-top)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/65">
+      <div className="mx-auto flex h-16 max-w-[1480px] items-center justify-between gap-3 px-3 sm:px-5 lg:px-8">
+        {/* Gauche */}
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 lg:hidden"
+            aria-label="Ouvrir le menu"
           >
-            <IconCalculator className="h-3.5 w-3.5" />
-            Guichet
-          </Link>
-        )}
+            <IconMenu className="h-5 w-5" />
+          </button>
 
-        {currentUser && (
-          <div className="flex items-center gap-1.5">
-            <span
-              className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800"
-              title={currentUser.displayName}
-            >
+          <div className="min-w-0">
+            <p className="hidden truncate text-[11px] font-medium capitalize text-slate-400 sm:block">
+              {today}
+            </p>
+            <h1 className="truncate font-display text-[15px] font-bold leading-5 text-slate-900 sm:text-base">
+              {title}
+            </h1>
+          </div>
+        </div>
+
+        {/* Droite */}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/journal"
+            className="hidden h-10 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 shadow-sm transition hover:border-slate-300 md:inline-flex"
+            title="Total encaissé enregistré dans le journal"
+          >
+            <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
+              {isSuperviseur ? 'Global' : 'Encaissé'}
+            </span>
+            <span className="font-mono text-sm font-bold tabular-nums text-slate-900">
+              {formatMoney(totalEncaisse)}
+              <span className="ml-1 text-[10px] font-semibold text-slate-400">TND</span>
+            </span>
+          </Link>
+
+          <Link
+            href={isSuperviseur ? '/' : '/chauffeurs'}
+            className={`hidden h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold shadow-sm transition sm:inline-flex ${
+              nonPayeCount > 0
+                ? 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            }`}
+          >
+            {nonPayeCount > 0 ? (
+              <>
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
+                </span>
+                {nonPayeCount} impayé{nonPayeCount > 1 ? 's' : ''}
+              </>
+            ) : (
+              <>
+                <IconCheck className="h-3.5 w-3.5" />
+                Flotte à jour
+              </>
+            )}
+          </Link>
+
+          {!isSuperviseur && pathname !== '/caisse' && (
+            <Link href="/caisse" className="btn-primary hidden xl:inline-flex">
+              <IconCalculator className="h-4 w-4" />
+              Guichet
+            </Link>
+          )}
+
+          {currentUser && (
+            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-1 pl-2.5 shadow-sm">
               <span
-                className={`h-2 w-2 rounded-full ${
+                className={`h-2 w-2 shrink-0 rounded-full ${
                   isSyncing ? 'animate-pulse bg-amber-400' : 'bg-emerald-500'
                 }`}
               />
-              <span className="max-w-[110px] truncate sm:max-w-[150px]">
+              <span
+                className="max-w-[96px] truncate text-xs font-semibold text-slate-800 sm:max-w-[150px]"
+                title={currentUser.displayName}
+              >
                 {currentUser.displayName}
               </span>
-            </span>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="hidden h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800 sm:inline-flex"
-              title="Se déconnecter"
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                title="Se déconnecter"
+              >
+                <IconLogout className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          {nonPayeCount > 0 && (
+            <Link
+              href={isSuperviseur ? '/' : '/chauffeurs'}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-600 sm:hidden"
+              aria-label={`${nonPayeCount} impayés`}
             >
-              <IconLogout className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
+              <IconAlert className="h-4 w-4" />
+            </Link>
+          )}
+        </div>
       </div>
     </header>
   );

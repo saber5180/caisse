@@ -97,12 +97,12 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           className={`group nav-link-dark ${active ? 'nav-link-dark-active' : ''}`}
         >
           {active && (
-            <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-indigo-400 shadow-[0_0_10px_#818cf8]" />
+            <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-gradient-to-b from-indigo-300 to-sky-400 shadow-[0_0_12px_#818cf8]" />
           )}
           <span
-            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all ${
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all ${
               active
-                ? 'bg-indigo-500/25 text-indigo-300 ring-1 ring-indigo-400/30'
+                ? 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-[0_4px_12px_-2px_rgba(99,102,241,0.6)]'
                 : `bg-white/[0.03] ${ICON_COLORS[item.icon]}`
             }`}
           >
@@ -120,7 +120,7 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   };
 
   return (
-    <nav className="flex-1 overflow-y-auto px-3 pb-4">
+    <nav className="scrollbar-none flex-1 overflow-y-auto px-3 pb-4">
       {SECTIONS.map((section) => {
         const itemsInSection = visibleNavItems.filter((item) => item.group === section.id);
         if (itemsInSection.length === 0) return null;

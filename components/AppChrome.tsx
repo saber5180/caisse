@@ -2,14 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import Sidebar from './Sidebar';
+import Sidebar, { BrandMark } from './Sidebar';
 import Topbar from './Topbar';
 import NavLinks from './NavLinks';
 import {
   IconAlert,
   IconCheck,
   IconClose,
-  IconCoins,
   IconLogout,
 } from './Icons';
 import { useCaisseStore } from '@/lib/store';
@@ -148,57 +147,40 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
     <>
       <Sidebar />
 
-      {/* Mobile Obsidian Drawer */}
+      {/* Tiroir mobile */}
       {menuOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <button
             type="button"
             aria-label="Fermer le menu"
-            className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm"
+            className="absolute inset-0 animate-fade-in-up bg-slate-950/60 backdrop-blur-sm"
             onClick={() => setMenuOpen(false)}
           />
-          <aside className="absolute inset-y-0 left-0 flex w-[min(20.5rem,88vw)] flex-col border-r border-white/10 bg-obsidian-mesh text-white shadow-2xl">
-            <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md">
-                  <IconCoins className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-extrabold text-white">CaissePro</p>
-                  <p className="text-[11px] text-slate-400">Trésorerie & Flotte</p>
-                </div>
-              </div>
+          <aside className="absolute inset-y-0 left-0 flex w-[min(19rem,86vw)] animate-slide-in-left flex-col border-r border-white/10 bg-obsidian-mesh pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] text-white shadow-2xl">
+            <div className="flex h-16 items-center justify-between px-4">
+              <BrandMark />
               <button
                 type="button"
                 onClick={() => setMenuOpen(false)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
                 aria-label="Fermer"
               >
                 <IconClose className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Mobile Account Summary */}
             {currentUser && (
-              <div className="border-b border-white/10 bg-white/[0.03] p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-white">
-                      {currentUser.displayName}
-                    </p>
-                    <p className="font-mono text-[10px] text-slate-400">
-                      @{currentUser.username}
-                    </p>
-                  </div>
-                </div>
+              <div className="mx-3 rounded-2xl border border-white/[0.07] bg-white/[0.04] p-3">
+                <p className="truncate text-sm font-semibold text-white">{currentUser.displayName}</p>
+                <p className="font-mono text-[11px] text-slate-400">@{currentUser.username}</p>
               </div>
             )}
 
             <NavLinks onNavigate={() => setMenuOpen(false)} />
 
-            <div className="mt-auto space-y-3 border-t border-white/10 bg-slate-950/60 p-4">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold">Total Chauffeurs</span>
+            <div className="mt-auto space-y-3 p-3">
+              <div className="flex items-center justify-between rounded-xl bg-white/[0.04] px-3 py-2.5 text-xs text-slate-400">
+                <span className="font-semibold">Total chauffeurs</span>
                 <span className="rounded-full bg-white/10 px-2.5 py-0.5 font-mono font-bold tabular-nums text-white">
                   {totalDrivers}
                 </span>
@@ -206,25 +188,24 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/15 py-2.5 text-xs font-bold text-rose-300 hover:bg-rose-500/25"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/15 text-sm font-semibold text-rose-300 hover:bg-rose-500/25"
               >
-                <IconLogout className="h-3.5 w-3.5" />
-                Se Déconnecter
+                <IconLogout className="h-4 w-4" />
+                Se déconnecter
               </button>
             </div>
           </aside>
         </div>
       )}
-
       {/* Main Content Area */}
-      <div id="app-chrome-content" className="lg:pl-[17.5rem]">
+      <div id="app-chrome-content" className="min-h-screen lg:pl-[17rem]">
         <Topbar onOpenMenu={() => setMenuOpen(true)} />
 
         {/* Global Floating Toast Feedback */}
         {feedback && (
-          <div className="no-print mx-auto max-w-[1440px] px-3 pt-3 sm:px-5 sm:pt-4 lg:px-8">
+          <div className="no-print mx-auto max-w-[1480px] px-3 pt-3 sm:px-5 sm:pt-4 lg:px-8">
             <div
-              className={`animate-fade-in-up flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm shadow-pro transition-all ${
+              className={`animate-fade-in-up flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm shadow-pro-lg backdrop-blur-xl transition-all ${
                 feedback.type === 'success'
                   ? 'border-emerald-200/90 bg-emerald-50/95 text-emerald-900'
                   : feedback.type === 'error'
@@ -259,7 +240,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <main className="mx-auto w-full max-w-[1440px] px-3 py-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-6 lg:px-8 lg:py-7">
+        <main className="mx-auto w-full max-w-[1480px] px-3 py-5 pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-6 lg:px-8 lg:py-8">
           <div className="animate-fade-in-up">{children}</div>
         </main>
       </div>

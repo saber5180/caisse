@@ -9,19 +9,13 @@ interface PageHeaderProps {
   actions?: ReactNode;
 }
 
-const accents: Record<string, string> = {
-  indigo:
-    'bg-gradient-to-br from-indigo-500 to-indigo-700 text-white shadow-[0_6px_16px_-3px_rgba(79,70,229,0.4)] ring-indigo-400/30',
-  rose:
-    'bg-gradient-to-br from-rose-500 to-rose-700 text-white shadow-[0_6px_16px_-3px_rgba(225,29,72,0.4)] ring-rose-400/30',
-  sky:
-    'bg-gradient-to-br from-sky-500 to-sky-700 text-white shadow-[0_6px_16px_-3px_rgba(2,132,199,0.4)] ring-sky-400/30',
-  amber:
-    'bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-[0_6px_16px_-3px_rgba(217,119,6,0.4)] ring-amber-400/30',
-  emerald:
-    'bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-[0_6px_16px_-3px_rgba(5,150,105,0.4)] ring-emerald-400/30',
-  slate:
-    'bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-[0_6px_16px_-3px_rgba(15,23,42,0.35)] ring-slate-600/30',
+const accents: Record<string, { chip: string; line: string }> = {
+  indigo: { chip: 'from-indigo-500 to-violet-600 shadow-[0_8px_20px_-6px_rgba(79,70,229,0.6)]', line: 'from-indigo-500' },
+  rose: { chip: 'from-rose-500 to-pink-600 shadow-[0_8px_20px_-6px_rgba(225,29,72,0.55)]', line: 'from-rose-500' },
+  sky: { chip: 'from-sky-500 to-cyan-600 shadow-[0_8px_20px_-6px_rgba(2,132,199,0.55)]', line: 'from-sky-500' },
+  amber: { chip: 'from-amber-400 to-orange-500 shadow-[0_8px_20px_-6px_rgba(217,119,6,0.55)]', line: 'from-amber-400' },
+  emerald: { chip: 'from-emerald-500 to-teal-600 shadow-[0_8px_20px_-6px_rgba(5,150,105,0.55)]', line: 'from-emerald-500' },
+  slate: { chip: 'from-slate-700 to-slate-900 shadow-[0_8px_20px_-6px_rgba(15,23,42,0.45)]', line: 'from-slate-600' },
 };
 
 export default function PageHeader({
@@ -32,32 +26,28 @@ export default function PageHeader({
   badge,
   actions,
 }: PageHeaderProps) {
+  const a = accents[accent] || accents.indigo;
   return (
-    <div className="no-print mb-6 rounded-2xl border border-slate-200/85 bg-white/90 p-4 shadow-pro backdrop-blur-md sm:p-5">
+    <div className="no-print relative mb-6 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-5">
+      <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${a.line} via-transparent to-transparent`} />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-start gap-3.5 sm:items-center">
+        <div className="flex min-w-0 items-start gap-3.5 sm:items-center">
           {icon && (
             <div
-              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ring-1 ring-inset ${accents[accent]}`}
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-white ring-1 ring-inset ring-white/20 ${a.chip}`}
             >
               {icon}
             </div>
           )}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-extrabold leading-tight tracking-tight text-slate-900 sm:text-[21px]">
+              <h1 className="font-display text-xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-2xl">
                 {title}
               </h1>
-              {badge && (
-                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-indigo-700 ring-1 ring-inset ring-indigo-200">
-                  {badge}
-                </span>
-              )}
+              {badge && <span className="badge-indigo uppercase">{badge}</span>}
             </div>
             {subtitle && (
-              <p className="mt-0.5 text-xs font-medium text-slate-500 sm:text-[13px]">
-                {subtitle}
-              </p>
+              <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-slate-500">{subtitle}</p>
             )}
           </div>
         </div>
