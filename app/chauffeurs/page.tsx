@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useCaisseStore } from '@/lib/store';
 import { Driver, DriverStatus } from '@/types/caisse';
-import { formatDate, isStandbyCircuit, programmeStatusLabel } from '@/lib/utils';
+import { calculateRetardFrom1230, formatDate, isJourPaye, isStandbyCircuit, programmeStatusLabel } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import {
@@ -26,12 +26,13 @@ function tourRows(driver: Driver) {
   const circuit = (driver.programmeJour || driver.circuitActuel || '').trim();
   const rows: { key: string; date: string; circuit: string; status: string; current: boolean }[] = [];
   if (!isStandbyCircuit(circuit)) {
-    const paid = Boolean(driver.jourPaye) || driver.statut === 'PAYE';
+    const refDate = driver.programmeDate || driver.dateDerniere;
+    const stillOpen = !calculateRetardFrom1230(refDate).isOverdue;
     rows.push({
       key: 'today',
-      date: formatDate(driver.programmeDate || driver.dateDerniere),
+      date: formatDate(refDate),
       circuit,
-      status: paid ? 'Payée' : 'Non payée',
+      status: isJourPaye(driver) ? 'Payée' : stillOpen ? 'En cours' : 'Non payée',
       current: true,
     });
   }
@@ -45,6 +46,23 @@ function tourRows(driver: Driver) {
     });
   }
   return rows;
+}
+
+function driverDayPending(driver: Driver) {
+  const circuit = (driver.programmeJour || driver.circuitActuel || '').trim();
+  if (isStandbyCircuit(circuit) || isJourPaye(driver)) return false;
+  if ((driver.programmeHistorique || []).some((entry) => !entry.paid)) return false;
+  return !calculateRetardFrom1230(driver.programmeDate || driver.dateDerniere).isOverdue;
+}
+
+function dueCaisseCount(driver: Driver) {
+  const past = (driver.programmeHistorique || []).filter((entry) => !entry.paid).length;
+  const circuit = (driver.programmeJour || driver.circuitActuel || '').trim();
+  const todayLate =
+    !isStandbyCircuit(circuit) &&
+    !isJourPaye(driver) &&
+    calculateRetardFrom1230(driver.programmeDate || driver.dateDerniere).isOverdue;
+  return past + (todayLate ? 1 : 0);
 }
 
 const SUGGESTED_CIRCUITS = [
@@ -66,21 +84,28 @@ function StatusBadgeSelect({
   value,
   onChange,
   compact = false,
+  pending = false,
 }: {
   value: DriverStatus;
   onChange: (val: DriverStatus) => void;
   compact?: boolean;
+  pending?: boolean;
 }) {
-  const isNonPaye = value === 'NON PAYE';
+  const isNonPaye = value === 'NON PAYE' && !pending;
   const isPaye = value === 'PAYE';
+  const isPending = pending && value === 'NON PAYE';
 
-  const colorStyles = isNonPaye
+  const colorStyles = isPending
+    ? 'border-sky-300/90 bg-sky-50 text-sky-800 hover:bg-sky-100/80 focus:ring-sky-500/25'
+    : isNonPaye
     ? 'border-rose-300/90 bg-rose-50 text-rose-700 hover:bg-rose-100/80 focus:ring-rose-500/25'
     : isPaye
     ? 'border-emerald-300/90 bg-emerald-50 text-emerald-700 hover:bg-emerald-100/80 focus:ring-emerald-500/25'
     : 'border-amber-300/90 bg-amber-50 text-amber-800 hover:bg-amber-100/80 focus:ring-amber-500/25';
 
-  const dotColor = isNonPaye
+  const dotColor = isPending
+    ? 'bg-sky-500'
+    : isNonPaye
     ? 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.6)]'
     : isPaye
     ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]'
@@ -97,7 +122,7 @@ function StatusBadgeSelect({
         }`}
       >
         <option value="NON PAYE" className="bg-white font-semibold text-slate-900">
-          {compact ? 'Non payé' : 'NON PAYÉ'}
+          {pending ? 'En cours' : compact ? 'Non payé' : 'NON PAYÉ'}
         </option>
         <option value="PAYE" className="bg-white font-semibold text-slate-900">
           {compact ? 'Payé' : 'PAYÉ'}
@@ -143,8 +168,10 @@ function TourList({ driver }: { driver: Driver }) {
               <td className="px-3 py-2">
                 <span
                   className={
-                    row.status.startsWith('Payée')
+                    row.status === 'Payée'
                       ? 'font-bold text-emerald-700'
+                      : row.status === 'En cours'
+                      ? 'font-bold text-sky-700'
                       : 'font-bold text-rose-700'
                   }
                 >
@@ -616,7 +643,8 @@ export default function ChauffeursPage() {
             {/* Mobile Card View (md:hidden) */}
             <div className="divide-y divide-slate-100 md:hidden">
               {filtered.map((d) => {
-                const isNonPaye = d.statut === 'NON PAYE';
+                const pending = driverDayPending(d);
+                const isNonPaye = d.statut === 'NON PAYE' && !pending;
                 const circuit = d.programmeJour || d.circuitActuel || 'STAND-BY';
 
                 return (
@@ -649,6 +677,8 @@ export default function ChauffeursPage() {
                       </div>
 
                       <StatusBadgeSelect
+                        compact
+                        pending={pending}
                         value={d.statut}
                         onChange={(val) => updateDriverStatus(d.id, val)}
                       />
@@ -730,7 +760,9 @@ export default function ChauffeursPage() {
                 </thead>
                 <tbody>
                   {filtered.map((d) => {
-                    const isNonPaye = d.statut === 'NON PAYE';
+                    const pending = driverDayPending(d);
+                    const dueCount = dueCaisseCount(d);
+                    const isNonPaye = d.statut === 'NON PAYE' && !pending;
                     const circuit = d.programmeJour || d.circuitActuel || 'STAND-BY';
 
                     const tours = tourRows(d);
@@ -771,14 +803,17 @@ export default function ChauffeursPage() {
                         <td className="!px-2 !py-2">
                           <StatusBadgeSelect
                             compact
+                            pending={pending}
                             value={d.statut}
                             onChange={(val) => updateDriverStatus(d.id, val)}
                           />
                         </td>
                         <td className="!px-2 !py-2 text-center">
-                          {d.caissesDues > 0 ? (
+                          {pending ? (
+                            <span className="text-[11px] font-bold text-sky-700">En cours</span>
+                          ) : dueCount > 0 ? (
                             <span className="badge-solid-rose font-extrabold">
-                              {d.caissesDues} Caisse
+                              {dueCount} Caisse
                             </span>
                           ) : (
                             <span className="badge-emerald">
