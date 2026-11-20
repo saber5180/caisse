@@ -100,6 +100,7 @@ interface CaisseStore {
   srfMoins: number;
   ver: number;
   recettePhysiqueTheorique: number;
+  cycleBordereaux: number;
 
   // History (Feuil2)
   transactions: CashTransaction[];
@@ -199,6 +200,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     srfMoins: 0,
     ver: 0,
     recettePhysiqueTheorique: 0,
+    cycleBordereaux: 0,
     transactions: [] as CashTransaction[],
     lastSyncTime: null,
   };
@@ -293,6 +295,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
               caissesSummary,
               billetterie,
               deskState,
+              cycleBordereaux,
             } = json.data;
             const normalizedDrivers: Driver[] = Array.isArray(drivers)
               ? drivers.map((d: Driver) => {
@@ -314,6 +317,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
                 : [],
               caissesSummary: Array.isArray(caissesSummary) ? caissesSummary : [],
               lastSyncTime: new Date().toLocaleTimeString('fr-FR'),
+              cycleBordereaux: Number(cycleBordereaux) || 0,
             };
 
             if (!hasInitialLoaded) {
@@ -424,6 +428,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     srfMoins: 0,
     ver: 0,
     recettePhysiqueTheorique: 0,
+    cycleBordereaux: 0,
 
     // History
     transactions: [],

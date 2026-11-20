@@ -14,6 +14,7 @@ import {
 } from '@/types/caisse';
 import {
   belongsToCaisse,
+  fetchHistoryFromPool,
   fetchTransactionsFromPool,
   isMainPoolUrl,
   loadCashierAccounts,
@@ -25,6 +26,27 @@ const CAISSE_CODES_MAP: Record<string, { code: 'CRNU' | 'CRSF' | 'CRTN'; name: s
   'acc-crsf': { code: 'CRSF', name: 'Caisse CRSF' },
   'acc-crtn': { code: 'CRTN', name: 'Caisse CRTN' },
 };
+
+function currentShiftStartMs(now = new Date()): number {
+  // La vacation court de 12:30 à 12:30. Minuit reste dans la même vacation.
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Africa/Tunis',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(now)
+      .map((part) => [part.type, part.value])
+  );
+  let start = new Date(`${parts.year}-${parts.month}-${parts.day}T12:30:00+01:00`).getTime();
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  if (minutes < 12 * 60 + 30) start -= 24 * 60 * 60 * 1000;
+  return start;
+}
 
 function mapTxnRow(r: any): TransactionRecord {
   const tPayer = parseFloat(r.t_payer) || 0;
@@ -301,6 +323,27 @@ export async function GET() {
       };
     }
 
+    // Bordereaux déjà clôturés depuis 12:30. Minuit ne les retire pas.
+    let cycleBordereaux = 0;
+    if (!isSupervisorOrAdmin) {
+      const startMs = currentShiftStartMs();
+      const historyPools = [targetPool];
+      if (account.custom_db_url && !isMainPoolUrl(account.custom_db_url)) {
+        historyPools.push(mainPool);
+      }
+      const seen = new Set<string>();
+      for (const pool of historyPools) {
+        const rows = await fetchHistoryFromPool(pool, session.id);
+        for (const row of rows) {
+          if (seen.has(row.id)) continue;
+          seen.add(row.id);
+          const when = new Date(row.date_cloture).getTime();
+          if (when >= startMs) cycleBordereaux += parseFloat(row.recette_theorique) || 0;
+        }
+      }
+      cycleBordereaux = Math.round(cycleBordereaux * 1000) / 1000;
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -310,6 +353,7 @@ export async function GET() {
         caissesSummary: isSupervisorOrAdmin ? caissesSummary : [],
         billetterie,
         deskState,
+        cycleBordereaux,
       },
     });
   } catch (error: any) {
@@ -379,10 +423,8 @@ export async function POST(req: NextRequest) {
       );
       const driverIds = realDrivers.map((d) => d.id).filter(Boolean);
       if (driverIds.length === 0) {
-        await mainPool.query(
-          'DELETE FROM caisse_drivers WHERE account_id = $1',
-          [GLOBAL_FLEET_ACCOUNT_ID]
-        );
+        // Une liste vide veut dire que l'écran n'a pas encore chargé la flotte.
+        // Seul le bouton « Vider » (clearAllHistory) a le droit de tout supprimer.
       } else {
         await mainPool.query(
           'DELETE FROM caisse_drivers WHERE account_id = $1 AND NOT (id = ANY($2::text[]))',

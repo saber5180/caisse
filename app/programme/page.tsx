@@ -3,12 +3,12 @@
 import { Fragment, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
+import { Driver } from '@/types/caisse';
 import { useCaisseStore } from '@/lib/store';
 import {
   calculateRetardFrom1230,
   formatDate,
-  getStatusBadge,
-  getUnpaidCaisses,
+  isJourPaye,
   programmeStatusLabel,
   ProgrammeImportError,
 } from '@/lib/utils';
@@ -16,14 +16,12 @@ import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import {
   IconAlert,
-  IconBolt,
   IconCalendar,
   IconCheck,
   IconClose,
   IconSearch,
   IconSync,
   IconTruck,
-  IconUpload,
 } from '@/components/Icons';
 
 const BASE_CIRCUITS = [
@@ -233,6 +231,29 @@ function isLiveDayProgramme(d: {
   return !isStandbyCircuit(prog);
 }
 
+function historyUnpaidCount(driver: Driver) {
+  return (driver.programmeHistorique || []).filter((entry) => !entry.paid).length;
+}
+
+function dayListStatut(driver: Driver, isStandby: boolean, overdue: boolean) {
+  if (isJourPaye(driver)) return 'PAYÉ';
+  if (isStandby) return historyUnpaidCount(driver) > 0 ? 'NON PAYÉ' : 'SANS CAISSE';
+  if (!overdue) return 'EN COURS';
+  return 'NON PAYÉ';
+}
+
+function DayStatutBadge({ label }: { label: string }) {
+  const cls =
+    label === 'PAYÉ'
+      ? 'badge-solid-emerald'
+      : label === 'EN COURS'
+      ? 'badge bg-sky-50 text-sky-800 ring-1 ring-sky-200'
+      : label === 'NON PAYÉ'
+      ? 'badge-solid-rose'
+      : 'badge-solid-amber';
+  return <span className={`${cls} shrink-0`}>{label}</span>;
+}
+
 export default function ProgrammePage() {
   const drivers = useCaisseStore((state) => state.drivers);
   const assignCircuit = useCaisseStore((state) => state.assignCircuit);
@@ -410,7 +431,7 @@ export default function ProgrammePage() {
   }, [historyRows]);
   const totalUnpaidHistoryCount = useMemo(
     () =>
-      drivers.reduce((sum, d) => sum + getUnpaidCaisses(d).length, 0),
+      drivers.reduce((sum, d) => sum + historyUnpaidCount(d), 0),
     [drivers]
   );
 
@@ -526,7 +547,7 @@ export default function ProgrammePage() {
         icon={<IconCalendar className="h-5 w-5" />}
         accent="sky"
         actions={
-          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <div className="flex items-center gap-4 text-sm">
             <input
               ref={fileInputRef}
               type="file"
@@ -540,68 +561,44 @@ export default function ProgrammePage() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="btn-primary flex-1 sm:flex-none min-h-11 px-4 text-xs sm:text-sm font-bold shadow-md"
+              className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
             >
-              <IconUpload className="h-4 w-4 shrink-0" />
-              <span>Importer Excel Programme</span>
+              Importer Excel
             </button>
             <button
               type="button"
               onClick={handleBascule}
-              className="btn-amber flex-1 sm:flex-none min-h-11 px-4 text-xs sm:text-sm font-bold shadow-md"
+              className="font-semibold text-amber-800 underline decoration-amber-300 underline-offset-4 hover:decoration-amber-800"
               title="Bascule manuelle vers la nouvelle journée"
             >
-              <IconBolt className="h-4 w-4 shrink-0" />
-              <span>Bascule</span>
+              Bascule
             </button>
           </div>
         }
       />
 
       {/* Bandeau d'Import Excel & Règle de Calcul du Retard après 12:30 Demain */}
-      <div className="card-dark bg-grid-pattern relative mb-5 overflow-hidden p-5 sm:p-6">
-        <div className="relative z-10 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-400/30 bg-indigo-500/20 px-3 py-0.5 text-[11px] font-bold text-indigo-200">
-                IMPORT AUTOMATIQUE EXCEL (.XLSX)
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/20 px-3 py-0.5 text-[11px] font-bold text-amber-300">
-                ÉCHÉANCE RETARD : DEMAIN 12:30
-              </span>
-            </div>
-            <h3 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
-              Colonnes reconnues : <span className="text-indigo-300">Nom &amp; Prénom du Chauffeur</span> ·{' '}
-              <span className="text-sky-300">PROGRAMME DE CHAUFFEUR</span> ·{' '}
-              <span className="text-emerald-300">Code TR</span>
-            </h3>
-            <p className="text-xs text-slate-300/90 max-w-3xl leading-relaxed">
-              Vérification automatique des doublons de Code TR et conflits de noms avant import. Création automatique des nouveaux chauffeurs et programmes, archivage des impayés en bas de page et calcul du retard après 12:30 demain.
+      <div className="mb-6 border-y border-slate-200 py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              Feuille du jour · échéance demain 12:30
+            </p>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">
+              Colonnes lues dans Excel : nom, programme, code TR. La journée ne passe en non payé qu&apos;après 12:30 le lendemain.
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="btn-primary !py-2.5 !px-4 text-xs sm:text-sm font-bold shadow-lg"
-            >
-              <IconUpload className="h-4 w-4" />
-              Choisir un fichier Excel (.xlsx)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setWipeError('');
-                setWipePassword('');
-                setWipeOpen(true);
-              }}
-              className="btn border border-rose-400/40 bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 !py-2.5 !px-3.5 text-xs font-bold backdrop-blur-sm"
-            >
-              <IconClose className="h-4 w-4" />
-              Vider Tous les Chauffeurs &amp; Historiques
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setWipeError('');
+              setWipePassword('');
+              setWipeOpen(true);
+            }}
+            className="self-start text-xs font-medium text-rose-700 underline decoration-rose-200 underline-offset-4 hover:decoration-rose-700 lg:self-end"
+          >
+            Vider chauffeurs et historiques
+          </button>
         </div>
 
         {importMsg && (
@@ -660,55 +657,26 @@ export default function ProgrammePage() {
       </div>
 
       {/* KPI Résumé du Programme du Jour */}
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <button
-          type="button"
-          onClick={() => setFilterCircuit('')}
-          className={`card p-4 text-left transition-all hover:shadow-md ${
-            filterCircuit === '' ? 'ring-2 ring-indigo-600 bg-indigo-50/30' : ''
-          }`}
-        >
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+      <div className="mb-8 grid grid-cols-2 gap-x-6 gap-y-4 border-b border-slate-200 pb-6 sm:grid-cols-4">
+        <button type="button" onClick={() => setFilterCircuit('')} className="text-left">
+          <p className="font-mono text-3xl font-medium tracking-tight text-slate-900">{dayDrivers.length}</p>
+          <p className={`mt-1 text-xs ${filterCircuit === '' ? 'font-semibold text-slate-900' : 'text-slate-500'}`}>
             Programme du jour
-          </span>
-          <p className="mt-1 font-mono text-2xl font-black text-slate-900">{dayDrivers.length}</p>
-          <p className="mt-0.5 text-[11px] text-slate-400">Lignes du tableau principal</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setFilterCircuit('__ACTIVE__')}
-          className={`card p-4 text-left transition-all hover:shadow-md ${
-            filterCircuit === '__ACTIVE__' ? 'ring-2 ring-sky-600 bg-sky-50/40' : ''
-          }`}
-        >
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-sky-700">
-            En Tournée Aujourd&apos;hui
-          </span>
-          <p className="mt-1 font-mono text-2xl font-black text-sky-700">
-            {activeProgrammeDrivers.length}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-400">Échéance demain 12:30</p>
         </button>
-
-        <div className="card p-4 text-left border-amber-200 bg-amber-50/40">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-700">
-            En Stand-By
-          </span>
-          <p className="mt-1 font-mono text-2xl font-black text-amber-700">
-            {standbyDrivers.length}
+        <button type="button" onClick={() => setFilterCircuit('__ACTIVE__')} className="text-left">
+          <p className="font-mono text-3xl font-medium tracking-tight text-sky-800">{activeProgrammeDrivers.length}</p>
+          <p className={`mt-1 text-xs ${filterCircuit === '__ACTIVE__' ? 'font-semibold text-sky-900' : 'text-slate-500'}`}>
+            En tournée
           </p>
-          <p className="mt-0.5 text-[11px] text-amber-800/80">Les stand-by non payés sont dans l&apos;historique</p>
+        </button>
+        <div>
+          <p className="font-mono text-3xl font-medium tracking-tight text-amber-800">{standbyDrivers.length}</p>
+          <p className="mt-1 text-xs text-slate-500">Stand-by</p>
         </div>
-
-        <div className="card p-4 text-left border-rose-200 bg-rose-50/40">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-700">
-            Caisses Non Payées (Total)
-          </span>
-          <p className="mt-1 font-mono text-2xl font-black text-rose-600">
-            {totalUnpaidHistoryCount}
-          </p>
-          <p className="mt-0.5 text-[11px] text-rose-700/80">Jour + Historique cumulé</p>
+        <div>
+          <p className="font-mono text-3xl font-medium tracking-tight text-rose-800">{totalUnpaidHistoryCount}</p>
+          <p className="mt-1 text-xs text-slate-500">Impayées, historique seul</p>
         </div>
       </div>
 
@@ -779,7 +747,8 @@ export default function ProgrammePage() {
                 const prog = (d.programmeJour || d.circuitActuel || 'STAND-BY').trim() || 'STAND-BY';
                 const isStandby = prog.toUpperCase() === 'STAND-BY';
                 const retardInfo = calculateRetardFrom1230(d.programmeDate || d.dateDerniere);
-                const unpaidList = getUnpaidCaisses(d, drivers);
+                const historyUnpaid = historyUnpaidCount(d);
+                const dayStatut = dayListStatut(d, isStandby, retardInfo.isOverdue);
 
                 return (
                   <div
@@ -796,7 +765,7 @@ export default function ProgrammePage() {
                             {d.nom}
                           </p>
                         </div>
-                        <span className={`${getStatusBadge(d.statut)} shrink-0`}>{d.statut}</span>
+                        <DayStatutBadge label={dayStatut} />
                       </div>
 
                       <div className="space-y-2 rounded-xl bg-slate-50/90 border border-slate-100 p-2.5">
@@ -828,7 +797,7 @@ export default function ProgrammePage() {
                           <div>
                             {isStandby ? (
                               <span className="text-xs font-medium text-slate-400">Stand-by aujourd&apos;hui</span>
-                            ) : d.statut === 'PAYE' ? (
+                            ) : isJourPaye(d) ? (
                               <span className="text-xs font-bold text-emerald-600">✓ Caisse réglée</span>
                             ) : retardInfo.isOverdue ? (
                               <span className="text-xs font-extrabold text-rose-600">
@@ -842,9 +811,9 @@ export default function ProgrammePage() {
                           </div>
 
                           <div>
-                            {unpaidList.length > 0 ? (
+                            {historyUnpaid > 0 ? (
                               <span className="badge-solid-rose font-bold text-[10px]">
-                                {unpaidList.length} non payée{unpaidList.length > 1 ? 's' : ''}
+                                {historyUnpaid} non payée{historyUnpaid > 1 ? 's' : ''}
                               </span>
                             ) : (
                               <span className="badge-emerald font-bold text-[10px]">0 impayé</span>
@@ -857,9 +826,9 @@ export default function ProgrammePage() {
                     <div className="flex items-center justify-end border-t border-slate-100 pt-2">
                       <Link
                         href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                        className="btn-primary !px-3 !py-1.5 !text-xs font-bold"
+                        className="text-xs font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
                       >
-                        Ouvrir au Guichet →
+                        Guichet
                       </Link>
                     </div>
                   </div>
@@ -886,7 +855,8 @@ export default function ProgrammePage() {
                     const prog = (d.programmeJour || d.circuitActuel || 'STAND-BY').trim() || 'STAND-BY';
                     const isStandby = prog.toUpperCase() === 'STAND-BY';
                     const retardInfo = calculateRetardFrom1230(d.programmeDate || d.dateDerniere);
-                    const unpaidList = getUnpaidCaisses(d, drivers);
+                    const historyUnpaid = historyUnpaidCount(d);
+                const dayStatut = dayListStatut(d, isStandby, retardInfo.isOverdue);
 
                     return (
                       <tr key={d.id} className="hover:bg-indigo-50/35 transition-colors">
@@ -925,7 +895,7 @@ export default function ProgrammePage() {
                             <span className="text-xs font-medium text-slate-400">
                               Stand-by aujourd&apos;hui
                             </span>
-                          ) : d.statut === 'PAYE' ? (
+                          ) : isJourPaye(d) ? (
                             <span className="text-xs font-bold text-emerald-600">
                               ✓ Caisse du jour réglée
                             </span>
@@ -940,23 +910,23 @@ export default function ProgrammePage() {
                           )}
                         </td>
                         <td className="!py-3 text-center">
-                          {unpaidList.length > 0 ? (
+                          {historyUnpaid > 0 ? (
                             <span className="badge-solid-rose font-bold text-[11px]">
-                              {unpaidList.length} non payée{unpaidList.length > 1 ? 's' : ''}
+                              {historyUnpaid} non payée{historyUnpaid > 1 ? 's' : ''}
                             </span>
                           ) : (
                             <span className="badge-emerald font-bold text-[11px]">0 impayé</span>
                           )}
                         </td>
                         <td className="!py-3">
-                          <span className={getStatusBadge(d.statut)}>{d.statut}</span>
+                          <DayStatutBadge label={dayStatut} />
                         </td>
                         <td className="!py-3 text-right">
                           <Link
                             href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                            className="btn-primary !px-2.5 !py-1 !text-xs font-bold"
+                            className="text-xs font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
                           >
-                            Guichet →
+                            Guichet
                           </Link>
                         </td>
                       </tr>
@@ -972,8 +942,8 @@ export default function ProgrammePage() {
       {/* =====================================================================
           SECTION 2 (BAS) : HISTORIQUE DES ANCIENS PROGRAMMES & CAISSES NON PAYÉES
       ===================================================================== */}
-      <div className="card mt-6 overflow-hidden border-rose-200/80">
-        <div className="card-header flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-rose-50/50 border-b border-rose-100">
+      <div className="mt-10 overflow-hidden">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="card-title text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
               <IconAlert className="h-5 w-5 text-rose-600 shrink-0" />
@@ -985,26 +955,26 @@ export default function ProgrammePage() {
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-            <div className="flex rounded-xl bg-white p-1 border border-slate-200">
+            <div className="flex items-center gap-4 text-xs">
               <button
                 type="button"
                 onClick={() => setHistoryFilter('UNPAID')}
-                className={`flex-1 sm:flex-none rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                className={
                   historyFilter === 'UNPAID'
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
+                    ? 'font-semibold text-rose-800 underline decoration-rose-300 underline-offset-4'
+                    : 'text-slate-500 hover:text-slate-800'
+                }
               >
-                Impayées uniquement
+                Impayées
               </button>
               <button
                 type="button"
                 onClick={() => setHistoryFilter('ALL')}
-                className={`flex-1 sm:flex-none rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                className={
                   historyFilter === 'ALL'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
+                    ? 'font-semibold text-slate-900 underline decoration-slate-400 underline-offset-4'
+                    : 'text-slate-500 hover:text-slate-800'
+                }
               >
                 Tout l&apos;historique
               </button>
@@ -1076,20 +1046,20 @@ export default function ProgrammePage() {
                       <div className="flex items-center gap-1.5">
                         <Link
                           href={`/caisse?tr=${encodeURIComponent(row.tr)}`}
-                          className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-indigo-500"
+                          className="text-[11px] font-semibold text-slate-800 underline decoration-slate-300 underline-offset-4"
                         >
                           Encaisser
                         </Link>
                         <button
                           type="button"
                           onClick={() => markProgramEntryPaid(row.driverId, row.entryId)}
-                          className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-500"
+                          className="text-[11px] font-semibold text-emerald-800 underline decoration-emerald-300 underline-offset-4"
                         >
                           ✓ Payé
                         </button>
                       </div>
                     )}
-                    <button type="button" title="Supprimer ce programme" onClick={() => { if (confirm(`Supprimer ce programme ?`)) deleteProgramEntry(row.driverId, row.entryId); }} className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100">🗑 Supprimer</button>
+                    <button type="button" title="Supprimer ce programme" onClick={() => { if (confirm(`Supprimer ce programme ?`)) deleteProgramEntry(row.driverId, row.entryId); }} className="text-[11px] font-medium text-rose-700 underline decoration-rose-200 underline-offset-4">Supprimer</button>
                   </div>
                 </div>
 ))}</div></div>))}
@@ -1153,20 +1123,20 @@ export default function ProgrammePage() {
                             <>
                               <Link
                                 href={`/caisse?tr=${encodeURIComponent(row.tr)}`}
-                                className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-indigo-500"
+                                className="text-[11px] font-semibold text-slate-800 underline decoration-slate-300 underline-offset-4"
                               >
                                 Encaisser
                               </Link>
                               <button
                                 type="button"
                                 onClick={() => markProgramEntryPaid(row.driverId, row.entryId)}
-                                className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-500"
+                                className="text-[11px] font-semibold text-emerald-800 underline decoration-emerald-300 underline-offset-4"
                               >
                                 ✓ Payé
                               </button>
                             </>
                           )}
-                          <button type="button" title="Supprimer ce programme" onClick={() => { if (confirm(`Supprimer ce programme ?`)) deleteProgramEntry(row.driverId, row.entryId); }} className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100">🗑 Supprimer</button>
+                          <button type="button" title="Supprimer ce programme" onClick={() => { if (confirm(`Supprimer ce programme ?`)) deleteProgramEntry(row.driverId, row.entryId); }} className="text-[11px] font-medium text-rose-700 underline decoration-rose-200 underline-offset-4">Supprimer</button>
                         </div>
                       </td>
                     </tr>
