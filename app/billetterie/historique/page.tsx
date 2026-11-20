@@ -321,7 +321,7 @@ export default function BilletterieHistoriquePage() {
                   <span className="font-mono font-bold">{formatMoney(printEntry.totalCoupures)} TND</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>SRF Monnaie (&le; 5T) :</span>
+                  <span>SRF Monnaie (&lt; 5T) :</span>
                   <span className="font-mono">{formatMoney(printEntry.srfPieces)} TND</span>
                 </div>
                 {printEntry.srfMoins > 0 && (

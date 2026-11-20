@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useCaisseStore, computeDeskTotals } from '@/lib/store';
-import { formatMoney, generateId, cleanScannerTr, getUnpaidCaisses, formatDate } from '@/lib/utils';
+import { formatMoney, generateId, cleanScannerTr, getGuichetCaisses, isStandbyCircuit, formatDate } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import PrintReceiptModal, { ReceiptData } from '@/components/PrintReceiptModal';
 import {
@@ -39,7 +39,6 @@ function CaisseContent() {
   const setDeskTrInput = useCaisseStore((state) => state.setDeskTrInput);
   const selectDriverByTr = useCaisseStore((state) => state.selectDriverByTr);
   const selectDriverById = useCaisseStore((state) => state.selectDriverById);
-  const updateDriverStatus = useCaisseStore((state) => state.updateDriverStatus);
   const markProgramEntryPaid = useCaisseStore((state) => state.markProgramEntryPaid);
   const validateCurrentSale = useCaisseStore((state) => state.validateCurrentSale);
   const resetDesk = useCaisseStore((state) => state.resetDesk);
@@ -48,7 +47,7 @@ function CaisseContent() {
   const hasAppliedInitialTr = useRef(false);
   const [printModalData, setPrintModalData] = useState<ReceiptData | null>(null);
   const [showDriverDropdown, setShowDriverDropdown] = useState(false);
-  const [activeUnpaidEntryId, setActiveUnpaidEntryId] = useState<string>('CURRENT');
+  const [activeUnpaidEntryId, setActiveUnpaidEntryId] = useState<string>('');
 
   const selectedDriver = drivers.find((d) => d.id === selectedDriverId);
 
@@ -62,11 +61,6 @@ function CaisseContent() {
   const matchingDrivers = searchTerm
     ? validDrivers
         .filter((d) => {
-          // Ne jamais afficher au guichet un chauffeur dont toutes les caisses sont déjà payées
-          const hasUnpaid =
-            d.statut === 'NON PAYE' || getUnpaidCaisses(d, validDrivers).length > 0;
-          if (!hasUnpaid) return false;
-
           const dTrClean = cleanScannerTr(d.tr).toUpperCase();
           const dTrRaw = d.tr.toUpperCase();
           const dNom = d.nom.toUpperCase();
@@ -86,8 +80,27 @@ function CaisseContent() {
 
   // Liste strictement limitée aux caisses NON PAYÉES du Code TR sélectionné (aucune caisse PAYE affichée)
   const selectedTrUnpaidCaisses = selectedDriver
-    ? getUnpaidCaisses(selectedDriver, validDrivers)
+    ? getGuichetCaisses(selectedDriver, validDrivers)
     : [];
+  const heldTodayCircuit =
+    selectedDriver &&
+    selectedTrUnpaidCaisses.some((u) => !u.current) &&
+    !isStandbyCircuit(selectedDriver.programmeJour || selectedDriver.circuitActuel)
+      ? (selectedDriver.programmeJour || selectedDriver.circuitActuel || '').trim()
+      : '';
+
+  useEffect(() => {
+    if (!selectedDriver) return;
+    const list = getGuichetCaisses(selectedDriver, validDrivers);
+    if (list.length === 0) {
+      setActiveUnpaidEntryId('');
+      return;
+    }
+    const stillVisible = list.some(
+      (u) => u.id === activeUnpaidEntryId && u.driverId === selectedDriver.id
+    );
+    if (!stillVisible) setActiveUnpaidEntryId(list[0].id);
+  }, [selectedDriver, validDrivers, activeUnpaidEntryId]);
 
   // Nettoyer tout ancien chauffeur par défaut ("0") au montage, ou appliquer uniquement ?tr=... s'il est dans l'URL
   useEffect(() => {
@@ -102,10 +115,7 @@ function CaisseContent() {
     }
   }, [initialTr, validDrivers.length, deskTrInput, selectedDriverId, setDeskTrInput, selectDriverByTr, selectDriverById]);
 
-  const handlePickDriver = (driverId: string, forceNonPaye = false, entryId = 'CURRENT') => {
-    if (forceNonPaye) {
-      updateDriverStatus(driverId, 'NON PAYE');
-    }
+  const handlePickDriver = (driverId: string, _forceNonPaye = false, entryId = '') => {
     setActiveUnpaidEntryId(entryId);
     selectDriverById(driverId);
     setShowDriverDropdown(false);
@@ -294,15 +304,18 @@ function CaisseContent() {
   };
 
   const handleValidate = () => {
-    const entryToMark = activeUnpaidEntryId;
+    const entryToMark =
+      selectedTrUnpaidCaisses.find((u) => u.id === activeUnpaidEntryId)?.id ||
+      selectedTrUnpaidCaisses[0]?.id;
+    const activeCaisse = selectedTrUnpaidCaisses.find((u) => u.id === entryToMark);
     const txn = validateCurrentSale(entryToMark);
     if (txn) {
-      setActiveUnpaidEntryId('CURRENT');
+      setActiveUnpaidEntryId('');
       setPrintModalData({
         receiptNo: txn.id,
         nom: txn.nomChauffeur || 'Comptoir Direct',
         tr: txn.codeChauffeur || '',
-        circuit: selectedDriver?.programmeJour || 'STAND-BY',
+        circuit: activeCaisse?.circuit || selectedDriver?.programmeJour || 'STAND-BY',
         recette: txn.recette,
         tPayer: txn.tPayer,
         resAPayer: txn.resAPayer,
@@ -426,7 +439,7 @@ function CaisseContent() {
                     <span>Cliquez pour choisir</span>
                   </div>
                   {matchingDrivers.slice(0, 12).map((d) => {
-                    const unpaidCount = getUnpaidCaisses(d, validDrivers).length;
+                    const unpaidCount = getGuichetCaisses(d, validDrivers).length;
                     return (
                       <button
                         key={d.id}
@@ -448,7 +461,11 @@ function CaisseContent() {
                           <span className="truncate font-semibold text-slate-900">{d.nom}</span>
                         </div>
                         <span className="ml-2 shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">
-                          {unpaidCount > 1 ? `${unpaidCount} NON PAYÉES` : 'NON PAYÉ'}
+                          {unpaidCount === 0
+                            ? 'Aucune caisse'
+                            : unpaidCount > 1
+                            ? `${unpaidCount} à encaisser`
+                            : 'À encaisser'}
                         </span>
                       </button>
                     );
@@ -498,15 +515,6 @@ function CaisseContent() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {selectedDriver.statut !== 'NON PAYE' && (
-                  <button
-                    type="button"
-                    onClick={() => handlePickDriver(selectedDriver.id, true)}
-                    className="rounded-xl bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition"
-                  >
-                    Passer en NON PAYÉ & Travailler
-                  </button>
-                )}
                 <span className="badge-solid-emerald px-3 py-1 text-xs font-bold shadow-sm">
                   Chauffeur Pointé
                 </span>
@@ -547,18 +555,15 @@ function CaisseContent() {
             </span>
           </div>
 
+          {heldTodayCircuit && (
+            <p className="mt-2 text-xs font-semibold text-amber-800">
+              Le circuit du jour ({heldTodayCircuit}) n&apos;est pas dans ce paiement. Il reste en attente jusqu&apos;à la prochaine Bascule.
+            </p>
+          )}
+
           {selectedTrUnpaidCaisses.length === 0 ? (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-              <span>
-                Aucune caisse non payée à afficher pour <strong>{selectedDriver.nom} (TR {selectedDriver.tr})</strong> (les caisses payées sont masquées).
-              </span>
-              <button
-                type="button"
-                onClick={() => handlePickDriver(selectedDriver.id, true, 'CURRENT')}
-                className="rounded-xl bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition"
-              >
-                Ouvrir en NON PAYÉ pour travailler dessus
-              </button>
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+              Aucune caisse à encaisser
             </div>
           ) : (
             <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
@@ -591,7 +596,7 @@ function CaisseContent() {
                         </span>
                       </div>
                       <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
-                        NON PAYÉ
+                        {u.retardText}
                       </span>
                     </div>
 

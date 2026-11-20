@@ -12,8 +12,6 @@ import {
   DeskRow,
   CaisseLiveSummary,
 } from '@/types/caisse';
-import { cleanScannerTr, applyProgrammeRowsToFleet } from '@/lib/utils';
-import { DEFAULT_PROGRAMME_EXCEL_ROWS } from '@/data/programmeJourDefault';
 import {
   belongsToCaisse,
   fetchTransactionsFromPool,
@@ -133,23 +131,11 @@ export async function GET() {
 
     const allTransactions: TransactionRecord[] = Array.from(txnByKey.values()).map(mapTxnRow);
 
-    // Map of drivers who have validated a payment in ANY caisse today
-    const paidDriverTrMap = new Map<string, { date: string; caisseCode: string }>();
-    for (const t of allTransactions) {
-      if (t.status === 'PAYE' && t.codeChauffeur) {
-        const cleanTr = cleanScannerTr(t.codeChauffeur).toUpperCase();
-        if (!paidDriverTrMap.has(cleanTr)) {
-          paidDriverTrMap.set(cleanTr, {
-            date: t.date,
-            caisseCode: t.caisseCode || 'CAISSE',
-          });
-        }
-      }
-    }
-
     // 2. Fetch shared global drivers fleet (stored under GLOBAL_FLEET_ACCOUNT_ID)
+    // Le statut vient de la fiche chauffeur (Bascule + encaissement), pas d'une transaction isolée :
+    // payer une caisse J-1 ne doit pas marquer le circuit du jour comme payé.
     const driversRes = await mainPool.query(
-      `SELECT id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date
+      `SELECT id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, jour_paye
        FROM caisse_drivers
        WHERE account_id = $1
        ORDER BY tr ASC, nom ASC`,
@@ -157,33 +143,16 @@ export async function GET() {
     );
 
     const drivers: Driver[] = driversRes.rows.map((r) => {
-      const cleanTr = cleanScannerTr(r.tr).toUpperCase();
-      const paidInfo = paidDriverTrMap.get(cleanTr);
-      const progMs = r.programme_date ? new Date(r.programme_date).getTime() : 0;
-      const paidMs = paidInfo?.date ? new Date(paidInfo.date).getTime() : 0;
-      const hist = Array.isArray(r.programme_historique) ? r.programme_historique : [];
-      const unpaidHistCount = hist.filter((h: any) => !h.paid).length;
-      // Une transaction ne passe le chauffeur en PAYE que s'il n'a plus aucune caisse impayée dans son historique et que la transaction est postérieure au programme du jour
-      const isPaidForCurrentProg =
-        r.statut === 'PAYE' ||
-        (unpaidHistCount === 0 && Boolean(paidInfo) && progMs > 0 && paidMs >= progMs);
-      const effectiveStatut = isPaidForCurrentProg ? 'PAYE' : r.statut;
-      const effectiveCaissesDues =
-        effectiveStatut === 'PAYE' ? 0 : Math.max(unpaidHistCount, r.caisses_dues || 0);
-
       return {
         id: r.id,
         nom: r.nom,
         tr: r.tr,
-        statut: effectiveStatut,
-        dateDerniere:
-          isPaidForCurrentProg && paidInfo?.date && paidMs >= progMs
-            ? paidInfo.date
-            : r.date_derniere
-            ? new Date(r.date_derniere).toISOString()
-            : new Date().toISOString(),
+        statut: r.statut,
+        dateDerniere: r.date_derniere
+          ? new Date(r.date_derniere).toISOString()
+          : new Date().toISOString(),
         reclamation: r.reclamation || '',
-        caissesDues: effectiveCaissesDues,
+        caissesDues: r.caisses_dues || 0,
         programmeJour: r.programme_jour || '',
         circuitActuel: r.circuit_actuel || '',
         serie: r.serie || '',
@@ -191,6 +160,7 @@ export async function GET() {
         montantBordereau: parseFloat(r.montant_bordereau) || 0,
         programmeHistorique: Array.isArray(r.programme_historique) ? r.programme_historique : [],
         programmeDate: r.programme_date ? new Date(r.programme_date).toISOString() : undefined,
+        jourPaye: Boolean(r.jour_paye),
       };
     }).filter((d) => d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1' && d.tr !== '0');
 
@@ -422,8 +392,8 @@ export async function POST(req: NextRequest) {
 
       for (const d of realDrivers) {
         await mainPool.query(
-          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, CURRENT_TIMESTAMP)
+          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, jour_paye, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, CURRENT_TIMESTAMP)
            ON CONFLICT (account_id, id) DO UPDATE SET
              nom = EXCLUDED.nom,
              tr = EXCLUDED.tr,
@@ -438,6 +408,7 @@ export async function POST(req: NextRequest) {
              montant_bordereau = EXCLUDED.montant_bordereau,
              programme_historique = EXCLUDED.programme_historique,
              programme_date = EXCLUDED.programme_date,
+             jour_paye = EXCLUDED.jour_paye,
              updated_at = CURRENT_TIMESTAMP`,
           [
             d.id,
@@ -455,6 +426,7 @@ export async function POST(req: NextRequest) {
             d.montantBordereau || 0,
             JSON.stringify(Array.isArray(d.programmeHistorique) ? d.programmeHistorique : []),
             d.programmeDate || null,
+            Boolean(d.jourPaye),
           ]
         );
       }
@@ -510,21 +482,6 @@ export async function POST(req: NextRequest) {
           await pool.query(upsertSql, txnParams);
         }
 
-        // Liaison automatique inter-modules : uniquement si la transaction est plus récente que le programme du jour du chauffeur
-        if (t.status === 'PAYE' && t.codeChauffeur && !Array.isArray(drivers)) {
-          await mainPool.query(
-            `UPDATE caisse_drivers
-             SET statut = 'PAYE',
-                 caisses_dues = 0,
-                 date_derniere = $3,
-                 reclamation = 'CAISSE REGLEE - AUCUNE RECLAMATION',
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE account_id = $1
-               AND (tr = $2 OR TRIM(LEADING '0' FROM tr) = TRIM(LEADING '0' FROM $2))
-               AND (programme_date IS NULL OR programme_date <= $3)`,
-            [GLOBAL_FLEET_ACCOUNT_ID, String(t.codeChauffeur), txnDate]
-          );
-        }
       }
     }
 

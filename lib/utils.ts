@@ -196,6 +196,24 @@ export function recalculateReclamation(
   };
 }
 
+export function isStandbyCircuit(value?: string | null): boolean {
+  const prog = (value || '').trim().toUpperCase();
+  return !prog || prog === 'STAND-BY' || prog === 'STANDBY';
+}
+
+export function programmeStatusLabel(entry: { paid: boolean; j1?: boolean }): string {
+  if (entry.paid) return 'Payée';
+  return entry.j1 ? 'Non payée (J-1)' : 'Non payée';
+}
+
+/** Le circuit encore affiché (avant Bascule) est déjà réglé. */
+export function isJourPaye(driver: Driver): boolean {
+  if (driver.jourPaye) return true;
+  if (isStandbyCircuit(driver.programmeJour || driver.circuitActuel)) return false;
+  const unpaidPast = (driver.programmeHistorique || []).some((e) => !e.paid);
+  return driver.statut === 'PAYE' && !unpaidPast;
+}
+
 export function getStatusBadge(status: DriverStatus): string {
   switch (status) {
     case 'NON PAYE':
@@ -319,6 +337,84 @@ export function getUnpaidCaisses(driver: Driver, allDrivers?: Driver[]): UnpaidC
   return list;
 }
 
+/**
+ * Caisses proposées au guichet, dans l'ordre réel de la journée (12h30 → 08h00) :
+ * 1. Uniquement les impayés des jours déjà basculés (J-1 et plus anciens). Le circuit importé aujourd'hui attend.
+ * 2. S'il n'y a aucun impayé passé : la caisse du programme encore ouvert.
+ * 3. Sinon : liste vide (« Aucune caisse à encaisser »).
+ */
+export function getGuichetCaisses(driver: Driver, allDrivers?: Driver[]): UnpaidCaisse[] {
+  const related: Driver[] = [driver];
+  if (Array.isArray(allDrivers)) {
+    const targetTr = cleanScannerTr(driver.tr).toUpperCase();
+    if (targetTr) {
+      for (const other of allDrivers) {
+        if (other.id !== driver.id && cleanScannerTr(other.tr).toUpperCase() === targetTr) {
+          related.push(other);
+        }
+      }
+    }
+  }
+
+  const past: UnpaidCaisse[] = [];
+  for (const d of related) {
+    for (const entry of d.programmeHistorique || []) {
+      if (entry.paid) continue;
+      past.push({
+        id: entry.id,
+        driverId: d.id,
+        tr: d.tr,
+        circuit: entry.circuit || 'ANCIENNE CAISSE',
+        date: entry.date,
+        current: false,
+        isOverdue: true,
+        retardText: programmeStatusLabel(entry),
+      });
+    }
+  }
+  past.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
+  if (past.length > 0) return past;
+
+  const today: UnpaidCaisse[] = [];
+  for (const d of related) {
+    const prog = (d.programmeJour || d.circuitActuel || '').trim();
+    if (isStandbyCircuit(prog) || isJourPaye(d)) continue;
+    if (d.statut === 'PAYE' || d.statut === 'PAS DE CAISSE') continue;
+    const refDate = d.programmeDate || d.dateDerniere;
+    today.push({
+      id: 'CURRENT',
+      driverId: d.id,
+      tr: d.tr,
+      circuit: prog,
+      date: refDate,
+      current: true,
+      isOverdue: false,
+      retardText: 'Programme du jour',
+    });
+  }
+  if (today.length > 0) return today;
+
+  for (const d of related) {
+    if (d.statut !== 'NON PAYE') continue;
+    if (!isStandbyCircuit(d.programmeJour || d.circuitActuel)) continue;
+    const refDate = d.programmeDate || d.dateDerniere;
+    return [
+      {
+        id: 'STANDBY-UNPAID',
+        driverId: d.id,
+        tr: d.tr,
+        circuit: 'CAISSE IMPAYÉE',
+        date: refDate,
+        current: false,
+        isOverdue: true,
+        retardText: 'Non payée (J-1)',
+      },
+    ];
+  }
+
+  return [];
+}
+
 export interface ProgrammeImportError {
   rowNumber: number;
   type: 'DUPLICATE_TR_IN_FILE' | 'TR_NAME_MISMATCH_DB';
@@ -354,8 +450,8 @@ export function isSameDriverName(existingNom: string, newNom: string): boolean {
  * - Vérifie les erreurs avant d'appliquer chaque ligne :
  *   1) Deux chauffeurs avec le même Code TR dans le fichier Excel -> Bloqué + Erreur signalée
  *   2) Un Code TR existant en base (hier) avec un nom différent aujourd'hui (ex: TR 10 = SAMI hier vs AHMED aujourd'hui) -> Bloqué + Erreur signalée
- * - Crée tous les programmes du jour valides (avec échéance demain 12:30)
- * - Archive les anciens programmes non payés dans programmeHistorique
+ * - Crée ou met à jour le programme encore ouvert (sans changer de journée)
+ * - Ne déplace jamais une tournée vers l'historique : seule la Bascule le fait
  * - Ajoute automatiquement les nouveaux chauffeurs valides
  */
 export function applyProgrammeRowsToFleet(
@@ -370,7 +466,6 @@ export function applyProgrammeRowsToFleet(
   errors: ProgrammeImportError[];
 } {
   const nowIso = nowIsoInput || new Date().toISOString();
-  const todayKey = nowIso.slice(0, 10);
 
   const resultDrivers: Driver[] = existingDrivers.map((d) => ({
     ...d,
@@ -473,32 +568,8 @@ export function applyProgrammeRowsToFleet(
       usedIndices.add(matchIdx);
       updatedCount++;
       const current = resultDrivers[matchIdx];
-      // Conserver intégralement tout l'historique existant (notamment toutes les caisses non payées !)
+      // L'historique (J-1 et plus) ne bouge pas à l'import. Seule la Bascule l'alimente.
       const history: ProgramEntry[] = [...(current.programmeHistorique || [])];
-
-      const prevProg = (current.programmeJour || current.circuitActuel || '').trim();
-      const prevIsStandby =
-        !prevProg || prevProg.toUpperCase() === 'STAND-BY' || prevProg.toUpperCase() === 'STANDBY';
-
-      // Toujours basculer l'ancien programme actif dans l'historique avant d'affecter le nouveau programme du jour
-      if (!prevIsStandby) {
-        const isPaidPrev = current.statut === 'PAYE';
-        history.unshift({
-          id: `PRG-${Date.now()}-${rowIdx}-${Math.random().toString(36).substring(2, 6)}`,
-          date: current.programmeDate || current.dateDerniere || nowIso,
-          circuit: prevProg,
-          paid: isPaidPrev,
-        });
-      } else if (current.statut === 'NON PAYE' && history.filter((h) => !h.paid).length === 0) {
-        // Si le chauffeur était en NON PAYE sans programme actif ni entrée d'historique, conserver cette dette dans l'historique
-        history.unshift({
-          id: `PRG-${Date.now()}-${rowIdx}-${Math.random().toString(36).substring(2, 6)}`,
-          date: current.programmeDate || current.dateDerniere || nowIso,
-          circuit: 'ANCIENNE CAISSE',
-          paid: false,
-        });
-      }
-
       const unpaidHistoryCount = history.filter((h) => !h.paid).length;
       const nextStatut: DriverStatus = !isStandby
         ? 'NON PAYE'
@@ -524,6 +595,7 @@ export function applyProgrammeRowsToFleet(
         programmeHistorique: history.slice(0, 60),
         statut: nextStatut,
         caissesDues: nextCaissesDues,
+        jourPaye: false,
       };
       const { reclamation } = recalculateReclamation(updatedDriver);
       updatedDriver.reclamation = reclamation;
@@ -550,6 +622,7 @@ export function applyProgrammeRowsToFleet(
         circuitActuel: cleanCircuit,
         programmeHistorique: [],
         caissesDues: isStandby ? 0 : 1,
+        jourPaye: false,
         reclamation: '',
       };
       const { reclamation } = recalculateReclamation(newDriver);
@@ -558,47 +631,6 @@ export function applyProgrammeRowsToFleet(
       usedIndices.add(resultDrivers.length - 1);
     }
   });
-
-  // Pour les chauffeurs déjà en base qui ne figurent pas dans le nouveau fichier Excel importé :
-  // basculer leur ancien programme actif dans l'historique et conserver leurs caisses non payées
-  for (let i = 0; i < resultDrivers.length; i++) {
-    if (usedIndices.has(i)) continue;
-    const d = resultDrivers[i];
-    const history: ProgramEntry[] = [...(d.programmeHistorique || [])];
-    const prevProg = (d.programmeJour || d.circuitActuel || '').trim();
-    const prevIsStandby =
-      !prevProg || prevProg.toUpperCase() === 'STAND-BY' || prevProg.toUpperCase() === 'STANDBY';
-
-    if (!prevIsStandby) {
-      history.unshift({
-        id: `PRG-ARCH-${Date.now()}-${i}`,
-        date: d.programmeDate || d.dateDerniere || nowIso,
-        circuit: prevProg,
-        paid: d.statut === 'PAYE',
-      });
-    } else if (d.statut === 'NON PAYE' && history.filter((h) => !h.paid).length === 0) {
-      history.unshift({
-        id: `PRG-ARCH-${Date.now()}-${i}`,
-        date: d.programmeDate || d.dateDerniere || nowIso,
-        circuit: 'ANCIENNE CAISSE',
-        paid: false,
-      });
-    }
-
-    const unpaidHistoryCount = history.filter((h) => !h.paid).length;
-    const nextStatut: DriverStatus = unpaidHistoryCount > 0 ? 'NON PAYE' : 'PAS DE CAISSE';
-    const updated: Driver = {
-      ...d,
-      programmeJour: 'STAND-BY',
-      circuitActuel: 'STAND-BY',
-      programmeHistorique: history.slice(0, 60),
-      statut: nextStatut,
-      caissesDues: unpaidHistoryCount,
-    };
-    const { reclamation } = recalculateReclamation(updated);
-    updated.reclamation = reclamation;
-    resultDrivers[i] = updated;
-  }
 
   const uniqueProgrammes = new Set(
     resultDrivers.map((d) => (d.programmeJour || 'STAND-BY').trim().toUpperCase()).filter(Boolean)

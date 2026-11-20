@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useCaisseStore } from '@/lib/store';
 import { Driver, DriverStatus } from '@/types/caisse';
-import { formatDate } from '@/lib/utils';
+import { formatDate, isStandbyCircuit, programmeStatusLabel } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import {
@@ -22,6 +22,34 @@ import {
   IconTrash,
   IconTruck,
 } from '@/components/Icons';
+
+function DriverTourHistory({ driver }: { driver: Driver }) {
+  const lines: { key: string; text: string }[] = [];
+  const circuit = (driver.programmeJour || driver.circuitActuel || '').trim();
+  if (!isStandbyCircuit(circuit)) {
+    const paid = Boolean(driver.jourPaye) || driver.statut === 'PAYE';
+    lines.push({
+      key: 'today',
+      text: `${formatDate(driver.programmeDate || driver.dateDerniere)} · ${circuit} · ${paid ? 'Payée' : 'Non payée'} · journée en cours`,
+    });
+  }
+  for (const entry of driver.programmeHistorique || []) {
+    lines.push({
+      key: entry.id,
+      text: `${formatDate(entry.date)} · ${entry.circuit || '—'} · ${programmeStatusLabel(entry)}`,
+    });
+  }
+  if (lines.length === 0) return null;
+  return (
+    <ul className="mt-1.5 space-y-0.5">
+      {lines.slice(0, 8).map((line) => (
+        <li key={line.key} className="text-[10px] font-medium leading-snug text-slate-500">
+          {line.text}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 const SUGGESTED_CIRCUITS = [
   'SFAX 1',
@@ -569,6 +597,7 @@ export default function ChauffeursPage() {
                             </span>
                             <span className="badge-slate text-[10.5px]">{circuit}</span>
                           </div>
+                          <DriverTourHistory driver={d} />
                         </div>
                       </div>
 
@@ -675,6 +704,7 @@ export default function ChauffeursPage() {
                               <p className="text-[11px] text-slate-400">
                                 MAJ {formatDate(d.dateDerniere)}
                               </p>
+                              <DriverTourHistory driver={d} />
                             </div>
                           </div>
                         </td>

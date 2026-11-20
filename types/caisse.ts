@@ -19,6 +19,8 @@ export interface Driver {
   // Historique des programmes (importés par Excel) pour détecter les caisses non payées
   programmeHistorique?: ProgramEntry[];
   programmeDate?: string; // Date d'import du programme du jour actuel (ISO)
+  /** Le circuit encore ouvert (avant Bascule) a déjà été encaissé. */
+  jourPaye?: boolean;
 }
 
 export interface ProgramEntry {
@@ -26,6 +28,8 @@ export interface ProgramEntry {
   date: string; // ISO - date du programme
   circuit: string;
   paid: boolean;
+  /** Tournée envoyée en historique par la dernière Bascule, encore impayée. */
+  j1?: boolean;
 }
 
 export interface CashDeskRow {

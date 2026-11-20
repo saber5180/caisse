@@ -9,6 +9,7 @@ import {
   formatDate,
   getStatusBadge,
   getUnpaidCaisses,
+  programmeStatusLabel,
   ProgrammeImportError,
 } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
@@ -217,32 +218,19 @@ function parseProgrammeWorkbook(wb: XLSX.WorkBook): {
   return rows;
 }
 
-function isSameLocalDay(iso?: string | null, ref = new Date()): boolean {
-  if (!iso) return false;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return false;
-  return (
-    d.getFullYear() === ref.getFullYear() &&
-    d.getMonth() === ref.getMonth() &&
-    d.getDate() === ref.getDate()
-  );
-}
-
 function isStandbyCircuit(value?: string | null): boolean {
   const prog = (value || '').trim().toUpperCase();
   return !prog || prog === 'STAND-BY' || prog === 'STANDBY';
 }
 
-/** Circuit encore affiché dans le tableau du jour. Un programme daté avant aujourd'hui n'y reste pas. */
+/** Circuit encore ouvert. Il reste affiché après minuit, jusqu'au clic sur Bascule. */
 function isLiveDayProgramme(d: {
   programmeJour?: string;
   circuitActuel?: string;
   programmeDate?: string;
 }): boolean {
   const prog = (d.programmeJour || d.circuitActuel || '').trim();
-  if (isStandbyCircuit(prog)) return false;
-  if (!d.programmeDate) return true;
-  return isSameLocalDay(d.programmeDate);
+  return !isStandbyCircuit(prog);
 }
 
 export default function ProgrammePage() {
@@ -258,7 +246,11 @@ export default function ProgrammePage() {
   const [filterCircuit, setFilterCircuit] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [historySearch, setHistorySearch] = useState('');
-  const [historyFilter, setHistoryFilter] = useState<'UNPAID' | 'ALL'>('UNPAID');
+  const [historyFilter, setHistoryFilter] = useState<'UNPAID' | 'ALL'>('ALL');
+  const [wipeOpen, setWipeOpen] = useState(false);
+  const [wipePassword, setWipePassword] = useState('');
+  const [wipeError, setWipeError] = useState('');
+  const [wipeBusy, setWipeBusy] = useState(false);
   const [importMsg, setImportMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(
     null
   );
@@ -324,6 +316,7 @@ export default function ProgrammePage() {
       date: string;
       paid: boolean;
       isCurrent: boolean;
+      statusLabel: string;
       retardText: string;
       isOverdue: boolean;
     }[] = [];
@@ -332,6 +325,7 @@ export default function ProgrammePage() {
       // 1. Anciens programmes dans programmeHistorique
       (d.programmeHistorique || []).forEach((h) => {
         const retard = calculateRetardFrom1230(h.date);
+        const statusLabel = programmeStatusLabel(h);
         list.push({
           key: `${d.id}-${h.id}`,
           driverId: d.id,
@@ -342,7 +336,8 @@ export default function ProgrammePage() {
           date: h.date,
           paid: h.paid,
           isCurrent: false,
-          retardText: h.paid ? 'Réglé' : retard.isOverdue ? `Retard : ${retard.text}` : retard.text,
+          statusLabel,
+          retardText: h.paid ? statusLabel : statusLabel + (retard.isOverdue ? ` · ${retard.text}` : ''),
           isOverdue: !h.paid && retard.isOverdue,
         });
       });
@@ -366,7 +361,8 @@ export default function ProgrammePage() {
           date: refDate,
           paid: false,
           isCurrent: false,
-          retardText: retard.isOverdue ? `Retard : ${retard.text}` : retard.text,
+          statusLabel: 'Non payée (J-1)',
+          retardText: `Non payée (J-1)${retard.isOverdue ? ` · ${retard.text}` : ''}`,
           isOverdue: retard.isOverdue,
         });
       }
@@ -419,6 +415,15 @@ export default function ProgrammePage() {
   );
 
   const handleExcelFile = (file: File) => {
+    if (drivers.some((d) => isLiveDayProgramme(d))) {
+      setImportMsg({
+        type: 'error',
+        text: 'La journée en cours est encore ouverte. Cliquez sur Bascule, confirmez, puis importez le fichier Excel de 12h30. L’import ne change pas la journée tout seul.',
+      });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     if (!/\.(xlsx|xlsm|xls|csv)$/i.test(file.name)) {
       setImportMsg({
         type: 'error',
@@ -467,12 +472,48 @@ export default function ProgrammePage() {
   };
 
   const handleBascule = () => {
+    if (confirm('Voulez-vous vraiment basculer vers la nouvelle journée ?')) {
+      executeBascule1230();
+    }
+  };
+
+  const confirmWipe = async () => {
+    if (!wipePassword.trim()) {
+      setWipeError('Mot de passe administrateur requis.');
+      return;
+    }
     if (
-      confirm(
-        '⚠️ Confirmation de la BASCULE DE 12:30 :\n\n- Les chauffeurs NON PAYÉ et STAND-BY NON PAYÉ passent dans l\'historique des caisses non payées.\n- Le programme du jour est vidé pour la nouvelle journée.\n- Les chauffeurs déjà payés sont libérés en "PAS DE CAISSE".\n\nVoulez-vous continuer ?'
+      !confirm(
+        'Voulez-vous vraiment supprimer TOUS les chauffeurs, programmes et historiques de caisses ?'
       )
     ) {
-      executeBascule1230();
+      return;
+    }
+    setWipeBusy(true);
+    setWipeError('');
+    try {
+      const res = await fetch('/api/auth/verify-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: wipePassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setWipeError(data.error || 'Mot de passe administrateur refusé.');
+        return;
+      }
+      loadDefaultProgrammeExcel();
+      setImportErrors([]);
+      setWipeOpen(false);
+      setWipePassword('');
+      setImportMsg({
+        type: 'success',
+        text: 'Tous les chauffeurs, programmes et historiques de transactions ont été supprimés (base 100% vide).',
+      });
+    } catch (err) {
+      setWipeError((err as Error).message || 'Vérification impossible.');
+    } finally {
+      setWipeBusy(false);
     }
   };
 
@@ -508,10 +549,10 @@ export default function ProgrammePage() {
               type="button"
               onClick={handleBascule}
               className="btn-amber flex-1 sm:flex-none min-h-11 px-4 text-xs sm:text-sm font-bold shadow-md"
-              title="Exécuter la bascule de 12:30"
+              title="Bascule manuelle vers la nouvelle journée"
             >
               <IconBolt className="h-4 w-4 shrink-0" />
-              <span>Bascule 12:30</span>
+              <span>Bascule</span>
             </button>
           </div>
         }
@@ -551,14 +592,9 @@ export default function ProgrammePage() {
             <button
               type="button"
               onClick={() => {
-                if (confirm('Voulez-vous vraiment supprimer TOUS les chauffeurs, programmes et historiques de caisses ?')) {
-                  loadDefaultProgrammeExcel();
-                  setImportErrors([]);
-                  setImportMsg({
-                    type: 'success',
-                    text: 'Tous les chauffeurs, programmes et historiques de transactions ont été supprimés (base 100% vide).',
-                  });
-                }
+                setWipeError('');
+                setWipePassword('');
+                setWipeOpen(true);
               }}
               className="btn border border-rose-400/40 bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 !py-2.5 !px-3.5 text-xs font-bold backdrop-blur-sm"
             >
@@ -1005,9 +1041,9 @@ export default function ProgrammePage() {
                       <p className="truncate text-xs sm:text-sm font-extrabold text-slate-900">{row.nom}</p>
                     </div>
                     {row.paid ? (
-                      <span className="badge-solid-emerald text-[10px]">PAYÉ</span>
+                      <span className="badge-solid-emerald text-[10px]">{row.statusLabel}</span>
                     ) : (
-                      <span className="badge-solid-rose text-[10px]">NON PAYÉ</span>
+                      <span className="badge-solid-rose text-[10px]">{row.statusLabel}</span>
                     )}
                   </div>
 
@@ -1106,9 +1142,9 @@ export default function ProgrammePage() {
                       </td>
                       <td className="!py-3">
                         {row.paid ? (
-                          <span className="badge-solid-emerald text-xs">PAYÉ</span>
+                          <span className="badge-solid-emerald text-xs">{row.statusLabel}</span>
                         ) : (
-                          <span className="badge-solid-rose text-xs">NON PAYÉ</span>
+                          <span className="badge-solid-rose text-xs">{row.statusLabel}</span>
                         )}
                       </td>
                       <td className="!py-3 text-right">
@@ -1141,6 +1177,49 @@ export default function ProgrammePage() {
           </>
         )}
       </div>
+
+      {wipeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-base font-extrabold text-slate-900">Vider tous les chauffeurs et historiques</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Cette suppression est définitive. Saisissez le mot de passe administrateur, puis confirmez.
+            </p>
+            <label className="mt-4 block text-xs font-bold uppercase tracking-wide text-slate-500">
+              Mot de passe administrateur
+            </label>
+            <input
+              type="password"
+              value={wipePassword}
+              onChange={(e) => setWipePassword(e.target.value)}
+              className="input mt-1"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') confirmWipe();
+              }}
+            />
+            {wipeError && <p className="mt-2 text-sm font-semibold text-rose-600">{wipeError}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setWipeOpen(false)}
+                disabled={wipeBusy}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-500 disabled:opacity-50"
+                onClick={confirmWipe}
+                disabled={wipeBusy}
+              >
+                {wipeBusy ? 'Vérification…' : 'Supprimer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

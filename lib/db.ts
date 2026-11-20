@@ -78,6 +78,7 @@ export async function initDatabaseSchema(customUrl?: string) {
     ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS montant_bordereau NUMERIC(12, 3) DEFAULT 0;
     ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS programme_historique JSONB NOT NULL DEFAULT '[]'::jsonb;
     ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS programme_date TIMESTAMP WITH TIME ZONE;
+    ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS jour_paye BOOLEAN NOT NULL DEFAULT FALSE;
 
     CREATE TABLE IF NOT EXISTS caisse_transactions (
       id VARCHAR(64) NOT NULL,

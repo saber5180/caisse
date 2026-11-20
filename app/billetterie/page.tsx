@@ -34,9 +34,9 @@ export default function BilletteriePage() {
   // Totaux
   const totalCoupures = items.reduce((sum, item) => sum + item.nombre * item.valeur, 0);
 
-  // SRF monnaie (somme coupures <= 5 TND)
+  // SRF monnaie : pièces strictement en dessous de 5 TND (la pièce de 5 TND n'entre pas)
   const srfCoinsOnly = items
-    .filter((i) => !i.isBillet && i.valeur <= 5)
+    .filter((i) => !i.isBillet && i.valeur < 5)
     .reduce((sum, item) => sum + item.nombre * item.valeur, 0);
 
   const tt = totalCoupures + srfMoins + ver;
@@ -243,7 +243,7 @@ export default function BilletteriePage() {
                 <span className="font-mono font-bold">{formatMoney(totalCoupures)} TND</span>
               </div>
               <div className="flex justify-between">
-                <span>SRF (Fonds Monnaie &le; 5T) :</span>
+                <span>SRF (Fonds Monnaie &lt; 5T) :</span>
                 <span className="font-mono">{formatMoney(srfCoinsOnly)} TND</span>
               </div>
               {srfMoins > 0 && (
@@ -376,7 +376,7 @@ export default function BilletteriePage() {
 
                 {/* SRF Pièces Calculé */}
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-600 font-medium">SRF (Fonds Monnaie &le; 5T)</span>
+                  <span className="text-slate-600 font-medium">SRF (Fonds Monnaie &lt; 5T)</span>
                   <span className="num font-semibold text-slate-800">
                     {formatMoney(srfCoinsOnly)} TND
                   </span>

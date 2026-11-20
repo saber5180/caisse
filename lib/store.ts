@@ -14,6 +14,7 @@ import {
   generateId,
   cleanScannerTr,
   applyProgrammeRowsToFleet,
+  getGuichetCaisses,
   ProgrammeImportError,
 } from './utils';
 
@@ -572,6 +573,19 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         return null;
       }
 
+      const dues = getGuichetCaisses(driver, drivers);
+      if (dues.length === 0) {
+        set({
+          feedbackMessage: {
+            type: 'error',
+            text: 'Aucune caisse à encaisser',
+          },
+        });
+        return null;
+      }
+      const entryToPay = dues.find((u) => u.id === targetEntryId) || dues[0];
+      const entryIdToPay = entryToPay.id;
+
       const currentUser = get().currentUser;
       const mtEspece = Math.round((tPayer - deskVersement) * 1000) / 1000;
 
@@ -616,18 +630,13 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           const prog = (d.programmeJour || d.circuitActuel || '').trim();
           const isStandby =
             !prog || prog.toUpperCase() === 'STAND-BY' || prog.toUpperCase() === 'STANDBY';
-          let nextProgJour = d.programmeJour;
-          let nextCircuitActuel = d.circuitActuel;
-          let nextStatut: DriverStatus = 'PAYE';
-          let nextCaissesDues = 0;
+          let jourPaye = Boolean(d.jourPaye);
 
-          if (targetEntryId && targetEntryId !== 'CURRENT') {
-            nextHist = nextHist.map((e) => (e.id === targetEntryId ? { ...e, paid: true } : e));
-            const remainingUnpaidHist = nextHist.filter((e) => !e.paid).length;
-            const currentProgUnpaid = !isStandby && d.statut === 'NON PAYE';
-            nextCaissesDues = remainingUnpaidHist + (currentProgUnpaid ? 1 : 0);
-            nextStatut = nextCaissesDues > 0 ? 'NON PAYE' : 'PAYE';
-          } else if (isStandby && nextHist.some((e) => !e.paid)) {
+          if (entryIdToPay !== 'CURRENT' && entryIdToPay !== 'STANDBY-UNPAID') {
+            nextHist = nextHist.map((e) => (e.id === entryIdToPay ? { ...e, paid: true } : e));
+          } else if (!isStandby) {
+            jourPaye = true;
+          } else if (nextHist.some((e) => !e.paid)) {
             let markedOne = false;
             nextHist = nextHist.map((e) => {
               if (!markedOne && !e.paid) {
@@ -636,35 +645,18 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
               }
               return e;
             });
-            const remainingUnpaidHist = nextHist.filter((e) => !e.paid).length;
-            nextCaissesDues = remainingUnpaidHist;
-            nextStatut = remainingUnpaidHist > 0 ? 'NON PAYE' : 'PAYE';
-          } else {
-            const remainingUnpaidHist = nextHist.filter((e) => !e.paid).length;
-            if (remainingUnpaidHist > 0) {
-              if (!isStandby) {
-                nextHist.unshift({
-                  id: generateId('PRG'),
-                  date: d.programmeDate || nowIso,
-                  circuit: prog,
-                  paid: true,
-                });
-                nextProgJour = 'STAND-BY';
-                nextCircuitActuel = 'STAND-BY';
-              }
-              nextCaissesDues = remainingUnpaidHist;
-              nextStatut = 'NON PAYE';
-            } else {
-              nextCaissesDues = 0;
-              nextStatut = 'PAYE';
-            }
           }
+
+          const remainingUnpaidHist = nextHist.filter((e) => !e.paid).length;
+          const todayStillDue = !isStandby && !jourPaye;
+          const nextCaissesDues = remainingUnpaidHist + (todayStillDue ? 1 : 0);
+          const nextStatut: DriverStatus =
+            nextCaissesDues > 0 ? 'NON PAYE' : isStandby ? 'PAS DE CAISSE' : 'PAYE';
 
           const updated: Driver = {
             ...d,
-            programmeJour: nextProgJour,
-            circuitActuel: nextCircuitActuel,
             programmeHistorique: nextHist,
+            jourPaye,
             statut: nextStatut,
             dateDerniere: nowIso,
             caissesDues: nextCaissesDues,
@@ -977,32 +969,30 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
 
     executeBascule1230: () => {
       set((state) => {
-        const now = new Date();
-        const nowStr = now.toISOString();
-        const pastDate = new Date(now.getTime() - 25 * 3600 * 1000).toISOString();
+        const nowStr = new Date().toISOString();
 
         const updated = state.drivers.map((d) => {
-          const history = [...(d.programmeHistorique || [])];
+          const history = (d.programmeHistorique || []).map((h) => ({ ...h, j1: false }));
           const prog = (d.programmeJour || d.circuitActuel || '').trim();
           const hasCircuit =
             prog.length > 0 && prog.toUpperCase() !== 'STAND-BY' && prog.toUpperCase() !== 'STANDBY';
-
-          const isNonPaye = d.statut === 'NON PAYE';
+          const wasPaid = Boolean(d.jourPaye) || d.statut === 'PAYE';
 
           if (hasCircuit) {
-            const wasPaid = d.statut === 'PAYE';
             history.unshift({
               id: generateId('PRG-BASC'),
-              date: wasPaid ? d.programmeDate || d.dateDerniere || nowStr : pastDate,
+              date: d.programmeDate || d.dateDerniere || nowStr,
               circuit: prog,
               paid: wasPaid,
+              j1: !wasPaid,
             });
-          } else if (isNonPaye && history.filter((h) => !h.paid).length === 0) {
+          } else if (d.statut === 'NON PAYE' && history.filter((h) => !h.paid).length === 0) {
             history.unshift({
               id: generateId('PRG-BASC'),
-              date: pastDate,
+              date: d.dateDerniere || nowStr,
               circuit: 'STAND-BY',
               paid: false,
+              j1: true,
             });
           }
 
@@ -1014,10 +1004,11 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             programmeJour: 'STAND-BY',
             circuitActuel: 'STAND-BY',
             programmeDate: undefined,
+            jourPaye: false,
             programmeHistorique: history.slice(0, 60),
             statut: nextStatut,
             caissesDues: unpaidCount,
-            dateDerniere: unpaidCount > 0 ? pastDate : nowStr,
+            dateDerniere: nowStr,
           };
           const { reclamation } = recalculateReclamation(u);
           return { ...u, reclamation };
@@ -1027,7 +1018,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           drivers: updated,
           feedbackMessage: {
             type: 'success',
-            text: 'Bascule de 12:30 exécutée : les NON PAYÉ et STAND-BY NON PAYÉ sont dans l’historique. Le programme du jour est vide.',
+            text: 'Bascule effectuée. Les tournées non payées sont en historique « Non payée (J-1) », les tournées payées restent « Payée ». Vous pouvez importer le fichier Excel de 12h30.',
           },
         };
       });
@@ -1123,33 +1114,29 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       set((state) => ({
         drivers: state.drivers.map((d) => {
           if (d.id !== driverId) return d;
-          if (entryId === 'STANDBY-UNPAID' || entryId === 'PREV-UNPAID' || entryId === 'CURRENT') {
-            const unpaidHist = (d.programmeHistorique || []).filter((e) => !e.paid).length;
-            const u: Driver = {
-              ...d,
-              statut: unpaidHist > 0 ? 'NON PAYE' : 'PAYE',
-              caissesDues: unpaidHist,
-              dateDerniere: new Date().toISOString(),
-            };
-            const { reclamation } = recalculateReclamation(u);
-            return { ...u, reclamation };
+          const prog = (d.programmeJour || '').trim().toUpperCase();
+          const isCurrentStandby = !prog || prog === 'STAND-BY' || prog === 'STANDBY';
+          let jourPaye = Boolean(d.jourPaye);
+          let nextHist = [...(d.programmeHistorique || [])];
+
+          if (entryId === 'CURRENT') {
+            jourPaye = true;
+          } else if (entryId !== 'STANDBY-UNPAID' && entryId !== 'PREV-UNPAID') {
+            nextHist = nextHist.map((e) => (e.id === entryId ? { ...e, paid: true } : e));
           }
-          const nextHist = (d.programmeHistorique || []).map((e) =>
-            e.id === entryId ? { ...e, paid: true } : e
-          );
+
           const remainingUnpaidHist = nextHist.filter((e) => !e.paid).length;
-          const isCurrentStandby = !d.programmeJour || d.programmeJour.toUpperCase() === 'STAND-BY';
+          const todayStillDue = !isCurrentStandby && !jourPaye;
+          const caissesDues = remainingUnpaidHist + (todayStillDue ? 1 : 0);
           const nextStatut: DriverStatus =
-            remainingUnpaidHist > 0
-              ? 'NON PAYE'
-              : isCurrentStandby
-              ? 'PAS DE CAISSE'
-              : d.statut;
+            caissesDues > 0 ? 'NON PAYE' : isCurrentStandby ? 'PAS DE CAISSE' : 'PAYE';
           const u: Driver = {
             ...d,
             programmeHistorique: nextHist,
+            jourPaye,
             statut: nextStatut,
-            caissesDues: remainingUnpaidHist + (!isCurrentStandby && nextStatut === 'NON PAYE' ? 1 : 0),
+            caissesDues,
+            dateDerniere: new Date().toISOString(),
           };
           const { reclamation } = recalculateReclamation(u);
           return { ...u, reclamation };
