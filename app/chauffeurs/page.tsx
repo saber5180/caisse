@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useCaisseStore } from '@/lib/store';
 import { Driver, DriverStatus } from '@/types/caisse';
@@ -9,7 +9,6 @@ import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import {
   IconAlert,
-  IconArrowRight,
   IconCalculator,
   IconCheck,
   IconClose,
@@ -23,32 +22,29 @@ import {
   IconTruck,
 } from '@/components/Icons';
 
-function DriverTourHistory({ driver }: { driver: Driver }) {
-  const lines: { key: string; text: string }[] = [];
+function tourRows(driver: Driver) {
   const circuit = (driver.programmeJour || driver.circuitActuel || '').trim();
+  const rows: { key: string; date: string; circuit: string; status: string; current: boolean }[] = [];
   if (!isStandbyCircuit(circuit)) {
     const paid = Boolean(driver.jourPaye) || driver.statut === 'PAYE';
-    lines.push({
+    rows.push({
       key: 'today',
-      text: `${formatDate(driver.programmeDate || driver.dateDerniere)} · ${circuit} · ${paid ? 'Payée' : 'Non payée'} · journée en cours`,
+      date: formatDate(driver.programmeDate || driver.dateDerniere),
+      circuit,
+      status: paid ? 'Payée' : 'Non payée',
+      current: true,
     });
   }
   for (const entry of driver.programmeHistorique || []) {
-    lines.push({
+    rows.push({
       key: entry.id,
-      text: `${formatDate(entry.date)} · ${entry.circuit || '—'} · ${programmeStatusLabel(entry)}`,
+      date: formatDate(entry.date),
+      circuit: entry.circuit || '—',
+      status: programmeStatusLabel(entry),
+      current: false,
     });
   }
-  if (lines.length === 0) return null;
-  return (
-    <ul className="mt-1.5 space-y-0.5">
-      {lines.slice(0, 8).map((line) => (
-        <li key={line.key} className="text-[10px] font-medium leading-snug text-slate-500">
-          {line.text}
-        </li>
-      ))}
-    </ul>
-  );
+  return rows;
 }
 
 const SUGGESTED_CIRCUITS = [
@@ -69,9 +65,11 @@ const SUGGESTED_CIRCUITS = [
 function StatusBadgeSelect({
   value,
   onChange,
+  compact = false,
 }: {
   value: DriverStatus;
   onChange: (val: DriverStatus) => void;
+  compact?: boolean;
 }) {
   const isNonPaye = value === 'NON PAYE';
   const isPaye = value === 'PAYE';
@@ -89,21 +87,23 @@ function StatusBadgeSelect({
     : 'bg-amber-500';
 
   return (
-    <div className="relative inline-flex items-center">
+    <div className={`relative inline-flex items-center ${compact ? 'w-full max-w-full' : ''}`}>
       <span className={`pointer-events-none absolute left-2.5 h-2 w-2 rounded-full ${dotColor}`} />
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as DriverStatus)}
-        className={`cursor-pointer appearance-none rounded-xl border py-1.5 pl-6 pr-7 text-xs font-extrabold tracking-tight shadow-sm transition-all focus:outline-none focus:ring-2 ${colorStyles}`}
+        className={`cursor-pointer appearance-none rounded-xl border py-1.5 pl-6 pr-7 text-xs font-extrabold tracking-tight shadow-sm transition-all focus:outline-none focus:ring-2 ${colorStyles} ${
+          compact ? 'w-full min-w-0' : ''
+        }`}
       >
         <option value="NON PAYE" className="bg-white font-semibold text-slate-900">
-          NON PAYÉ
+          {compact ? 'Non payé' : 'NON PAYÉ'}
         </option>
         <option value="PAYE" className="bg-white font-semibold text-slate-900">
-          PAYÉ
+          {compact ? 'Payé' : 'PAYÉ'}
         </option>
         <option value="PAS DE CAISSE" className="bg-white font-semibold text-slate-900">
-          PAS DE CAISSE
+          {compact ? 'Sans caisse' : 'PAS DE CAISSE'}
         </option>
       </select>
       <span className="pointer-events-none absolute right-2 text-current opacity-65">
@@ -111,6 +111,53 @@ function StatusBadgeSelect({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" d="m19 9-7 7-7-7" />
         </svg>
       </span>
+    </div>
+  );
+}
+
+function TourList({ driver }: { driver: Driver }) {
+  const rows = tourRows(driver);
+  if (rows.length === 0) {
+    return (
+      <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+        Aucune tournée enregistrée.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <table className="w-full text-left text-xs">
+        <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th className="px-3 py-2">Date</th>
+            <th className="px-3 py-2">Circuit</th>
+            <th className="px-3 py-2">Statut</th>
+            <th className="px-3 py-2">Période</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} className="border-t border-slate-100">
+              <td className="px-3 py-2 font-medium text-slate-700">{row.date}</td>
+              <td className="px-3 py-2 font-bold text-slate-900">{row.circuit}</td>
+              <td className="px-3 py-2">
+                <span
+                  className={
+                    row.status.startsWith('Payée')
+                      ? 'font-bold text-emerald-700'
+                      : 'font-bold text-rose-700'
+                  }
+                >
+                  {row.status}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-slate-500">
+                {row.current ? 'Journée en cours' : 'Historique'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -133,6 +180,7 @@ export default function ChauffeursPage() {
   const resetAllDriversStatus = useCaisseStore((state) => state.resetAllDriversStatus);
   const loadDemoDriversTemplate = useCaisseStore((state) => state.loadDemoDriversTemplate);
 
+  const [openHistoryId, setOpenHistoryId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<DriverStatus | 'ALL'>('ALL');
   const [filterCircuit, setFilterCircuit] = useState<string>('ALL');
@@ -597,7 +645,6 @@ export default function ChauffeursPage() {
                             </span>
                             <span className="badge-slate text-[10.5px]">{circuit}</span>
                           </div>
-                          <DriverTourHistory driver={d} />
                         </div>
                       </div>
 
@@ -620,9 +667,18 @@ export default function ChauffeursPage() {
                       </div>
                     )}
 
+                    {openHistoryId === d.id && <TourList driver={d} />}
+
                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-400">
                       <span>MAJ : {formatDate(d.dateDerniere)}</span>
                       <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setOpenHistoryId(openHistoryId === d.id ? null : d.id)}
+                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700"
+                        >
+                          Tournées
+                        </button>
                         <button
                           type="button"
                           onClick={() => openEditModal(d)}
@@ -658,17 +714,18 @@ export default function ChauffeursPage() {
             </div>
 
             {/* Desktop Enterprise Table View (hidden md:block) */}
-            <div className="table-wrap hidden md:block">
-              <table className="data-table">
+            <div className="hidden overflow-x-hidden md:block">
+              <table className="data-table w-full table-fixed [&_td]:overflow-hidden [&_th]:overflow-hidden">
                 <thead>
                   <tr>
-                    <th className="w-20">Code TR</th>
-                    <th className="w-56">Chauffeur</th>
-                    <th className="w-36">Circuit</th>
-                    <th className="w-44">Statut Caisse</th>
-                    <th className="w-28 !text-center">Situation</th>
-                    <th>Suivi & Délai</th>
-                    <th className="w-44 !text-right">Actions</th>
+                    <th className="w-[8%] !whitespace-normal !px-2 !py-2">TR</th>
+                    <th className="w-[18%] !whitespace-normal !px-2 !py-2">Chauffeur</th>
+                    <th className="w-[12%] !whitespace-normal !px-2 !py-2">Circuit</th>
+                    <th className="w-[8%] !whitespace-normal !px-2 !py-2">Hist.</th>
+                    <th className="w-[14%] !whitespace-normal !px-2 !py-2">Statut</th>
+                    <th className="w-[9%] !whitespace-normal !px-2 !py-2 !text-center">Caisses</th>
+                    <th className="w-[18%] !whitespace-normal !px-2 !py-2">Suivi</th>
+                    <th className="w-[13%] !whitespace-normal !px-2 !py-2 !text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -676,53 +733,49 @@ export default function ChauffeursPage() {
                     const isNonPaye = d.statut === 'NON PAYE';
                     const circuit = d.programmeJour || d.circuitActuel || 'STAND-BY';
 
+                    const tours = tourRows(d);
                     return (
-                      <tr key={d.id} className={isNonPaye ? 'row-alert' : ''}>
-                        <td>
-                          <span className="inline-flex items-center rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-extrabold text-white shadow-sm">
-                            #{d.tr}
+                      <Fragment key={d.id}>
+                      <tr className={isNonPaye ? 'row-alert' : ''}>
+                        <td className="!px-2 !py-2">
+                          <span className="inline-flex items-center rounded-lg bg-slate-900 px-2 py-1 font-mono text-[11px] font-extrabold text-white shadow-sm">
+                            {d.tr}
                           </span>
                         </td>
-                        <td>
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-extrabold ${
-                                isNonPaye
-                                  ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-200'
-                                  : 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200/80'
-                              }`}
-                            >
-                              {getInitials(d.nom)}
-                            </div>
-                            <div className="min-w-0">
-                              <p
-                                className="max-w-[175px] truncate font-bold text-slate-900"
-                                title={d.nom}
-                              >
-                                {d.nom}
-                              </p>
-                              <p className="text-[11px] text-slate-400">
-                                MAJ {formatDate(d.dateDerniere)}
-                              </p>
-                              <DriverTourHistory driver={d} />
-                            </div>
-                          </div>
+                        <td className="!px-2 !py-2">
+                          <p className="truncate text-[13px] font-bold text-slate-900" title={d.nom}>
+                            {d.nom}
+                          </p>
+                          <p className="truncate text-[11px] text-slate-400">
+                            MAJ {formatDate(d.dateDerniere)}
+                          </p>
                         </td>
-                        <td>
-                          <span
-                            className="badge-slate max-w-[135px] truncate font-semibold"
-                            title={circuit}
-                          >
+                        <td className="!px-2 !py-2">
+                          <span className="block truncate text-xs font-semibold text-slate-800" title={circuit}>
                             {circuit}
                           </span>
                         </td>
-                        <td>
+                        <td className="!px-2 !py-2">
+                          <button
+                            type="button"
+                            onClick={() => setOpenHistoryId(openHistoryId === d.id ? null : d.id)}
+                            className={`w-full truncate rounded-lg px-2 py-1 text-[11px] font-bold ${
+                              openHistoryId === d.id
+                                ? 'bg-slate-900 text-white'
+                                : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            {tours.length}
+                          </button>
+                        </td>
+                        <td className="!px-2 !py-2">
                           <StatusBadgeSelect
+                            compact
                             value={d.statut}
                             onChange={(val) => updateDriverStatus(d.id, val)}
                           />
                         </td>
-                        <td className="text-center">
+                        <td className="!px-2 !py-2 text-center">
                           {d.caissesDues > 0 ? (
                             <span className="badge-solid-rose font-extrabold">
                               {d.caissesDues} Caisse
@@ -734,10 +787,10 @@ export default function ChauffeursPage() {
                             </span>
                           )}
                         </td>
-                        <td className="max-w-[250px]">
+                        <td className="!px-2 !py-2">
                           <div
                             title={d.reclamation}
-                            className={`flex items-center gap-2 truncate text-xs ${
+                            className={`flex min-w-0 items-center gap-2 text-xs ${
                               isNonPaye ? 'font-bold text-rose-700' : 'font-medium text-slate-600'
                             }`}
                           >
@@ -747,14 +800,14 @@ export default function ChauffeursPage() {
                             <span className="truncate">{d.reclamation}</span>
                           </div>
                         </td>
-                        <td className="text-right">
+                        <td className="!px-2 !py-2 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <Link
                               href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                              className="btn-primary !px-3 !py-1.5 !text-xs"
+                              className="btn-primary !px-2 !py-1.5 !text-[11px]"
+                              title="Encaisser"
                             >
-                              Encaisser
-                              <IconArrowRight className="h-3.5 w-3.5" />
+                              Caisse
                             </Link>
                             <button
                               type="button"
@@ -779,6 +832,14 @@ export default function ChauffeursPage() {
                           </div>
                         </td>
                       </tr>
+                      {openHistoryId === d.id && (
+                        <tr className="bg-slate-50/80">
+                          <td colSpan={8} className="!px-4 !py-3">
+                            <TourList driver={d} />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
