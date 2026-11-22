@@ -132,6 +132,7 @@ interface CaisseStore {
     patch: Partial<Pick<Driver, 'nom' | 'tr' | 'statut' | 'programmeJour' | 'circuitActuel' | 'caissesDues' | 'serie' | 'sousSerie' | 'montantBordereau'>>
   ) => void;
   assignCircuit: (id: string, circuit: string) => void;
+  placeDriverOnDayProgramme: (id: string, circuit: string) => void;
   deleteDriver: (id: string) => void;
   addDriver: (driver: Omit<Driver, 'id' | 'reclamation'>) => void;
   executeBascule1230: () => void;
@@ -932,6 +933,60 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         };
       });
       triggerImmediateSync();
+    },
+
+    placeDriverOnDayProgramme: (id, circuit) => {
+      const clean = circuit.trim().toUpperCase();
+      if (!clean || clean === 'STAND-BY' || clean === 'STANDBY') {
+        set({
+          feedbackMessage: {
+            type: 'error',
+            text: 'Choisissez un programme du jour, pas Stand-by.',
+          },
+        });
+        return;
+      }
+      const nowIso = new Date().toISOString();
+      let placedName = '';
+      set((state) => {
+        const liveDate = state.drivers.find((d) => {
+          const prog = (d.programmeJour || '').trim().toUpperCase();
+          return prog && prog !== 'STAND-BY' && prog !== 'STANDBY' && d.programmeDate;
+        })?.programmeDate;
+        const drivers = state.drivers.map((d) => {
+          if (d.id !== id) return d;
+          const prog = (d.programmeJour || '').trim().toUpperCase();
+          const standby = !prog || prog === 'STAND-BY' || prog === 'STANDBY';
+          if (!standby && d.statut !== 'PAS DE CAISSE') return d;
+          placedName = d.nom;
+          const unpaid = (d.programmeHistorique || []).filter((entry) => !entry.paid).length;
+          const updated: Driver = {
+            ...d,
+            programmeJour: clean,
+            circuitActuel: clean,
+            statut: 'NON PAYE',
+            jourPaye: false,
+            programmeDate: liveDate || nowIso,
+            dateDerniere: nowIso,
+            caissesDues: unpaid + 1,
+          };
+          const { reclamation } = recalculateReclamation(updated);
+          return { ...updated, reclamation };
+        });
+        return {
+          drivers,
+          feedbackMessage: placedName
+            ? {
+                type: 'success',
+                text: `${placedName} est ajouté au programme du jour : ${clean}.`,
+              }
+            : {
+                type: 'error',
+                text: 'Ce chauffeur a déjà un programme du jour.',
+              },
+        };
+      });
+      if (placedName) triggerImmediateSync();
     },
 
     deleteDriver: (id) => {

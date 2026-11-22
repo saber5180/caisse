@@ -14,6 +14,7 @@ import {
 } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
+import SheetModal from '@/components/SheetModal';
 import {
   IconAlert,
   IconCalendar,
@@ -256,7 +257,9 @@ function DayStatutBadge({ label }: { label: string }) {
 
 export default function ProgrammePage() {
   const drivers = useCaisseStore((state) => state.drivers);
+  const currentUser = useCaisseStore((state) => state.currentUser);
   const assignCircuit = useCaisseStore((state) => state.assignCircuit);
+  const placeDriverOnDayProgramme = useCaisseStore((state) => state.placeDriverOnDayProgramme);
   const executeBascule1230 = useCaisseStore((state) => state.executeBascule1230);
   const importProgramme = useCaisseStore((state) => state.importProgramme);
   const loadDefaultProgrammeExcel = useCaisseStore((state) => state.loadDefaultProgrammeExcel);
@@ -276,6 +279,15 @@ export default function ProgrammePage() {
     null
   );
   const [importErrors, setImportErrors] = useState<ProgrammeImportError[]>([]);
+  const [openList, setOpenList] = useState<'day' | 'standby'>('day');
+  const [addOpen, setAddOpen] = useState(false);
+  const [addDriverId, setAddDriverId] = useState('');
+  const [addCircuit, setAddCircuit] = useState('');
+  const [addQuery, setAddQuery] = useState('');
+
+  const caisseCode = (currentUser?.caisseCode || currentUser?.username || '').toUpperCase();
+  const canManageProgramme = caisseCode !== 'CRSF' && caisseCode !== 'CRTN';
+  const canRectify = currentUser?.role !== 'superviseur';
 
   // Construire dynamiquement la liste de TOUS les programmes (ceux de base + ceux créés via Excel)
   const allCircuits = useMemo(() => {
@@ -324,6 +336,31 @@ export default function ProgrammePage() {
       return matchCircuit && matchSearch;
     });
   }, [dayDrivers, filterCircuit, searchQuery]);
+
+  const standbyListed = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return standbyDrivers.filter((d) => {
+      if (!q) return true;
+      return d.nom.toLowerCase().includes(q) || d.tr.toLowerCase().includes(q);
+    });
+  }, [standbyDrivers, searchQuery]);
+
+  const shownDrivers = openList === 'standby' ? standbyListed : filteredDrivers;
+
+  const rectifiableDrivers = useMemo(() => {
+    const q = addQuery.trim().toLowerCase();
+    return drivers
+      .filter((d) => {
+        const prog = (d.programmeJour || '').trim().toUpperCase();
+        const standby = !prog || prog === 'STAND-BY' || prog === 'STANDBY';
+        return (standby || d.statut === 'PAS DE CAISSE') && !isLiveDayProgramme(d);
+      })
+      .filter((d) => {
+        if (!q) return true;
+        return d.nom.toLowerCase().includes(q) || d.tr.toLowerCase().includes(q);
+      })
+      .sort((a, b) => a.tr.localeCompare(b.tr, undefined, { numeric: true }));
+  }, [drivers, addQuery]);
 
   // Liste aplatie de l'historique des anciens programmes et des caisses non payées
   const historyRows = useMemo(() => {
@@ -548,31 +585,49 @@ export default function ProgrammePage() {
         accent="sky"
         actions={
           <div className="flex items-center gap-4 text-sm">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.xlsm,.csv"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleExcelFile(f);
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
-            >
-              Importer Excel
-            </button>
-            <button
-              type="button"
-              onClick={handleBascule}
-              className="font-semibold text-amber-800 underline decoration-amber-300 underline-offset-4 hover:decoration-amber-800"
-              title="Bascule manuelle vers la nouvelle journée"
-            >
-              Bascule
-            </button>
+            {canRectify && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAddDriverId('');
+                  setAddCircuit('');
+                  setAddQuery('');
+                  setAddOpen(true);
+                }}
+                className="font-semibold text-indigo-800 underline decoration-indigo-300 underline-offset-4 hover:decoration-indigo-800"
+              >
+                Ajouter un chauffeur
+              </button>
+            )}
+            {canManageProgramme && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.xlsm,.csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleExcelFile(f);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
+                >
+                  Importer Excel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBascule}
+                  className="font-semibold text-amber-800 underline decoration-amber-300 underline-offset-4 hover:decoration-amber-800"
+                  title="Bascule manuelle vers la nouvelle journée"
+                >
+                  Bascule
+                </button>
+              </>
+            )}
           </div>
         }
       />
@@ -588,17 +643,19 @@ export default function ProgrammePage() {
               Colonnes lues dans Excel : nom, programme, code TR. La journée ne passe en non payé qu&apos;après 12:30 le lendemain.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setWipeError('');
-              setWipePassword('');
-              setWipeOpen(true);
-            }}
-            className="self-start text-xs font-medium text-rose-700 underline decoration-rose-200 underline-offset-4 hover:decoration-rose-700 lg:self-end"
-          >
-            Vider chauffeurs et historiques
-          </button>
+          {canManageProgramme && (
+            <button
+              type="button"
+              onClick={() => {
+                setWipeError('');
+                setWipePassword('');
+                setWipeOpen(true);
+              }}
+              className="self-start text-xs font-medium text-rose-700 underline decoration-rose-200 underline-offset-4 hover:decoration-rose-700 lg:self-end"
+            >
+              Vider chauffeurs et historiques
+            </button>
+          )}
         </div>
 
         {importMsg && (
@@ -658,26 +715,66 @@ export default function ProgrammePage() {
 
       {/* KPI Résumé du Programme du Jour */}
       <div className="mb-8 grid grid-cols-2 gap-x-6 gap-y-4 border-b border-slate-200 pb-6 sm:grid-cols-4">
-        <button type="button" onClick={() => setFilterCircuit('')} className="text-left">
-          <p className="font-mono text-3xl font-medium tracking-tight text-slate-900">{dayDrivers.length}</p>
-          <p className={`mt-1 text-xs ${filterCircuit === '' ? 'font-semibold text-slate-900' : 'text-slate-500'}`}>
+        <button
+          type="button"
+          onClick={() => {
+            setOpenList('day');
+            setFilterCircuit('');
+          }}
+          className="text-left"
+        >
+          <p className="font-mono text-3xl font-medium tracking-tight text-slate-900 underline decoration-slate-300 underline-offset-4">
+            {dayDrivers.length}
+          </p>
+          <p className={`mt-1 text-xs underline underline-offset-4 ${filterCircuit === '' && openList === 'day' ? 'font-semibold text-slate-900 decoration-slate-900' : 'text-slate-500 decoration-slate-300'}`}>
             Programme du jour
           </p>
         </button>
-        <button type="button" onClick={() => setFilterCircuit('__ACTIVE__')} className="text-left">
-          <p className="font-mono text-3xl font-medium tracking-tight text-sky-800">{activeProgrammeDrivers.length}</p>
-          <p className={`mt-1 text-xs ${filterCircuit === '__ACTIVE__' ? 'font-semibold text-sky-900' : 'text-slate-500'}`}>
+        <button
+          type="button"
+          onClick={() => {
+            setOpenList('day');
+            setFilterCircuit('__ACTIVE__');
+          }}
+          className="text-left"
+        >
+          <p className="font-mono text-3xl font-medium tracking-tight text-sky-800 underline decoration-sky-200 underline-offset-4">
+            {activeProgrammeDrivers.length}
+          </p>
+          <p className={`mt-1 text-xs underline underline-offset-4 ${filterCircuit === '__ACTIVE__' && openList === 'day' ? 'font-semibold text-sky-900 decoration-sky-700' : 'text-slate-500 decoration-slate-300'}`}>
             En tournée
           </p>
         </button>
-        <div>
-          <p className="font-mono text-3xl font-medium tracking-tight text-amber-800">{standbyDrivers.length}</p>
-          <p className="mt-1 text-xs text-slate-500">Stand-by</p>
-        </div>
-        <div>
-          <p className="font-mono text-3xl font-medium tracking-tight text-rose-800">{totalUnpaidHistoryCount}</p>
-          <p className="mt-1 text-xs text-slate-500">Impayées, historique seul</p>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setOpenList('standby');
+            setFilterCircuit('');
+          }}
+          className="text-left"
+        >
+          <p className="font-mono text-3xl font-medium tracking-tight text-amber-800 underline decoration-amber-300 underline-offset-4">
+            {standbyDrivers.length}
+          </p>
+          <p className={`mt-1 text-xs underline underline-offset-4 ${openList === 'standby' ? 'font-semibold text-amber-900 decoration-amber-700' : 'text-slate-500 decoration-slate-300'}`}>
+            Stand-by
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setHistoryFilter('UNPAID');
+            document.getElementById('programme-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          className="text-left"
+        >
+          <p className="font-mono text-3xl font-medium tracking-tight text-rose-800 underline decoration-rose-200 underline-offset-4">
+            {totalUnpaidHistoryCount}
+          </p>
+          <p className="mt-1 text-xs text-slate-500 underline decoration-slate-300 underline-offset-4">
+            Impayées, historique seul
+          </p>
+        </button>
       </div>
 
       {/* =====================================================================
@@ -687,7 +784,9 @@ export default function ProgrammePage() {
         <div className="card-header flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white border-b border-slate-100">
           <div>
             <h2 className="card-title text-sm sm:text-base font-extrabold text-slate-900">
-              1. Liste du Programme du Jour ({filteredDrivers.length} sur {dayDrivers.length} chauffeurs)
+              {openList === 'standby'
+                ? `Stand-by (${shownDrivers.length})`
+                : `1. Liste du Programme du Jour (${shownDrivers.length} sur ${dayDrivers.length} chauffeurs)`}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               Uniquement le programme de la journée en cours. Après la bascule de 12:30, cette liste reste vide jusqu&apos;au prochain import.
@@ -733,7 +832,7 @@ export default function ProgrammePage() {
           </div>
         </div>
 
-        {filteredDrivers.length === 0 ? (
+        {shownDrivers.length === 0 ? (
           <EmptyState
             icon={<IconCalendar className="h-6 w-6 text-sky-500" />}
             title="Aucun programme pour cette journée"
@@ -743,7 +842,7 @@ export default function ProgrammePage() {
           <>
             {/* Responsive Cards View for Mobile & Tablet / Compact Screens (xl:hidden) */}
             <div className="grid grid-cols-1 gap-3 p-3.5 sm:p-4 md:grid-cols-2 max-h-[600px] overflow-y-auto xl:hidden bg-slate-50/40">
-              {filteredDrivers.map((d) => {
+              {shownDrivers.map((d) => {
                 const prog = (d.programmeJour || d.circuitActuel || 'STAND-BY').trim() || 'STAND-BY';
                 const isStandby = prog.toUpperCase() === 'STAND-BY';
                 const retardInfo = calculateRetardFrom1230(d.programmeDate || d.dateDerniere);
@@ -851,7 +950,7 @@ export default function ProgrammePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDrivers.map((d) => {
+                  {shownDrivers.map((d) => {
                     const prog = (d.programmeJour || d.circuitActuel || 'STAND-BY').trim() || 'STAND-BY';
                     const isStandby = prog.toUpperCase() === 'STAND-BY';
                     const retardInfo = calculateRetardFrom1230(d.programmeDate || d.dateDerniere);
@@ -942,7 +1041,7 @@ export default function ProgrammePage() {
       {/* =====================================================================
           SECTION 2 (BAS) : HISTORIQUE DES ANCIENS PROGRAMMES & CAISSES NON PAYÉES
       ===================================================================== */}
-      <div className="mt-10 overflow-hidden">
+      <div id="programme-history" className="mt-10 overflow-hidden scroll-mt-24">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="card-title text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
@@ -1147,6 +1246,89 @@ export default function ProgrammePage() {
           </>
         )}
       </div>
+
+      {addOpen && (
+        <SheetModal
+          title="Ajouter un chauffeur au programme du jour"
+          subtitle="Uniquement un chauffeur Stand-by ou sans caisse. Choisissez son circuit pour la rectification."
+          onClose={() => setAddOpen(false)}
+          accent="indigo"
+          footer={
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-ghost" onClick={() => setAddOpen(false)}>
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={!addDriverId || !addCircuit}
+                onClick={() => {
+                  placeDriverOnDayProgramme(addDriverId, addCircuit);
+                  setAddOpen(false);
+                  setOpenList('day');
+                  setFilterCircuit('');
+                }}
+              >
+                Ajouter au programme
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-3">
+            <div className="relative">
+              <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={addQuery}
+                onChange={(e) => setAddQuery(e.target.value)}
+                placeholder="Chercher un Stand-by ou sans caisse..."
+                className="input !pl-9"
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200">
+              {rectifiableDrivers.length === 0 ? (
+                <p className="p-4 text-sm text-slate-500">Aucun chauffeur Stand-by ou sans caisse.</p>
+              ) : (
+                rectifiableDrivers.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setAddDriverId(d.id)}
+                    className={`flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 ${
+                      addDriverId === d.id ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-slate-900">{d.nom}</span>
+                      <span className="text-[11px] text-slate-500">
+                        {d.statut === 'PAS DE CAISSE' ? 'Sans caisse' : 'Stand-by'}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-mono text-xs text-slate-500">TR {d.tr}</span>
+                  </button>
+                ))
+              )}
+            </div>
+            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+              Programme du jour
+              <select
+                value={addCircuit}
+                onChange={(e) => setAddCircuit(e.target.value)}
+                className="select mt-1"
+              >
+                <option value="">Choisir un circuit</option>
+                {allCircuits
+                  .filter((c) => c !== 'STAND-BY')
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          </div>
+        </SheetModal>
+      )}
 
       {wipeOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
