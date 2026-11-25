@@ -157,7 +157,7 @@ export async function GET() {
     // Le statut vient de la fiche chauffeur (Bascule + encaissement), pas d'une transaction isolée :
     // payer une caisse J-1 ne doit pas marquer le circuit du jour comme payé.
     const driversRes = await mainPool.query(
-      `SELECT id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, jour_paye
+      `SELECT id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, jour_paye, caisse_paye, paye_le
        FROM caisse_drivers
        WHERE account_id = $1
        ORDER BY tr ASC, nom ASC`,
@@ -183,6 +183,8 @@ export async function GET() {
         programmeHistorique: Array.isArray(r.programme_historique) ? r.programme_historique : [],
         programmeDate: r.programme_date ? new Date(r.programme_date).toISOString() : undefined,
         jourPaye: Boolean(r.jour_paye),
+        caissePaye: r.caisse_paye || '',
+        payeLe: r.paye_le ? new Date(r.paye_le).toISOString() : undefined,
       };
     }).filter((d) => d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1' && d.tr !== '0');
 
@@ -416,26 +418,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: 'Tous les chauffeurs et historiques ont été supprimés' });
     }
 
-    // 1. Save shared global drivers if provided
-    if (Array.isArray(drivers)) {
-      const realDrivers = drivers.filter(
-        (d) => d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1'
-      );
-      const driverIds = realDrivers.map((d) => d.id).filter(Boolean);
-      if (driverIds.length === 0) {
-        // Une liste vide veut dire que l'écran n'a pas encore chargé la flotte.
-        // Seul le bouton « Vider » (clearAllHistory) a le droit de tout supprimer.
-      } else {
+    // Une suppression de chauffeur n'est acceptée que si l'écran le demande
+    // explicitement. Une sauvegarde de caisse ou une clôture ne retire personne.
+    if (Array.isArray(body.removedDriverIds)) {
+      const removedIds = body.removedDriverIds
+        .map((id: unknown) => String(id || '').trim())
+        .filter(Boolean);
+      if (removedIds.length > 0) {
         await mainPool.query(
-          'DELETE FROM caisse_drivers WHERE account_id = $1 AND NOT (id = ANY($2::text[]))',
-          [GLOBAL_FLEET_ACCOUNT_ID, driverIds]
+          'DELETE FROM caisse_drivers WHERE account_id = $1 AND id = ANY($2::text[])',
+          [GLOBAL_FLEET_ACCOUNT_ID, removedIds]
         );
       }
+    }
+
+    // 1. Save shared global drivers if provided. Upsert only: never delete the rest.
+    if (Array.isArray(drivers) && drivers.length > 0) {
+      const realDrivers = drivers.filter(
+        (d) => d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1' && d.id
+      );
 
       for (const d of realDrivers) {
         await mainPool.query(
-          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, jour_paye, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, CURRENT_TIMESTAMP)
+          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, jour_paye, caisse_paye, paye_le, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18, CURRENT_TIMESTAMP)
            ON CONFLICT (account_id, id) DO UPDATE SET
              nom = EXCLUDED.nom,
              tr = EXCLUDED.tr,
@@ -451,6 +457,8 @@ export async function POST(req: NextRequest) {
              programme_historique = EXCLUDED.programme_historique,
              programme_date = EXCLUDED.programme_date,
              jour_paye = EXCLUDED.jour_paye,
+             caisse_paye = EXCLUDED.caisse_paye,
+             paye_le = EXCLUDED.paye_le,
              updated_at = CURRENT_TIMESTAMP`,
           [
             d.id,
@@ -469,6 +477,8 @@ export async function POST(req: NextRequest) {
             JSON.stringify(Array.isArray(d.programmeHistorique) ? d.programmeHistorique : []),
             d.programmeDate || null,
             Boolean(d.jourPaye),
+            (d.caissePaye || '').toUpperCase(),
+            d.payeLe || null,
           ]
         );
       }

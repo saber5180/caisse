@@ -15,6 +15,7 @@ import {
   cleanScannerTr,
   applyProgrammeRowsToFleet,
   getGuichetCaisses,
+  normalizeCaisseCode,
   ProgrammeImportError,
 } from './utils';
 
@@ -161,6 +162,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
   let hasPendingSync = false;
   let hasPendingDriverSync = false;
   let hasInitialLoaded = false;
+  let pendingRemovedDriverIds: string[] = [];
 
   const triggerDebouncedSync = (includeDrivers = false) => {
     if (get().currentUser?.role === 'superviseur') return;
@@ -176,11 +178,12 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     if (get().currentUser?.role === 'superviseur') return;
     hasPendingSync = true;
     if (includeDrivers) hasPendingDriverSync = true;
+    else hasPendingDriverSync = false;
     if (syncTimeout) {
       clearTimeout(syncTimeout);
       syncTimeout = null;
     }
-    void get().syncToBackend(hasPendingDriverSync);
+    void get().syncToBackend(includeDrivers);
   };
 
   const blankState = {
@@ -214,6 +217,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         hasPendingSync = false;
         hasPendingDriverSync = false;
         hasInitialLoaded = false;
+        pendingRemovedDriverIds = [];
         set({ currentUser: null, ...blankState });
       } else {
         set({ currentUser: user });
@@ -228,6 +232,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       hasPendingSync = false;
       hasPendingDriverSync = false;
       hasInitialLoaded = false;
+      pendingRemovedDriverIds = [];
       set(blankState);
     },
 
@@ -308,6 +313,8 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             const rawBilletterie = (billetterie?.items || DEFAULT_BILLETTERIE_ITEMS)
               .filter((item: CoinBreakdownItem) => Math.abs(item.valeur - 0.020) > 0.001);
 
+            const firstLoad = !hasInitialLoaded;
+            hasInitialLoaded = true;
             const baseUpdate: Partial<CaisseStore> = {
               drivers: normalizedDrivers,
               transactions: Array.isArray(transactions) ? transactions : [],
@@ -319,17 +326,16 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
               caissesSummary: Array.isArray(caissesSummary) ? caissesSummary : [],
               lastSyncTime: new Date().toLocaleTimeString('fr-FR'),
               cycleBordereaux: Number(cycleBordereaux) || 0,
+              billetterieItems: rawBilletterie,
+              srfMoins: billetterie?.srfMoins ?? 0,
+              ver: billetterie?.ver ?? 0,
+              recettePhysiqueTheorique: billetterie?.recetteTheorique ?? 0,
+              deskRows: deskState?.deskRows || DEFAULT_DESK_ROWS.map((row) => ({ ...row })),
+              deskRecette: deskState?.deskRecette ?? 0,
+              deskVersement: deskState?.deskVersement ?? 0,
             };
 
-            if (!hasInitialLoaded) {
-              hasInitialLoaded = true;
-              baseUpdate.billetterieItems = rawBilletterie;
-              baseUpdate.srfMoins = billetterie?.srfMoins ?? 0;
-              baseUpdate.ver = billetterie?.ver ?? 0;
-              baseUpdate.recettePhysiqueTheorique = billetterie?.recetteTheorique ?? 0;
-              baseUpdate.deskRows = deskState?.deskRows || DEFAULT_DESK_ROWS;
-              baseUpdate.deskRecette = deskState?.deskRecette ?? 0;
-              baseUpdate.deskVersement = deskState?.deskVersement ?? 0;
+            if (firstLoad) {
               // Ne jamais sélectionner de chauffeur par défaut ("0" ou autre) au chargement
               baseUpdate.deskTrInput = '';
               baseUpdate.selectedDriverId = null;
@@ -370,8 +376,13 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           },
         };
 
-        if (syncDrivers || hasPendingDriverSync) {
+        const removedSnapshot = pendingRemovedDriverIds.slice();
+        const fleetReady = hasInitialLoaded && get().drivers.length > 0;
+        if ((syncDrivers || hasPendingDriverSync) && fleetReady) {
           payload.drivers = get().drivers;
+        }
+        if (removedSnapshot.length > 0) {
+          payload.removedDriverIds = removedSnapshot;
         }
 
         const res = await fetch('/api/caisse/data', {
@@ -396,6 +407,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         if (res.ok) {
           hasPendingSync = false;
           hasPendingDriverSync = false;
+          pendingRemovedDriverIds = pendingRemovedDriverIds.filter((id) => !removedSnapshot.includes(id));
           set({ lastSyncTime: new Date().toLocaleTimeString('fr-FR') });
           // Refresh multi-caisse summary & global driver states
           void get().fetchAccountData();
@@ -637,20 +649,33 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           const isStandby =
             !prog || prog.toUpperCase() === 'STAND-BY' || prog.toUpperCase() === 'STANDBY';
           let jourPaye = Boolean(d.jourPaye);
+          let caissePaye = d.caissePaye || '';
+          let payeLe = d.payeLe;
+          const paidAt = normalizeCaisseCode(
+            currentUser?.caisseCode || currentUser?.username
+          );
 
           if (entryIdToPay !== 'CURRENT' && entryIdToPay !== 'STANDBY-UNPAID') {
-            nextHist = nextHist.map((e) => (e.id === entryIdToPay ? { ...e, paid: true } : e));
+            nextHist = nextHist.map((e) =>
+              e.id === entryIdToPay ? { ...e, paid: true, caisseCode: paidAt || e.caisseCode } : e
+            );
+            caissePaye = paidAt || caissePaye;
+            payeLe = nowIso;
           } else if (!isStandby) {
             jourPaye = true;
+            caissePaye = paidAt || caissePaye;
+            payeLe = nowIso;
           } else if (nextHist.some((e) => !e.paid)) {
             let markedOne = false;
             nextHist = nextHist.map((e) => {
               if (!markedOne && !e.paid) {
                 markedOne = true;
-                return { ...e, paid: true };
+                return { ...e, paid: true, caisseCode: paidAt || e.caisseCode };
               }
               return e;
             });
+            caissePaye = paidAt || caissePaye;
+            payeLe = nowIso;
           }
 
           const remainingUnpaidHist = nextHist.filter((e) => !e.paid).length;
@@ -663,6 +688,8 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             ...d,
             programmeHistorique: nextHist,
             jourPaye,
+            caissePaye,
+            payeLe,
             statut: nextStatut,
             dateDerniere: nowIso,
             caissesDues: nextCaissesDues,
@@ -966,6 +993,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             circuitActuel: clean,
             statut: 'NON PAYE',
             jourPaye: false,
+            caissePaye: '',
             programmeDate: liveDate || nowIso,
             dateDerniere: nowIso,
             caissesDues: unpaid + 1,
@@ -990,6 +1018,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     },
 
     deleteDriver: (id) => {
+      pendingRemovedDriverIds.push(id);
       set((state) => ({
         drivers: state.drivers.filter((d) => d.id !== id),
         feedbackMessage: {
@@ -1045,6 +1074,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
               circuit: prog,
               paid: wasPaid,
               j1: !wasPaid,
+              caisseCode: wasPaid ? d.caissePaye || '' : '',
             });
           } else if (d.statut === 'NON PAYE' && history.filter((h) => !h.paid).length === 0) {
             history.unshift({
@@ -1065,6 +1095,8 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             circuitActuel: 'STAND-BY',
             programmeDate: undefined,
             jourPaye: false,
+            caissePaye: '',
+            payeLe: undefined,
             programmeHistorique: history.slice(0, 60),
             statut: nextStatut,
             caissesDues: unpaidCount,
@@ -1177,12 +1209,24 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           const prog = (d.programmeJour || '').trim().toUpperCase();
           const isCurrentStandby = !prog || prog === 'STAND-BY' || prog === 'STANDBY';
           let jourPaye = Boolean(d.jourPaye);
+          let caissePaye = d.caissePaye || '';
+          let payeLe = d.payeLe;
           let nextHist = [...(d.programmeHistorique || [])];
+          const paidAt = normalizeCaisseCode(
+            state.currentUser?.caisseCode || state.currentUser?.username
+          );
+          const nowIso = new Date().toISOString();
 
           if (entryId === 'CURRENT') {
             jourPaye = true;
+            caissePaye = paidAt || caissePaye;
+            payeLe = nowIso;
           } else if (entryId !== 'STANDBY-UNPAID' && entryId !== 'PREV-UNPAID') {
-            nextHist = nextHist.map((e) => (e.id === entryId ? { ...e, paid: true } : e));
+            nextHist = nextHist.map((e) =>
+              e.id === entryId ? { ...e, paid: true, caisseCode: paidAt || e.caisseCode } : e
+            );
+            caissePaye = paidAt || caissePaye;
+            payeLe = nowIso;
           }
 
           const remainingUnpaidHist = nextHist.filter((e) => !e.paid).length;
@@ -1194,9 +1238,11 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             ...d,
             programmeHistorique: nextHist,
             jourPaye,
+            caissePaye,
+            payeLe,
             statut: nextStatut,
             caissesDues,
-            dateDerniere: new Date().toISOString(),
+            dateDerniere: nowIso,
           };
           const { reclamation } = recalculateReclamation(u);
           return { ...u, reclamation };
@@ -1269,19 +1315,22 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     },
 
     cloturerJournee: () => {
-      // Archiver et réinitialiser les transactions actives du journal et l'état de caisse
+      // Archiver et réinitialiser la caisse du jour. Les chauffeurs et le programme ne sont pas envoyés.
+      hasPendingDriverSync = false;
       set({
         transactions: [],
-        deskRows: DEFAULT_DESK_ROWS,
+        deskRows: DEFAULT_DESK_ROWS.map((row) => ({ ...row })),
         deskRecette: 0,
         deskVersement: 0,
         deskVersementBanque: 0,
         deskVersementCoffre: 0,
         deskTrInput: '',
         selectedDriverId: null,
+        billetterieItems: DEFAULT_BILLETTERIE_ITEMS.map((item) => ({ ...item, nombre: 0 })),
         recettePhysiqueTheorique: 0,
         ver: 0,
         srfMoins: 0,
+        cycleBordereaux: 0,
         feedbackMessage: {
           type: 'success',
           text: 'Journée clôturée avec succès : les transactions ont été archivées et le journal actif est réinitialisé.',

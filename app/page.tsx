@@ -9,6 +9,9 @@ import {
   cleanScannerTr,
   calculateRetardFrom1230,
   isJourPaye,
+  normalizeCaisseCode,
+  shiftStartMs,
+  withPaidCaisse,
 } from '@/lib/utils';
 import StatCard from '@/components/StatCard';
 import SheetModal from '@/components/SheetModal';
@@ -101,7 +104,6 @@ export default function DashboardPage() {
   const srfMoins = useCaisseStore((state) => state.srfMoins);
   const ver = useCaisseStore((state) => state.ver);
   const recettePhysiqueTheorique = useCaisseStore((state) => state.recettePhysiqueTheorique);
-  const cycleBordereaux = useCaisseStore((state) => state.cycleBordereaux);
   const updateDriver = useCaisseStore((state) => state.updateDriver);
   const executeBascule1230 = useCaisseStore((state) => state.executeBascule1230);
   const controlCaisse = useCaisseStore((state) => state.controlCaisse);
@@ -209,37 +211,7 @@ export default function DashboardPage() {
     !isJourPaye(d) &&
     d.statut !== 'PAYE' &&
     calculateRetardFrom1230(d.programmeDate || d.dateDerniere).isOverdue;
-  const nonPayesActifs = drivers.filter(
-    (d) => !isStandbyCircuit(d.programmeJour) && (hasHistoryDebt(d) || dayLate(d))
-  );
-  const standbyNonPayes = drivers.filter(
-    (d) => isStandbyCircuit(d.programmeJour) && hasHistoryDebt(d)
-  );
-  const enCours = drivers.filter((d) => !hasHistoryDebt(d) && dayStillOpen(d));
-  const payes = drivers.filter(
-    (d) => !hasHistoryDebt(d) && (d.statut === 'PAYE' || isJourPaye(d))
-  );
-  const pasDeCaisse = drivers.filter(
-    (d) =>
-      !hasHistoryDebt(d) &&
-      !dayStillOpen(d) &&
-      !dayLate(d) &&
-      d.statut !== 'PAYE' &&
-      !isJourPaye(d)
-  );
-  const allNonPayes = [...nonPayesActifs, ...standbyNonPayes];
-  const rowStatut = (d: Driver) => {
-    if (hasHistoryDebt(d)) return isStandbyCircuit(d.programmeJour) ? 'Stand-by' : 'Non payé';
-    if (isJourPaye(d) || d.statut === 'PAYE') return 'Payé';
-    if (isStandbyCircuit(d.programmeJour) || d.statut === 'PAS DE CAISSE') return 'Sans caisse';
-    if (dayStillOpen(d)) return 'En cours';
-    return 'Non payé';
-  };
-
   const totalDrivers = drivers.length;
-  const activeTours = allNonPayes.length + payes.length;
-  const settlementPct =
-    activeTours > 0 ? Math.round((payes.length / activeTours) * 100) : totalDrivers > 0 ? 100 : 0;
 
   // Calcul des totaux globaux des 3 caisses (UNIQUEMENT pour Superviseur / Admin)
   const globalMontantActuel = caissesSummary.reduce((sum, c) => sum + c.montantActuel, 0);
@@ -271,9 +243,8 @@ export default function DashboardPage() {
           : driverTxns.reduce((sum, t) => sum + t.recette, 0);
 
       const ecart = Math.round((mvtCaisse - mtBordereau) * 1000) / 1000;
-      const lastPaidCaisse = isSupervisorOrAdmin
-        ? driverTxns.find((t) => t.status === 'PAYE')?.caisseCode
-        : undefined;
+      const lastPaidCaisse =
+        d.caissePaye || driverTxns[0]?.caisseCode;
 
       return {
         ...d,
@@ -286,6 +257,48 @@ export default function DashboardPage() {
       };
     });
   }, [drivers, txnsSource, isSupervisorOrAdmin]);
+
+  const shiftStart = shiftStartMs();
+  const paidTodayByTr = new Map<string, string>();
+  for (const t of txnsSource) {
+    if (!t?.date || new Date(t.date).getTime() < shiftStart) continue;
+    const tr = cleanScannerTr(t.codeChauffeur).toUpperCase();
+    if (!tr || paidTodayByTr.has(tr)) continue;
+    paidTodayByTr.set(tr, normalizeCaisseCode(t.caisseCode));
+  }
+  const paidThisDay = (d: Driver) => {
+    const tr = cleanScannerTr(d.tr).toUpperCase();
+    if (paidTodayByTr.has(tr)) return true;
+    if (!d.payeLe) return false;
+    return new Date(d.payeLe).getTime() >= shiftStart;
+  };
+  const caisseOf = (d: Driver & { paidCaisseCode?: string }) => {
+    const fromReceipt = paidTodayByTr.get(cleanScannerTr(d.tr).toUpperCase());
+    if (fromReceipt) return fromReceipt;
+    if (!d.payeLe || new Date(d.payeLe).getTime() < shiftStart) return '';
+    return normalizeCaisseCode(d.caissePaye || d.paidCaisseCode);
+  };
+  const nonPayesActifs = drivers.filter(
+    (d) => !paidThisDay(d) && !isStandbyCircuit(d.programmeJour) && (hasHistoryDebt(d) || dayLate(d))
+  );
+  const standbyNonPayes = drivers.filter(
+    (d) => !paidThisDay(d) && isStandbyCircuit(d.programmeJour) && hasHistoryDebt(d)
+  );
+  const enCours = drivers.filter((d) => !paidThisDay(d) && !hasHistoryDebt(d) && dayStillOpen(d));
+  const pasDeCaisse = drivers.filter(
+    (d) => !paidThisDay(d) && !hasHistoryDebt(d) && !dayStillOpen(d) && !dayLate(d)
+  );
+  const allNonPayes = [...nonPayesActifs, ...standbyNonPayes];
+  const payes = enrichedDrivers.filter((d) => paidThisDay(d));
+  const rowStatut = (d: Driver & { paidCaisseCode?: string }) => {
+    if (paidThisDay(d)) return withPaidCaisse('Payé', caisseOf(d));
+    if (hasHistoryDebt(d)) return isStandbyCircuit(d.programmeJour) ? 'Stand-by' : 'Non payé';
+    if (isStandbyCircuit(d.programmeJour) || d.statut === 'PAS DE CAISSE') return 'Sans caisse';
+    if (dayStillOpen(d)) return 'En cours';
+    return 'Non payé';
+  };
+  const settlementPct =
+    totalDrivers > 0 ? Math.round((payes.length / totalDrivers) * 100) : 0;
 
   // Filtrage combiné (Statut + Recherche)
   const filteredDrivers = useMemo(() => {
@@ -307,7 +320,7 @@ export default function DashboardPage() {
       } else if (tableFilter === 'STANDBY_NON_PAYE') {
         matchStatus = isStandbyCircuit(d.programmeJour) && historyDebt;
       } else if (tableFilter === 'PAYE') {
-        matchStatus = !historyDebt && (d.statut === 'PAYE' || isJourPaye(d));
+        matchStatus = paidThisDay(d);
       } else if (tableFilter === 'PAS DE CAISSE') {
         matchStatus =
           !historyDebt && !openDay && !lateDay && d.statut !== 'PAYE' && !isJourPaye(d);
@@ -343,8 +356,7 @@ export default function DashboardPage() {
     });
   }, [isSupervisorOrAdmin, txnsSource, journalCaisseFilter, journalSearch]);
 
-  // Caisse isolée : la recette attendue de maintenant + les bordereaux déjà clôturés
-  // depuis le début de la journée de programme. Minuit ne les cache pas.
+  // Caisse isolée : uniquement la journée encore ouverte. La clôture remet ces cumuls à 0.
   const sheetCoupures = billetterieItems.reduce(
     (sum, item) => sum + (Number(item.nombre) || 0) * (Number(item.valeur) || 0),
     0
@@ -360,7 +372,7 @@ export default function DashboardPage() {
   const openBordereaux = liveSheet ? sheetBordereaux : txnBordereaux;
   const cumulBordereaux = isSupervisorOrAdmin
     ? enrichedDrivers.reduce((sum, d) => sum + (d.montantBordereau || 0), 0)
-    : Math.round((openBordereaux + (cycleBordereaux || 0)) * 1000) / 1000;
+    : openBordereaux;
   const cumulMouvements = isSupervisorOrAdmin
     ? enrichedDrivers.reduce((sum, d) => sum + (d.mouvementCaisse || 0), 0)
     : liveSheet
@@ -863,7 +875,7 @@ export default function DashboardPage() {
           icon={<IconCheck className="h-4 w-4" />}
           accent="emerald"
           progress={totalDrivers > 0 ? (payes.length / totalDrivers) * 100 : 0}
-          hint="Recette déjà validée"
+          hint="Aujourd'hui seulement, remis à 0 après 12:30"
           onClick={() => openCategoryModal('PAYES')}
         />
         <StatCard
@@ -1131,7 +1143,7 @@ export default function DashboardPage() {
                           className={
                             rowStatut(d) === 'En cours'
                               ? 'badge bg-sky-50 text-sky-800 ring-1 ring-sky-200'
-                              : rowStatut(d) === 'Payé'
+                              : rowStatut(d).startsWith('Payé')
                               ? 'badge-solid-emerald'
                               : rowStatut(d) === 'Non payé'
                               ? 'badge-solid-rose'
@@ -1140,6 +1152,11 @@ export default function DashboardPage() {
                         >
                           {rowStatut(d)}
                         </span>
+                        {caisseOf(d) && (
+                          <p className="mt-1 inline-flex rounded-md bg-indigo-600 px-2 py-0.5 font-mono text-[11px] font-black tracking-wide text-white">
+                            {caisseOf(d)}
+                          </p>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl bg-slate-50/90 border border-slate-100 p-2.5 text-xs">
@@ -1237,7 +1254,7 @@ export default function DashboardPage() {
                     <th className="w-[6.25rem] !text-right">Bordereau</th>
                     <th className="w-[6.25rem] !text-right">Mouvement</th>
                     <th className="w-[5.5rem] !text-right">Écart</th>
-                    <th className="w-[6.5rem] !whitespace-normal">Statut</th>
+                    <th className="w-[7.5rem] !whitespace-normal">Statut</th>
                     {!isSuperviseur && <th className="w-[8.25rem] !text-right">Actions</th>}
                   </tr>
                 </thead>
@@ -1321,7 +1338,7 @@ export default function DashboardPage() {
                               className={
                                 rowStatut(d) === 'En cours'
                                   ? 'badge bg-sky-50 text-sky-800 ring-1 ring-sky-200'
-                                  : rowStatut(d) === 'Payé'
+                                  : rowStatut(d).startsWith('Payé')
                                   ? 'badge-solid-emerald'
                                   : rowStatut(d) === 'Non payé'
                                   ? 'badge-solid-rose'
@@ -1330,9 +1347,9 @@ export default function DashboardPage() {
                             >
                               {rowStatut(d)}
                             </span>
-                            {isSupervisorOrAdmin && d.paidCaisseCode && d.statut === 'PAYE' && (
-                              <span className="font-mono text-[9px] font-bold text-emerald-700">
-                                Réglé : {d.paidCaisseCode}
+                            {caisseOf(d) && (
+                              <span className="inline-flex rounded-md bg-indigo-600 px-2 py-0.5 font-mono text-[11px] font-black tracking-wide text-white">
+                                {caisseOf(d)}
                               </span>
                             )}
                           </div>
@@ -1899,6 +1916,11 @@ export default function DashboardPage() {
                             <span className="shrink-0 whitespace-nowrap rounded-md bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white">
                               TR {d.tr}
                             </span>
+                            {caisseOf(d) && (
+                              <span className="shrink-0 rounded-md bg-indigo-600 px-2 py-0.5 font-mono text-[11px] font-black tracking-wide text-white">
+                                {caisseOf(d)}
+                              </span>
+                            )}
                           </div>
                           <p className="mt-0.5 truncate text-xs font-semibold tracking-wide text-slate-500">{d.programmeJour || 'Stand-by'}</p>
                           {d.reclamation && /retard/i.test(d.reclamation) ? (
@@ -1930,7 +1952,7 @@ export default function DashboardPage() {
       {selectedDriverDetails && (
         <SheetModal
           title={`${selectedDriverDetails.nom}`}
-          subtitle={`TR ${selectedDriverDetails.tr} · ${selectedDriverDetails.statut}`}
+          subtitle={`TR ${selectedDriverDetails.tr} · ${selectedDriverDetails.statut}${caisseOf(selectedDriverDetails) ? ` · Payé à ${caisseOf(selectedDriverDetails)}` : ''}`}
           onClose={() => setSelectedDriverDetails(null)}
           footer={
             !isSuperviseur ? (

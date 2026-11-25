@@ -355,6 +355,38 @@ export async function POST(req: NextRequest) {
       await pool.query('DELETE FROM caisse_transactions WHERE account_id = $1', [session.id]);
     }
 
+    // La clôture remet le comptage Feuil3 et le guichet à zéro. Les chauffeurs restent.
+    await targetPool.query(
+      `UPDATE caisse_billetterie
+       SET srf_moins = 0,
+           ver = 0,
+           recette_theorique = 0,
+           items = (
+             SELECT COALESCE(jsonb_agg(jsonb_set(elem, '{nombre}', '0')), '[]'::jsonb)
+             FROM jsonb_array_elements(COALESCE(items, '[]'::jsonb)) elem
+           ),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE account_id = $1`,
+      [session.id]
+    );
+    await targetPool.query(
+      `UPDATE caisse_desk_state
+       SET desk_recette = 0,
+           desk_versement = 0,
+           desk_tr_input = '',
+           selected_driver_id = NULL,
+           desk_rows = (
+             SELECT COALESCE(
+               jsonb_agg(jsonb_set(jsonb_set(elem, '{entree}', '0'), '{sortie}', '0')),
+               '[]'::jsonb
+             )
+             FROM jsonb_array_elements(COALESCE(desk_rows, '[]'::jsonb)) elem
+           ),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE account_id = $1`,
+      [session.id]
+    );
+
     return NextResponse.json({
       success: true,
       message: 'Clôture de journée enregistrée avec succès !',

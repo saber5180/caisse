@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useCaisseStore } from '@/lib/store';
 import { Driver, DriverStatus } from '@/types/caisse';
-import { calculateRetardFrom1230, formatDate, isJourPaye, isStandbyCircuit, programmeStatusLabel } from '@/lib/utils';
+import { calculateRetardFrom1230, formatDate, isJourPaye, isStandbyCircuit, programmeStatusLabel, withPaidCaisse } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import {
@@ -32,7 +32,7 @@ function tourRows(driver: Driver) {
       key: 'today',
       date: formatDate(refDate),
       circuit,
-      status: isJourPaye(driver) ? 'Payée' : stillOpen ? 'En cours' : 'Non payée',
+      status: isJourPaye(driver) ? withPaidCaisse('Payée', driver.caissePaye) : stillOpen ? 'En cours' : 'Non payée',
       current: true,
     });
   }
@@ -168,7 +168,7 @@ function TourList({ driver }: { driver: Driver }) {
               <td className="px-3 py-2">
                 <span
                   className={
-                    row.status === 'Payée'
+                    row.status.startsWith('Payée')
                       ? 'font-bold text-emerald-700'
                       : row.status === 'En cours'
                       ? 'font-bold text-sky-700'

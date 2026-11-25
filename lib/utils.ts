@@ -76,6 +76,14 @@ export function calculateElapsed(dateStr: string | Date | undefined | null): {
  * Calcule l'échéance d'un programme du jour : le lendemain (J+1) à 12:30:00.
  * C'est après 12:30 du lendemain que l'on commence à calculer le retard.
  */
+/** Début de la journée de caisse en cours : 12:30, jusqu'à 12:30 le lendemain. */
+export function shiftStartMs(now = new Date()): number {
+  const start = new Date(now);
+  start.setHours(12, 30, 0, 0);
+  if (now.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+  return start.getTime();
+}
+
 export function getDeadline1230(dateStr?: string | Date | null): Date {
   const base = dateStr ? new Date(dateStr) : new Date();
   const validBase = isNaN(base.getTime()) ? new Date() : base;
@@ -201,9 +209,20 @@ export function isStandbyCircuit(value?: string | null): boolean {
   return !prog || prog === 'STAND-BY' || prog === 'STANDBY';
 }
 
-export function programmeStatusLabel(entry: { paid: boolean; j1?: boolean }): string {
-  if (entry.paid) return 'Payée';
+export function programmeStatusLabel(entry: { paid: boolean; j1?: boolean; caisseCode?: string }): string {
+  if (entry.paid) return withPaidCaisse('Payée', entry.caisseCode);
   return entry.j1 ? 'Non payée (J-1)' : 'Non payée';
+}
+
+export function normalizeCaisseCode(code?: string | null): string {
+  const value = (code || '').trim().toUpperCase();
+  if (!value || value === 'CAISSE') return '';
+  return value;
+}
+
+export function withPaidCaisse(label: string, code?: string | null): string {
+  const caisse = normalizeCaisseCode(code);
+  return caisse ? `${label} · ${caisse}` : label;
 }
 
 /** Le circuit encore affiché (avant Bascule) est déjà réglé. */

@@ -21,6 +21,10 @@ export interface Driver {
   programmeDate?: string; // Date d'import du programme du jour actuel (ISO)
   /** Le circuit encore ouvert (avant Bascule) a déjà été encaissé. */
   jourPaye?: boolean;
+  /** Caisse qui a encaissé le dernier règlement : CRNU, CRSF ou CRTN. */
+  caissePaye?: string;
+  /** Heure du dernier encaissement. Le compteur Payé repart à 0 après 12:30. */
+  payeLe?: string;
 }
 
 export interface ProgramEntry {
@@ -30,6 +34,8 @@ export interface ProgramEntry {
   paid: boolean;
   /** Tournée envoyée en historique par la dernière Bascule, encore impayée. */
   j1?: boolean;
+  /** Caisse qui a encaissé cette tournée : CRNU, CRSF ou CRTN. */
+  caisseCode?: string;
 }
 
 export interface CashDeskRow {

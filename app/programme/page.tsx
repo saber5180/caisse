@@ -11,6 +11,7 @@ import {
   isJourPaye,
   programmeStatusLabel,
   ProgrammeImportError,
+  withPaidCaisse,
 } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
@@ -237,21 +238,20 @@ function historyUnpaidCount(driver: Driver) {
 }
 
 function dayListStatut(driver: Driver, isStandby: boolean, overdue: boolean) {
-  if (isJourPaye(driver)) return 'PAYÉ';
+  if (isJourPaye(driver)) return withPaidCaisse('PAYÉ', driver.caissePaye);
   if (isStandby) return historyUnpaidCount(driver) > 0 ? 'NON PAYÉ' : 'SANS CAISSE';
   if (!overdue) return 'EN COURS';
   return 'NON PAYÉ';
 }
 
 function DayStatutBadge({ label }: { label: string }) {
-  const cls =
-    label === 'PAYÉ'
-      ? 'badge-solid-emerald'
-      : label === 'EN COURS'
-      ? 'badge bg-sky-50 text-sky-800 ring-1 ring-sky-200'
-      : label === 'NON PAYÉ'
-      ? 'badge-solid-rose'
-      : 'badge-solid-amber';
+  const cls = label.startsWith('PAYÉ')
+    ? 'badge-solid-emerald'
+    : label === 'EN COURS'
+    ? 'badge bg-sky-50 text-sky-800 ring-1 ring-sky-200'
+    : label === 'NON PAYÉ'
+    ? 'badge-solid-rose'
+    : 'badge-solid-amber';
   return <span className={`${cls} shrink-0`}>{label}</span>;
 }
 
@@ -897,7 +897,7 @@ export default function ProgrammePage() {
                             {isStandby ? (
                               <span className="text-xs font-medium text-slate-400">Stand-by aujourd&apos;hui</span>
                             ) : isJourPaye(d) ? (
-                              <span className="text-xs font-bold text-emerald-600">✓ Caisse réglée</span>
+                              <span className="text-xs font-bold text-emerald-600">{withPaidCaisse('✓ Caisse réglée', d.caissePaye)}</span>
                             ) : retardInfo.isOverdue ? (
                               <span className="text-xs font-extrabold text-rose-600">
                                 ⚠️ Retard : {retardInfo.text}
@@ -996,7 +996,7 @@ export default function ProgrammePage() {
                             </span>
                           ) : isJourPaye(d) ? (
                             <span className="text-xs font-bold text-emerald-600">
-                              ✓ Caisse du jour réglée
+                              {withPaidCaisse('✓ Caisse du jour réglée', d.caissePaye)}
                             </span>
                           ) : retardInfo.isOverdue ? (
                             <span className="inline-flex items-center gap-1 rounded-lg bg-rose-100 border border-rose-200 px-2.5 py-1 text-[11px] font-extrabold text-rose-700">
