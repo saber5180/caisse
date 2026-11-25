@@ -11,7 +11,6 @@ import {
   isJourPaye,
   normalizeCaisseCode,
   shiftStartMs,
-  withPaidCaisse,
 } from '@/lib/utils';
 import StatCard from '@/components/StatCard';
 import SheetModal from '@/components/SheetModal';
@@ -37,6 +36,33 @@ import {
   IconSync,
   IconTruck,
 } from '@/components/Icons';
+
+function normalCaisseCode(raw?: string | null): 'CRNU' | 'CRSF' | 'CRTN' | '' {
+  const value = (raw || '').toUpperCase();
+  if (value.includes('CRNU')) return 'CRNU';
+  if (value.includes('CRSF')) return 'CRSF';
+  if (value.includes('CRTN')) return 'CRTN';
+  return '';
+}
+
+function PaidAtCaisse({ code }: { code: string }) {
+  const caisse = normalCaisseCode(code);
+  if (!caisse) return <span className="text-[11px] font-medium text-slate-300">—</span>;
+  const tone =
+    caisse === 'CRNU'
+      ? 'bg-indigo-50 text-indigo-700 ring-indigo-200'
+      : caisse === 'CRSF'
+      ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+      : 'bg-sky-50 text-sky-800 ring-sky-200';
+  const dot =
+    caisse === 'CRNU' ? 'bg-indigo-500' : caisse === 'CRSF' ? 'bg-emerald-500' : 'bg-sky-500';
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11px] font-black tracking-[0.14em] ring-1 ${tone}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+      {caisse}
+    </span>
+  );
+}
 
 function UnpaidCaissesSelect({
   driver,
@@ -273,10 +299,10 @@ export default function DashboardPage() {
     return new Date(d.payeLe).getTime() >= shiftStart;
   };
   const caisseOf = (d: Driver & { paidCaisseCode?: string }) => {
-    const fromReceipt = paidTodayByTr.get(cleanScannerTr(d.tr).toUpperCase());
+    const fromReceipt = normalCaisseCode(paidTodayByTr.get(cleanScannerTr(d.tr).toUpperCase()));
     if (fromReceipt) return fromReceipt;
     if (!d.payeLe || new Date(d.payeLe).getTime() < shiftStart) return '';
-    return normalizeCaisseCode(d.caissePaye || d.paidCaisseCode);
+    return normalCaisseCode(d.caissePaye || d.paidCaisseCode);
   };
   const nonPayesActifs = drivers.filter(
     (d) => !paidThisDay(d) && !isStandbyCircuit(d.programmeJour) && (hasHistoryDebt(d) || dayLate(d))
@@ -291,7 +317,7 @@ export default function DashboardPage() {
   const allNonPayes = [...nonPayesActifs, ...standbyNonPayes];
   const payes = enrichedDrivers.filter((d) => paidThisDay(d));
   const rowStatut = (d: Driver & { paidCaisseCode?: string }) => {
-    if (paidThisDay(d)) return withPaidCaisse('Payé', caisseOf(d));
+    if (paidThisDay(d)) return 'Payé';
     if (hasHistoryDebt(d)) return isStandbyCircuit(d.programmeJour) ? 'Stand-by' : 'Non payé';
     if (isStandbyCircuit(d.programmeJour) || d.statut === 'PAS DE CAISSE') return 'Sans caisse';
     if (dayStillOpen(d)) return 'En cours';
@@ -1152,11 +1178,9 @@ export default function DashboardPage() {
                         >
                           {rowStatut(d)}
                         </span>
-                        {caisseOf(d) && (
-                          <p className="mt-1 inline-flex rounded-md bg-indigo-600 px-2 py-0.5 font-mono text-[11px] font-black tracking-wide text-white">
-                            {caisseOf(d)}
-                          </p>
-                        )}
+                        <div className="mt-2">
+                          <PaidAtCaisse code={caisseOf(d)} />
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl bg-slate-50/90 border border-slate-100 p-2.5 text-xs">
@@ -1249,12 +1273,13 @@ export default function DashboardPage() {
                   <tr>
                     <th className="w-[5.75rem] !whitespace-nowrap">Code TR</th>
                     <th>Chauffeur</th>
-                    <th className="w-[18%] !whitespace-normal">Programme</th>
-                    <th className="w-[16%] !whitespace-normal">Impayés</th>
+                    <th className="w-[14%] !whitespace-normal">Programme</th>
+                    <th className="w-[14%] !whitespace-normal">Impayés</th>
                     <th className="w-[6.25rem] !text-right">Bordereau</th>
                     <th className="w-[6.25rem] !text-right">Mouvement</th>
                     <th className="w-[5.5rem] !text-right">Écart</th>
-                    <th className="w-[7.5rem] !whitespace-normal">Statut</th>
+                    <th className="w-[6.25rem] !whitespace-normal">Statut</th>
+                    <th className="w-[7.25rem] !whitespace-normal">Payé à</th>
                     {!isSuperviseur && <th className="w-[8.25rem] !text-right">Actions</th>}
                   </tr>
                 </thead>
@@ -1347,12 +1372,10 @@ export default function DashboardPage() {
                             >
                               {rowStatut(d)}
                             </span>
-                            {caisseOf(d) && (
-                              <span className="inline-flex rounded-md bg-indigo-600 px-2 py-0.5 font-mono text-[11px] font-black tracking-wide text-white">
-                                {caisseOf(d)}
-                              </span>
-                            )}
                           </div>
+                        </td>
+                        <td className="!py-3">
+                          <PaidAtCaisse code={caisseOf(d)} />
                         </td>
                         {!isSuperviseur && (
                           <td className="!py-3 text-right" onClick={(e) => e.stopPropagation()}>
@@ -1916,13 +1939,11 @@ export default function DashboardPage() {
                             <span className="shrink-0 whitespace-nowrap rounded-md bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white">
                               TR {d.tr}
                             </span>
-                            {caisseOf(d) && (
-                              <span className="shrink-0 rounded-md bg-indigo-600 px-2 py-0.5 font-mono text-[11px] font-black tracking-wide text-white">
-                                {caisseOf(d)}
-                              </span>
-                            )}
                           </div>
                           <p className="mt-0.5 truncate text-xs font-semibold tracking-wide text-slate-500">{d.programmeJour || 'Stand-by'}</p>
+                          <div className="mt-1">
+                            <PaidAtCaisse code={caisseOf(d)} />
+                          </div>
                           {d.reclamation && /retard/i.test(d.reclamation) ? (
                             <p className="mt-0.5 truncate text-xs font-medium text-rose-700">{d.reclamation}</p>
                           ) : null}
@@ -1952,7 +1973,7 @@ export default function DashboardPage() {
       {selectedDriverDetails && (
         <SheetModal
           title={`${selectedDriverDetails.nom}`}
-          subtitle={`TR ${selectedDriverDetails.tr} · ${selectedDriverDetails.statut}${caisseOf(selectedDriverDetails) ? ` · Payé à ${caisseOf(selectedDriverDetails)}` : ''}`}
+          subtitle={`TR ${selectedDriverDetails.tr} · ${selectedDriverDetails.statut}${caisseOf(selectedDriverDetails) ? ` · ${caisseOf(selectedDriverDetails)}` : ''}`}
           onClose={() => setSelectedDriverDetails(null)}
           footer={
             !isSuperviseur ? (

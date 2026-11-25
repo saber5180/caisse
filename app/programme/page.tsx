@@ -11,7 +11,6 @@ import {
   isJourPaye,
   programmeStatusLabel,
   ProgrammeImportError,
-  withPaidCaisse,
 } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
@@ -237,8 +236,22 @@ function historyUnpaidCount(driver: Driver) {
   return (driver.programmeHistorique || []).filter((entry) => !entry.paid).length;
 }
 
+function paidAtNormalCaisse(code?: string) {
+  const value = (code || '').toUpperCase();
+  if (value.includes('CRNU')) return 'CRNU';
+  if (value.includes('CRSF')) return 'CRSF';
+  if (value.includes('CRTN')) return 'CRTN';
+  return '';
+}
+
+function caissePillTone(code: string) {
+  if (code === 'CRNU') return { chip: 'bg-indigo-50 text-indigo-700 ring-indigo-200', dot: 'bg-indigo-500' };
+  if (code === 'CRTN') return { chip: 'bg-sky-50 text-sky-800 ring-sky-200', dot: 'bg-sky-500' };
+  return { chip: 'bg-emerald-50 text-emerald-700 ring-emerald-200', dot: 'bg-emerald-500' };
+}
+
 function dayListStatut(driver: Driver, isStandby: boolean, overdue: boolean) {
-  if (isJourPaye(driver)) return withPaidCaisse('PAYÉ', driver.caissePaye);
+  if (isJourPaye(driver)) return 'PAYÉ';
   if (isStandby) return historyUnpaidCount(driver) > 0 ? 'NON PAYÉ' : 'SANS CAISSE';
   if (!overdue) return 'EN COURS';
   return 'NON PAYÉ';
@@ -897,7 +910,16 @@ export default function ProgrammePage() {
                             {isStandby ? (
                               <span className="text-xs font-medium text-slate-400">Stand-by aujourd&apos;hui</span>
                             ) : isJourPaye(d) ? (
-                              <span className="text-xs font-bold text-emerald-600">{withPaidCaisse('✓ Caisse réglée', d.caissePaye)}</span>
+                              {(() => {
+                                const code = paidAtNormalCaisse(d.caissePaye);
+                                const tone = caissePillTone(code);
+                                return (
+                                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11px] font-black tracking-[0.14em] ring-1 ${tone.chip}`}>
+                                    <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
+                                    {code || 'PAYÉ'}
+                                  </span>
+                                );
+                              })()}
                             ) : retardInfo.isOverdue ? (
                               <span className="text-xs font-extrabold text-rose-600">
                                 ⚠️ Retard : {retardInfo.text}
@@ -995,9 +1017,16 @@ export default function ProgrammePage() {
                               Stand-by aujourd&apos;hui
                             </span>
                           ) : isJourPaye(d) ? (
-                            <span className="text-xs font-bold text-emerald-600">
-                              {withPaidCaisse('✓ Caisse du jour réglée', d.caissePaye)}
-                            </span>
+                            {(() => {
+                              const code = paidAtNormalCaisse(d.caissePaye);
+                              const tone = caissePillTone(code);
+                              return (
+                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11px] font-black tracking-[0.14em] ring-1 ${tone.chip}`}>
+                                  <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
+                                  {code || 'PAYÉ'}
+                                </span>
+                              );
+                            })()}
                           ) : retardInfo.isOverdue ? (
                             <span className="inline-flex items-center gap-1 rounded-lg bg-rose-100 border border-rose-200 px-2.5 py-1 text-[11px] font-extrabold text-rose-700">
                               ⚠️ Retard : {retardInfo.text}
