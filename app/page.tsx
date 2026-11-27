@@ -1502,30 +1502,6 @@ export default function DashboardPage() {
                           </span>
                         )}
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-3 rounded-lg bg-slate-50 px-2.5 py-1.5 border border-slate-200/70 sm:bg-transparent sm:border-0 sm:p-0">
-                        <span className="text-[11px] text-slate-500">
-                          Bord : <strong className="num text-slate-900">{formatMoney(d.montantBordereau)}</strong>
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          Mvt : <strong className="num text-emerald-700">{formatMoney(d.mouvementCaisse)}</strong>
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          Écart :{' '}
-                          <strong
-                            className={`num ${
-                              d.ecartBordereau === 0
-                                ? 'text-slate-700'
-                                : d.ecartBordereau > 0
-                                ? 'text-rose-600'
-                                : 'text-emerald-600'
-                            }`}
-                          >
-                            {d.ecartBordereau > 0 ? '+' : ''}
-                            {formatMoney(d.ecartBordereau)}
-                          </strong>
-                        </span>
-                      </div>
                     </div>
                   </div>
                 );
@@ -1533,20 +1509,17 @@ export default function DashboardPage() {
             </div>
 
             {/* Tableau Grand Écran (hidden xl:block) */}
-            <div className="table-wrap hidden xl:block">
-              <table className="data-table w-full">
+            <div className="hidden overflow-x-hidden xl:block">
+              <table className="data-table w-full table-fixed">
                 <thead>
                   <tr>
                     <th className="w-24">Code TR</th>
                     <th>Chauffeur</th>
-                    <th>Programme</th>
-                    <th>Impayés</th>
-                    <th className="!text-right">Bordereau</th>
-                    <th className="!text-right">Mouvement</th>
-                    <th className="!text-right">Écart</th>
-                    <th>Statut</th>
-                    <th>Payé à</th>
-                    {!isSuperviseur && <th className="!text-right">Actions</th>}
+                    <th className="w-[16%]">Programme</th>
+                    <th className="w-[16%]">Impayés</th>
+                    <th className="w-[7.5rem]">Statut</th>
+                    <th className="w-[12.5rem]">Payé à</th>
+                    {!isSuperviseur && <th className="w-[8.5rem] !text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1623,26 +1596,6 @@ export default function DashboardPage() {
                             allDrivers={drivers}
                             isSuperviseur={isSuperviseur}
                           />
-                        </td>
-                        <td className="text-right num font-bold text-xs text-slate-900">
-                          {formatMoney(d.montantBordereau)}
-                        </td>
-                        <td className="text-right num font-bold text-xs text-emerald-700">
-                          {formatMoney(d.mouvementCaisse)}
-                        </td>
-                        <td className="text-right">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded-md font-mono text-xs font-bold ${
-                              d.ecartBordereau === 0
-                                ? 'bg-slate-100 text-slate-700'
-                                : d.ecartBordereau > 0
-                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            }`}
-                          >
-                            {d.ecartBordereau > 0 ? '+' : ''}
-                            {formatMoney(d.ecartBordereau)}
-                          </span>
                         </td>
                         <td>
                           <span
