@@ -11,8 +11,10 @@ import {
   BilletterieItem,
   DeskRow,
   CaisseLiveSummary,
+  FleetPayment,
 } from '@/types/caisse';
 import {
+  allCashierRows,
   belongsToCaisse,
   fetchHistoryFromPool,
   fetchTransactionsFromPool,
@@ -20,6 +22,8 @@ import {
   loadCashierAccounts,
   type CashierCode,
 } from '@/lib/cashierAccounts';
+import { logAudit } from '@/lib/audit';
+import { cleanScannerTr } from '@/lib/utils';
 
 const CAISSE_CODES_MAP: Record<string, { code: 'CRNU' | 'CRSF' | 'CRTN'; name: string }> = {
   'acc-crnu': { code: 'CRNU', name: 'Caisse CRNU' },
@@ -56,13 +60,18 @@ function mapTxnRow(r: any): TransactionRecord {
     r.caisse_code ||
     CAISSE_CODES_MAP[r.account_id]?.code ||
     (r.username ? r.username.toUpperCase() : 'CAISSE');
-  const caisseName = r.display_name || CAISSE_CODES_MAP[r.account_id]?.name || caisseCode;
+  const operatorUsername = r.raw_data?.operatorUsername || r.username || '';
+  const caisseName =
+    r.caisse_code && ['CRNU', 'CRSF', 'CRTN'].includes(String(r.caisse_code).toUpperCase())
+      ? `Caisse ${String(r.caisse_code).toUpperCase()}`
+      : r.display_name || CAISSE_CODES_MAP[r.account_id]?.name || caisseCode;
 
   return {
     id: r.id,
     accountId: r.account_id,
     caisseCode,
     caisseName,
+    operatorUsername,
     date: r.date ? new Date(r.date).toISOString() : new Date().toISOString(),
     codeChauffeur: r.code_chauffeur,
     nomChauffeur: r.nom_chauffeur,
@@ -97,7 +106,7 @@ export async function GET() {
     const account = accRes.rows[0];
 
     // Check remote block / force logout
-    if (account.is_blocked && account.role === 'cashier') {
+    if (account.is_blocked && account.role !== 'admin') {
       const response = NextResponse.json(
         {
           error: `Votre caisse (${account.display_name}) a été temporairement bloquée par le Superviseur.`,
@@ -138,7 +147,7 @@ export async function GET() {
       txnByKey.set(`${row.account_id}::${row.id}`, row);
     }
 
-    for (const acc of Array.from(cashierAccounts.values())) {
+    for (const acc of allCashierRows(cashierAccounts)) {
       if (isMainPoolUrl(acc.custom_db_url)) continue;
       try {
         const extra = await fetchTransactionsFromPool(getPool(acc.custom_db_url || undefined), acc.id);
@@ -157,7 +166,7 @@ export async function GET() {
     // Le statut vient de la fiche chauffeur (Bascule + encaissement), pas d'une transaction isolée :
     // payer une caisse J-1 ne doit pas marquer le circuit du jour comme payé.
     const driversRes = await mainPool.query(
-      `SELECT id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, jour_paye, caisse_paye, paye_le
+      `SELECT id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, jour_paye, caisse_paye, paye_par, paye_le
        FROM caisse_drivers
        WHERE account_id = $1
        ORDER BY tr ASC, nom ASC`,
@@ -184,6 +193,7 @@ export async function GET() {
         programmeDate: r.programme_date ? new Date(r.programme_date).toISOString() : undefined,
         jourPaye: Boolean(r.jour_paye),
         caissePaye: r.caisse_paye || '',
+        payePar: r.paye_par || '',
         payeLe: r.paye_le ? new Date(r.paye_le).toISOString() : undefined,
       };
     }).filter((d) => d.id !== 'DRV-GLOBAL-0' && d.id !== 'DRV-GLOBAL-1' && d.tr !== '0');
@@ -191,12 +201,18 @@ export async function GET() {
     // Transactions for current view:
     // - Supervisor & Admin get all transactions across all caisses
     // - Individual Caisse (CRNU, CRSF, CRTN) gets its own active transactions
+    const sessionCaisse = String(account.caisse_code || '').toUpperCase();
     const transactions = isSupervisorOrAdmin
       ? allTransactions
-      : allTransactions.filter((t) => t.accountId === session.id);
+      : allTransactions.filter(
+          (t) =>
+            t.accountId === session.id ||
+            (sessionCaisse && String(t.caisseCode || '').toUpperCase() === sessionCaisse)
+        );
 
     // 3. Build real-time Caisse Live Summary for CRNU, CRSF, CRTN
-    const cashierIds = Array.from(cashierAccounts.values()).map((a) => a.id);
+    const cashierRows = allCashierRows(cashierAccounts);
+    const cashierIds = cashierRows.map((a) => a.id);
     const historyTotalsMap = new Map<
       string,
       { nb_clotures: number; total_cloture: number; total_coupures: number; total_ver: number }
@@ -232,7 +248,7 @@ export async function GET() {
       addHistoryTotals(historyTotalsRes.rows);
     }
 
-    for (const acc of Array.from(cashierAccounts.values())) {
+    for (const acc of cashierRows) {
       if (isMainPoolUrl(acc.custom_db_url)) continue;
       try {
         const extraHist = await getPool(acc.custom_db_url || undefined).query(
@@ -259,36 +275,55 @@ export async function GET() {
     ];
 
     const caissesSummary: CaisseLiveSummary[] = orderedCaisses.map((item) => {
-      const dbAcc = cashierAccounts.get(item.code);
-      const caisseTxns = allTransactions.filter((t) => belongsToCaisse(t, dbAcc, item.code));
+      const dbAccs = cashierAccounts.get(item.code) || [];
+      const caisseTxns = allTransactions.filter((t) => belongsToCaisse(t, dbAccs, item.code));
       const montantActuel = caisseTxns.reduce((sum, t) => sum + t.tPayer, 0);
       const versement = caisseTxns.reduce((sum, t) => sum + t.versement, 0);
       const mtEspece = Math.round((montantActuel - versement) * 1000) / 1000;
       const recetteAttendue = caisseTxns.reduce((sum, t) => sum + t.recette, 0);
       const ecart = Math.round((montantActuel - recetteAttendue) * 1000) / 1000;
 
-      const hist = dbAcc ? historyTotalsMap.get(dbAcc.id) : undefined;
+      const hist = dbAccs.reduce(
+        (acc, row) => {
+          const h = historyTotalsMap.get(row.id);
+          if (!h) return acc;
+          return {
+            nb_clotures: acc.nb_clotures + h.nb_clotures,
+            total_cloture: acc.total_cloture + h.total_cloture,
+            total_coupures: acc.total_coupures + h.total_coupures,
+            total_ver: acc.total_ver + h.total_ver,
+          };
+        },
+        { nb_clotures: 0, total_cloture: 0, total_coupures: 0, total_ver: 0 }
+      );
+
+      const latest = dbAccs.reduce<(typeof dbAccs)[number] | undefined>((best, row) => {
+        if (!best) return row;
+        const a = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+        const b = best.updated_at ? new Date(best.updated_at).getTime() : 0;
+        return a > b ? row : best;
+      }, undefined);
 
       return {
-        accountId: dbAcc?.id || `acc-${item.code.toLowerCase()}`,
+        accountId: latest?.id || `acc-${item.code.toLowerCase()}`,
         caisseCode: item.code,
-        displayName: dbAcc?.display_name || item.name,
-        username: dbAcc?.username || item.user,
-        isBlocked: Boolean(dbAcc?.is_blocked),
-        forceLogoutAt: dbAcc?.force_logout_at
-          ? new Date(dbAcc.force_logout_at).toISOString()
+        displayName: item.name,
+        username: dbAccs.length ? dbAccs.map((a) => a.username).join(', ') : item.user,
+        isBlocked: dbAccs.length > 0 && dbAccs.every((a) => a.is_blocked),
+        forceLogoutAt: latest?.force_logout_at
+          ? new Date(latest.force_logout_at).toISOString()
           : null,
-        updatedAt: dbAcc?.updated_at ? new Date(dbAcc.updated_at).toISOString() : null,
+        updatedAt: latest?.updated_at ? new Date(latest.updated_at).toISOString() : null,
         montantActuel: Math.round(montantActuel * 1000) / 1000,
         mtEspece: Math.round(mtEspece * 1000) / 1000,
         versement: Math.round(versement * 1000) / 1000,
         recetteAttendue: Math.round(recetteAttendue * 1000) / 1000,
         ecart,
         nbTransactions: caisseTxns.length,
-        totalCloture: hist ? hist.total_cloture : 0,
-        totalClotureEspece: hist ? hist.total_coupures : 0,
-        totalClotureVersement: hist ? hist.total_ver : 0,
-        nbClotures: hist ? hist.nb_clotures : 0,
+        totalCloture: hist.total_cloture,
+        totalClotureEspece: hist.total_coupures,
+        totalClotureVersement: hist.total_ver,
+        nbClotures: hist.nb_clotures,
       };
     });
 
@@ -346,12 +381,45 @@ export async function GET() {
       cycleBordereaux = Math.round(cycleBordereaux * 1000) / 1000;
     }
 
+    const shiftMs = currentShiftStartMs();
+    const fleetPaidMap = new Map<string, FleetPayment>();
+    const upsertPaid = (entry: FleetPayment) => {
+      const tr = cleanScannerTr(entry.tr).toUpperCase();
+      if (!tr) return;
+      const prev = fleetPaidMap.get(tr);
+      if (prev && new Date(prev.date).getTime() >= new Date(entry.date).getTime()) return;
+      fleetPaidMap.set(tr, { ...entry, tr });
+    };
+    for (const t of allTransactions) {
+      if (!t?.date || new Date(t.date).getTime() < shiftMs) continue;
+      const raw = t.rawData && typeof t.rawData === 'object' ? t.rawData : {};
+      upsertPaid({
+        tr: t.codeChauffeur || '',
+        caisseCode: t.caisseCode || '',
+        operatorUsername: t.operatorUsername || raw.operatorUsername || '',
+        operatorName:
+          raw.operatorDisplayName || t.operatorUsername || raw.operatorUsername || '',
+        date: t.date,
+      });
+    }
+    for (const d of drivers) {
+      if (!d.payeLe || new Date(d.payeLe).getTime() < shiftMs) continue;
+      upsertPaid({
+        tr: d.tr,
+        caisseCode: d.caissePaye || '',
+        operatorUsername: d.payePar || '',
+        operatorName: d.payePar || '',
+        date: d.payeLe,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         drivers,
         transactions,
         allTransactions: isSupervisorOrAdmin ? allTransactions : transactions,
+        fleetPaidToday: Array.from(fleetPaidMap.values()),
         caissesSummary: isSupervisorOrAdmin ? caissesSummary : [],
         billetterie,
         deskState,
@@ -377,7 +445,7 @@ export async function POST(req: NextRequest) {
 
     const mainPool = getPool();
     const accRes = await mainPool.query(
-      'SELECT id, role, display_name, is_blocked, force_logout_at, custom_db_url FROM caisse_accounts WHERE id = $1',
+      'SELECT id, role, display_name, caisse_code, is_blocked, force_logout_at, custom_db_url FROM caisse_accounts WHERE id = $1',
       [session.id]
     );
 
@@ -396,7 +464,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Block check for cashiers
-    if (account.is_blocked && account.role === 'cashier') {
+    if (account.is_blocked && account.role !== 'admin') {
       return NextResponse.json(
         {
           error: `Opération refusée : Votre caisse (${account.display_name}) est bloquée par le Superviseur.`,
@@ -440,8 +508,8 @@ export async function POST(req: NextRequest) {
 
       for (const d of realDrivers) {
         await mainPool.query(
-          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, jour_paye, caisse_paye, paye_le, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18, CURRENT_TIMESTAMP)
+          `INSERT INTO caisse_drivers (id, account_id, nom, tr, statut, date_derniere, reclamation, caisses_dues, programme_jour, circuit_actuel, serie, sous_serie, montant_bordereau, programme_historique, programme_date, jour_paye, caisse_paye, paye_par, paye_le, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18, $19, CURRENT_TIMESTAMP)
            ON CONFLICT (account_id, id) DO UPDATE SET
              nom = EXCLUDED.nom,
              tr = EXCLUDED.tr,
@@ -458,6 +526,7 @@ export async function POST(req: NextRequest) {
              programme_date = EXCLUDED.programme_date,
              jour_paye = EXCLUDED.jour_paye,
              caisse_paye = EXCLUDED.caisse_paye,
+             paye_par = EXCLUDED.paye_par,
              paye_le = EXCLUDED.paye_le,
              updated_at = CURRENT_TIMESTAMP`,
           [
@@ -478,6 +547,7 @@ export async function POST(req: NextRequest) {
             d.programmeDate || null,
             Boolean(d.jourPaye),
             (d.caissePaye || '').toUpperCase(),
+            d.payePar || '',
             d.payeLe || null,
           ]
         );
@@ -515,8 +585,13 @@ export async function POST(req: NextRequest) {
           t.tPayer,
           t.resAPayer,
           t.versement,
-          t.status,
-          t.rawData ? JSON.stringify(t.rawData) : null,
+            t.status,
+            JSON.stringify({
+              ...(t.rawData && typeof t.rawData === 'object' ? t.rawData : {}),
+              operatorUsername: session.username,
+              operatorDisplayName: account.display_name,
+              operatorCaisse: account.caisse_code || '',
+            }),
         ];
         const upsertSql = `INSERT INTO caisse_transactions (id, account_id, date, code_chauffeur, nom_chauffeur, recette, t_payer, res_a_payer, versement, status, raw_data)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -535,6 +610,13 @@ export async function POST(req: NextRequest) {
         }
 
       }
+      await logAudit(
+        mainPool,
+        { id: session.id, username: session.username, caisseCode: account.caisse_code },
+        'journal_save',
+        { count: transactions.length, caisse: account.caisse_code, user: session.username },
+        account.caisse_code
+      );
     }
 
     // 3. Save billetterie if present

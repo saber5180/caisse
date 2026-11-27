@@ -13,6 +13,7 @@ import {
   IconReceipt,
   IconSheet,
   IconTruck,
+  IconUser,
 } from './Icons';
 
 const ICONS = {
@@ -24,26 +25,15 @@ const ICONS = {
   calendar: IconCalendar,
   receipt: IconReceipt,
   sheet: IconSheet,
-};
-
-const ICON_COLORS: Record<NavItem['icon'], string> = {
-  dashboard: 'text-indigo-400 group-hover:text-indigo-300',
-  calculator: 'text-sky-400 group-hover:text-sky-300',
-  coins: 'text-amber-400 group-hover:text-amber-300',
-  history: 'text-amber-400 group-hover:text-amber-300',
-  truck: 'text-rose-400 group-hover:text-rose-300',
-  calendar: 'text-violet-400 group-hover:text-violet-300',
-  receipt: 'text-emerald-400 group-hover:text-emerald-300',
-  sheet: 'text-teal-400 group-hover:text-teal-300',
+  user: IconUser,
 };
 
 const SECTIONS = [
-  { id: 'workspace', title: 'Trésorerie & Pilotage' },
-  { id: 'operations', title: 'Opérations Flotte' },
-  { id: 'reports', title: 'Journal & Audit' },
+  { id: 'workspace', title: 'Caisse' },
+  { id: 'operations', title: 'Flotte' },
+  { id: 'reports', title: 'Suivi & Admin' },
 ] as const;
 
-// Pages masquées pour le profil Superviseur (Spécification 4)
 const SUPERVISEUR_HIDDEN_HREFS = new Set([
   '/caisse',
   '/billetterie',
@@ -58,35 +48,39 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const transactions = useCaisseStore((state) => state.transactions);
 
   const isSuperviseur = currentUser?.role === 'superviseur';
+  const isAdmin = currentUser?.role === 'admin';
   const nonPayeCount = drivers.filter((d) => d.statut === 'NON PAYE').length;
 
-  const visibleNavItems = isSuperviseur
-    ? NAV_ITEMS.filter((item) => !SUPERVISEUR_HIDDEN_HREFS.has(item.href))
-    : NAV_ITEMS;
+  const visibleNavItems = NAV_ITEMS.filter((item) => {
+    if (item.href === '/admin/comptes') return isAdmin;
+    if (isSuperviseur && SUPERVISEUR_HIDDEN_HREFS.has(item.href)) return false;
+    return true;
+  });
 
   const renderLink = (item: NavItem) => {
     const Icon = ICONS[item.icon];
     const active = pathname === item.href;
 
     let badgeText = '';
-    let badgeClass = 'bg-white/10 text-slate-300 ring-1 ring-white/10';
+    let badgeClass = active
+      ? 'bg-white/20 text-white'
+      : 'bg-slate-800 text-slate-300';
 
     if (item.badgeKey === 'nonPaye' && nonPayeCount > 0) {
       badgeText = String(nonPayeCount);
-      badgeClass =
-        'bg-rose-500/20 text-rose-300 ring-1 ring-rose-400/35 font-extrabold shadow-[0_0_12px_rgba(244,63,94,0.25)]';
+      badgeClass = active
+        ? 'bg-white text-sky-700 font-bold'
+        : 'bg-rose-500/20 text-rose-300 font-bold';
     } else if (item.href === '/journal' && transactions.length > 0) {
       badgeText = String(transactions.length);
-      badgeClass = 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25 font-bold';
+      badgeClass = active
+        ? 'bg-white/20 text-white font-bold'
+        : 'bg-emerald-500/20 text-emerald-300 font-bold';
     }
 
     const displayLabel =
       isSuperviseur && item.href === '/'
-        ? 'Pilotage Superviseur'
-        : isSuperviseur && item.href === '/journal'
-        ? 'Journal des Transactions Avancé'
-        : isSuperviseur && item.href === '/billetterie/historique'
-        ? 'Historique de Clôture'
+        ? 'Supervision'
         : item.label;
 
     return (
@@ -96,21 +90,10 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
           className={`group nav-link-dark ${active ? 'nav-link-dark-active' : ''}`}
         >
-          {active && (
-            <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-gradient-to-b from-indigo-300 to-sky-400 shadow-[0_0_12px_#818cf8]" />
-          )}
-          <span
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all ${
-              active
-                ? 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-[0_4px_12px_-2px_rgba(99,102,241,0.6)]'
-                : `bg-white/[0.03] ${ICON_COLORS[item.icon]}`
-            }`}
-          >
-            <Icon className="h-[16px] w-[16px]" />
-          </span>
+          <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
           <span className="flex-1 truncate">{displayLabel}</span>
           {badgeText && (
-            <span className={`rounded-full px-2 py-0.5 font-mono text-[10px] tabular-nums ${badgeClass}`}>
+            <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums ${badgeClass}`}>
               {badgeText}
             </span>
           )}
@@ -120,14 +103,14 @@ export default function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   };
 
   return (
-    <nav className="scrollbar-none flex-1 overflow-y-auto px-3 pb-4">
+    <nav className="scrollbar-none flex-1 overflow-y-auto px-2.5 pb-4">
       {SECTIONS.map((section) => {
         const itemsInSection = visibleNavItems.filter((item) => item.group === section.id);
         if (itemsInSection.length === 0) return null;
         return (
           <div key={section.id}>
             <p className="nav-section-dark">{section.title}</p>
-            <ul className="space-y-1">{itemsInSection.map(renderLink)}</ul>
+            <ul className="space-y-0.5">{itemsInSection.map(renderLink)}</ul>
           </div>
         );
       })}

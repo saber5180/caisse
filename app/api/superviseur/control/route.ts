@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser, ensureDefaultAccountsAndSeed } from '@/lib/auth';
 import { getPool } from '@/lib/db';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,33 +25,46 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { accountId, action } = await req.json();
-    if (!accountId || !['block', 'unblock', 'force_logout'].includes(action)) {
+    const { accountId, caisseCode, action } = await req.json();
+    if ((!accountId && !caisseCode) || !['block', 'unblock', 'force_logout'].includes(action)) {
       return NextResponse.json(
         { error: 'Paramètres de contrôle invalides.' },
         { status: 400 }
       );
     }
 
-    const targetRes = await pool.query(
-      'SELECT id, display_name, caisse_code FROM caisse_accounts WHERE id = $1',
-      [accountId]
-    );
+    const code = String(caisseCode || '').toUpperCase();
+    const targetRes = accountId
+      ? await pool.query(
+          'SELECT id, display_name, caisse_code, username, role FROM caisse_accounts WHERE id = $1',
+          [accountId]
+        )
+      : await pool.query(
+          `SELECT id, display_name, caisse_code, username, role FROM caisse_accounts
+           WHERE UPPER(caisse_code) = $1 AND role = 'cashier'`,
+          [code]
+        );
 
     if (targetRes.rows.length === 0) {
-      return NextResponse.json({ error: 'Caisse introuvable.' }, { status: 404 });
+      return NextResponse.json({ error: 'Compte ou caisse introuvable.' }, { status: 404 });
     }
 
+    if (targetRes.rows.some((row: { role: string }) => row.role === 'admin')) {
+      return NextResponse.json({ error: 'Le compte administrateur ne peut pas être bloqué.' }, { status: 403 });
+    }
+
+    const ids = targetRes.rows.map((row: { id: string }) => row.id);
     const target = targetRes.rows[0];
-    const label = target.caisse_code || target.display_name;
+    const label = code || target.caisse_code || target.username || target.display_name;
 
     if (action === 'block') {
       await pool.query(
         `UPDATE caisse_accounts
          SET is_blocked = TRUE, force_logout_at = NOW(), updated_at = NOW()
-         WHERE id = $1`,
-        [accountId]
+         WHERE id = ANY($1::text[])`,
+        [ids]
       );
+      await logAudit(pool, session, 'account_block', { ids, label, by: session.username }, String(label));
       return NextResponse.json({
         success: true,
         message: `La caisse ${label} a été bloquée à distance et sa session a été déconnectée.`,
@@ -59,21 +73,22 @@ export async function POST(req: NextRequest) {
       await pool.query(
         `UPDATE caisse_accounts
          SET is_blocked = FALSE, updated_at = NOW()
-         WHERE id = $1`,
-        [accountId]
+         WHERE id = ANY($1::text[])`,
+        [ids]
       );
+      await logAudit(pool, session, 'account_unblock', { ids, label, by: session.username }, String(label));
       return NextResponse.json({
         success: true,
         message: `La caisse ${label} a été débloquée et peut à nouveau se connecter.`,
       });
     } else {
-      // force_logout
       await pool.query(
         `UPDATE caisse_accounts
          SET force_logout_at = NOW(), updated_at = NOW()
-         WHERE id = $1`,
-        [accountId]
+         WHERE id = ANY($1::text[])`,
+        [ids]
       );
+      await logAudit(pool, session, 'account_force_logout', { ids, label, by: session.username }, String(label));
       return NextResponse.json({
         success: true,
         message: `Déconnexion forcée envoyée avec succès à la caisse ${label}.`,

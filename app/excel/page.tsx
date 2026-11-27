@@ -224,121 +224,127 @@ export default function ExcelPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="w-full pb-12">
       <PageHeader
-        title="Import & Export Excel"
+        title="Importation & Exportation Excel"
         subtitle={
           canImportExcel
-            ? 'Mise à jour des chauffeurs depuis votre fichier .xlsm ou exportation des rapports'
-            : 'Exportation des rapports. L’importation Excel est réservée aux comptes CRNU et Admin.'
+            ? 'Importation du programme journalier (.xlsx / .xlsm) et exportation des états de caisse'
+            : 'Exportation des états au format Excel. L’importation est réservée à la caisse CRNU et à l’administration.'
         }
         icon={<IconSheet className="h-5 w-5" />}
-        accent="slate"
+        accent="indigo"
       />
 
       {/* Zone Drag & Drop — CRNU et Admin uniquement */}
       {canImportExcel && (
-      <div className="card p-6">
-        <h3 className="card-title text-sm mb-4">Importer un Fichier Excel (.xlsm ou .xlsx)</h3>
+        <div className="card p-5 sm:p-6">
+          <h3 className="text-sm font-bold text-slate-900 mb-3">
+            Importer un fichier de programme (.xlsm ou .xlsx)
+          </h3>
 
-        <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center hover:border-indigo-400 transition-all">
-          <input
-            type="file"
-            accept=".xlsx,.xlsm,.xls"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) processFile(f);
-            }}
-            disabled={uploading}
-            id="excel-file"
-            className="hidden"
-          />
+          <div className="rounded-2xl border-2 border-dashed border-sky-300/80 bg-sky-50/30 p-7 sm:p-9 text-center hover:border-sky-500 hover:bg-sky-50/60 transition-colors">
+            <input
+              type="file"
+              accept=".xlsx,.xlsm,.xls"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) processFile(f);
+              }}
+              disabled={uploading}
+              id="excel-file"
+              className="hidden"
+            />
 
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm ring-1 ring-slate-100">
-            {uploading ? (
-              <span className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
-            ) : (
-              <IconUpload className="h-6 w-6" />
-            )}
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-sky-600 text-white shadow-sm">
+              {uploading ? (
+                <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <IconUpload className="h-5 w-5" />
+              )}
+            </div>
+
+            <p className="mt-3.5 text-base font-bold text-slate-900">
+              {uploading ? 'Analyse et synchronisation en cours…' : 'Sélectionnez votre fichier Excel'}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Colonnes détectées : Nom &amp; Prénom du Chauffeur, Programme de Chauffeur et Code TR
+            </p>
+
+            <label
+              htmlFor="excel-file"
+              className={`btn-primary mt-4 inline-flex cursor-pointer ${
+                uploading ? 'pointer-events-none opacity-50' : ''
+              }`}
+            >
+              <IconFile className="h-4 w-4" />
+              Parcourir les fichiers
+            </label>
           </div>
 
-          <p className="mt-3 text-sm font-semibold text-slate-900">
-            {uploading ? 'Importation en cours...' : 'Sélectionnez votre fichier Excel'}
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Compatible avec TABLEAU_SCALCULE_CAISSE_HICHEJ.xlsm
-          </p>
+          {feedback && (
+            <div
+              className={`mt-4 flex items-center gap-2.5 rounded-xl border p-3.5 text-xs font-semibold ${
+                feedback.type === 'success'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-rose-200 bg-rose-50 text-rose-800'
+              }`}
+            >
+              {feedback.type === 'success' ? (
+                <IconCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+              ) : (
+                <IconAlert className="h-4 w-4 text-rose-600 shrink-0" />
+              )}
+              <p>{feedback.text}</p>
+            </div>
+          )}
 
-          <label
-            htmlFor="excel-file"
-            className={`btn-primary mt-5 inline-flex cursor-pointer ${
-              uploading ? 'pointer-events-none opacity-50' : ''
-            }`}
-          >
-            <IconFile className="h-4 w-4" />
-            Choisir le Fichier
-          </label>
+          {importErrors.length > 0 && (
+            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-900">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-rose-800 mb-2">
+                Erreurs bloquées ({importErrors.length}) :
+              </h4>
+              <ul className="space-y-1.5 text-xs font-medium text-slate-800">
+                {importErrors.map((err, idx) => (
+                  <li
+                    key={idx}
+                    className="rounded-lg bg-white border border-rose-200 px-3 py-2"
+                  >
+                    {err.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-
-        {feedback && (
-          <div
-            className={`mt-4 flex items-center gap-2.5 rounded-xl border p-4 text-sm ${
-              feedback.type === 'success'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                : 'border-rose-200 bg-rose-50 text-rose-800'
-            }`}
-          >
-            {feedback.type === 'success' ? (
-              <IconCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-            ) : (
-              <IconAlert className="h-4 w-4 text-rose-600 shrink-0" />
-            )}
-            <p className="font-medium">{feedback.text}</p>
-          </div>
-        )}
-
-        {importErrors.length > 0 && (
-          <div className="mt-4 rounded-2xl border-2 border-rose-300 bg-rose-50 p-4 text-rose-950">
-            <h4 className="text-xs font-black uppercase tracking-wider text-rose-800 mb-2">
-              Détail des erreurs bloquées ({importErrors.length}) :
-            </h4>
-            <ul className="space-y-1.5 text-xs font-semibold text-rose-900">
-              {importErrors.map((err, idx) => (
-                <li
-                  key={idx}
-                  className="rounded-xl bg-white border border-rose-200 px-3 py-2"
-                >
-                  {err.message}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
       )}
 
       {/* Export Options */}
-      <div className="card mt-6 p-6">
-        <h3 className="card-title text-sm mb-4">Exportation des Données</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-slate-200 p-4">
-            <h4 className="font-semibold text-slate-900 text-sm">Mouvement des Chauffeurs</h4>
-            <p className="mt-1 text-xs text-slate-500">
-              Exporter les {drivers.length} chauffeurs avec statuts et alertes de retard.
-            </p>
-            <button onClick={exportMouvement} className="btn-ghost btn-sm mt-4 w-full">
-              <IconDownload className="h-3.5 w-3.5" />
+      <div className="card mt-5 p-5 sm:p-6">
+        <h3 className="text-sm font-bold text-slate-900 mb-3.5">Exportation des données</h3>
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+            <div>
+              <h4 className="font-bold text-slate-900 text-sm">Mouvement des Chauffeurs</h4>
+              <p className="mt-1 text-xs text-slate-500">
+                Exporter les {drivers.length} chauffeurs avec statuts, circuits et alertes de retard.
+              </p>
+            </div>
+            <button onClick={exportMouvement} className="btn-ghost btn-sm mt-4 w-full bg-white">
+              <IconDownload className="h-3.5 w-3.5 text-sky-600" />
               Télécharger .xlsx
             </button>
           </div>
 
-          <div className="rounded-xl border border-slate-200 p-4">
-            <h4 className="font-semibold text-slate-900 text-sm">Comptage Billetterie</h4>
-            <p className="mt-1 text-xs text-slate-500">
-              Exporter le détail des 12 coupures physiques et l&apos;état du coffre.
-            </p>
-            <button onClick={exportBilletterie} className="btn-ghost btn-sm mt-4 w-full">
-              <IconDownload className="h-3.5 w-3.5" />
+          <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+            <div>
+              <h4 className="font-bold text-slate-900 text-sm">Comptage Billetterie</h4>
+              <p className="mt-1 text-xs text-slate-500">
+                Exporter le détail des 11 coupures en caisse et les totaux de billetterie.
+              </p>
+            </div>
+            <button onClick={exportBilletterie} className="btn-ghost btn-sm mt-4 w-full bg-white">
+              <IconDownload className="h-3.5 w-3.5 text-sky-600" />
               Télécharger .xlsx
             </button>
           </div>

@@ -12,55 +12,58 @@ export type NavItem = {
     | 'calendar'
     | 'receipt'
     | 'sheet'
-    | 'history';
+    | 'history'
+    | 'user';
 };
 
 export const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Tableau de bord', icon: 'dashboard', group: 'workspace' },
-  { href: '/caisse', label: 'Guichet de Caisse', icon: 'calculator', group: 'workspace', accent: 'text-indigo-600' },
-  { href: '/billetterie', label: 'Comptage Billetterie', icon: 'coins', group: 'workspace', accent: 'text-amber-500' },
-  { href: '/billetterie/historique', label: 'Historique Clôtures', icon: 'history', group: 'workspace', accent: 'text-amber-400' },
+  { href: '/caisse', label: 'Guichet Caisse', icon: 'calculator', group: 'workspace' },
+  { href: '/billetterie', label: 'Billetterie', icon: 'coins', group: 'workspace' },
+  { href: '/billetterie/historique', label: 'Clôtures', icon: 'history', group: 'workspace' },
 
   {
     href: '/chauffeurs',
-    label: 'Mouvement Chauffeurs',
+    label: 'Chauffeurs',
     icon: 'truck',
     badgeKey: 'nonPaye',
-    accent: 'text-rose-500',
     group: 'operations',
   },
   {
     href: '/programme',
-    label: 'Programme & Bascule 12h30',
+    label: 'Programme 12:30',
     icon: 'calendar',
-    accent: 'text-sky-500',
     group: 'operations',
   },
 
   {
     href: '/journal',
-    label: 'Journal des Transactions',
+    label: 'Journal',
     icon: 'receipt',
-    accent: 'text-emerald-500',
     group: 'reports',
   },
   {
     href: '/excel',
-    label: 'Import / Export Excel',
+    label: 'Import / Export',
     icon: 'sheet',
-    accent: 'text-slate-500',
+    group: 'reports',
+  },
+  {
+    href: '/admin/comptes',
+    label: 'Comptes',
+    icon: 'user',
     group: 'reports',
   },
 ];
 
 export const PAGE_TITLES: Record<string, string> = {
   '/': 'Tableau de bord',
-  '/caisse': 'Guichet de Caisse (Tableau de Calcule)',
-  '/billetterie': 'Comptage Billetterie & Monnaie (Feuil3)',
-  '/billetterie/historique': 'Historique des Clôtures de Billetterie',
-  '/chauffeurs': 'Mouvement des Chauffeurs',
-  '/programme': 'Programme des Tournées & Bascule 12:30',
-  '/journal': 'Journal des Transactions (Feuil2)',
+  '/caisse': 'Guichet de Caisse',
+  '/billetterie': 'Comptage Billetterie',
+  '/billetterie/historique': 'Historique des Clôtures',
+  '/chauffeurs': 'Chauffeurs',
+  '/programme': 'Programme 12:30',
+  '/journal': 'Journal des Transactions',
   '/excel': 'Import / Export Excel',
+  '/admin/comptes': 'Comptes Utilisateurs',
 };
-

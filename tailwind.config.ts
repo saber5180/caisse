@@ -12,16 +12,16 @@ const config: Config = {
         xs: "420px",
       },
       borderRadius: {
+        sm: "6px",
         md: "8px",
         lg: "10px",
         xl: "12px",
-        "2xl": "16px",
-        "3xl": "20px",
+        "2xl": "14px",
+        "3xl": "16px",
       },
       fontFamily: {
         sans: [
           "Inter",
-          "Plus Jakarta Sans",
           "ui-sans-serif",
           "system-ui",
           "-apple-system",
@@ -29,33 +29,36 @@ const config: Config = {
           "Roboto",
           "sans-serif",
         ],
-        display: ["Plus Jakarta Sans", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: [
+          "Inter",
+          "ui-sans-serif",
+          "system-ui",
+          "sans-serif",
+        ],
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       colors: {
-        canvas: "#F4F6FB",
+        canvas: "#F4F6F9",
         ink: {
-          950: "#070B14",
-          900: "#0B1220",
-          800: "#111A2E",
-          700: "#1A2540",
+          950: "#090D16",
+          900: "#0F172A",
+          800: "#1E293B",
+          700: "#334155",
         },
       },
       boxShadow: {
-        card: "0 1px 2px 0 rgb(15 23 42 / 0.04), 0 4px 16px -4px rgb(15 23 42 / 0.06)",
-        "card-lg":
-          "0 4px 12px -2px rgb(15 23 42 / 0.06), 0 20px 40px -8px rgb(15 23 42 / 0.12)",
-        obsidian:
-          "0 16px 40px -10px rgb(2 6 23 / 0.5), inset 0 1px 0 0 rgb(255 255 255 / 0.06)",
-        focus: "0 0 0 4px rgb(99 102 241 / 0.14)",
+        card: "0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)",
+        "card-lg": "0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04)",
+        obsidian: "0 10px 25px -5px rgb(15 23 42 / 0.25)",
+        focus: "0 0 0 3px rgb(2 132 199 / 0.18)",
       },
       keyframes: {
         "fade-in-up": {
-          from: { opacity: "0", transform: "translateY(8px)" },
+          from: { opacity: "0", transform: "translateY(4px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
         "scale-in": {
-          from: { opacity: "0", transform: "scale(0.96)" },
+          from: { opacity: "0", transform: "scale(0.98)" },
           to: { opacity: "1", transform: "scale(1)" },
         },
         "slide-in-left": {
@@ -64,9 +67,9 @@ const config: Config = {
         },
       },
       animation: {
-        "fade-in-up": "fade-in-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards",
-        "scale-in": "scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) backwards",
-        "slide-in-left": "slide-in-left 0.28s cubic-bezier(0.16, 1, 0.3, 1)",
+        "fade-in-up": "fade-in-up 0.18s ease-out backwards",
+        "scale-in": "scale-in 0.15s ease-out backwards",
+        "slide-in-left": "slide-in-left 0.2s ease-out",
       },
     },
   },

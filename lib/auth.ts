@@ -21,48 +21,14 @@ export interface UserAccount {
 
 export const GLOBAL_FLEET_ACCOUNT_ID = 'acc-admin';
 
-export const OFFICIAL_ACCOUNTS = [
-  {
-    id: 'acc-superviseur',
-    username: 'superviseur',
-    password: 'sup123',
-    displayName: 'Superviseur Général',
-    role: 'superviseur',
-    caisseCode: 'SUP',
-  },
-  {
-    id: 'acc-admin',
-    username: 'admin',
-    password: 'admin123',
-    displayName: 'Administration Générale',
-    role: 'admin',
-    caisseCode: 'ADMIN',
-  },
-  {
-    id: 'acc-crnu',
-    username: 'crnu',
-    password: 'crnu123',
-    displayName: 'Caisse CRNU',
-    role: 'cashier',
-    caisseCode: 'CRNU',
-  },
-  {
-    id: 'acc-crsf',
-    username: 'crsf',
-    password: 'crsf123',
-    displayName: 'Caisse CRSF',
-    role: 'cashier',
-    caisseCode: 'CRSF',
-  },
-  {
-    id: 'acc-crtn',
-    username: 'crtn',
-    password: 'crtn123',
-    displayName: 'Caisse CRTN',
-    role: 'cashier',
-    caisseCode: 'CRTN',
-  },
-] as const;
+const DEFAULT_ADMIN = {
+  id: 'acc-admin',
+  username: 'admin',
+  password: 'admin123',
+  displayName: 'Administration Générale',
+  role: 'admin',
+  caisseCode: 'ADMIN',
+} as const;
 
 export function signToken(user: UserAccount): string {
   return jwt.sign(
@@ -103,32 +69,28 @@ export async function ensureDefaultAccountsAndSeed() {
 
   const pool = getPool();
 
-  for (const acc of OFFICIAL_ACCOUNTS) {
-    const existing = await pool.query(
-      'SELECT id, role, caisse_code FROM caisse_accounts WHERE username = $1',
-      [acc.username]
-    );
+  const existingAdmin = await pool.query(
+    `SELECT id FROM caisse_accounts
+     WHERE LOWER(username) = $1 OR id = $2 OR role = 'admin'
+     LIMIT 1`,
+    [DEFAULT_ADMIN.username, DEFAULT_ADMIN.id]
+  );
 
-    if (existing.rows.length === 0) {
-      const hash = await bcrypt.hash(acc.password, 10);
-      await pool.query(
-        `INSERT INTO caisse_accounts (id, username, password_hash, display_name, role, caisse_code, is_blocked)
-         VALUES ($1, $2, $3, $4, $5, $6, FALSE)
-         ON CONFLICT (id) DO UPDATE SET
-           username = EXCLUDED.username,
-           display_name = EXCLUDED.display_name,
-           role = EXCLUDED.role,
-           caisse_code = EXCLUDED.caisse_code`,
-        [acc.id, acc.username, hash, acc.displayName, acc.role, acc.caisseCode]
-      );
-    } else {
-      await pool.query(
-        `UPDATE caisse_accounts
-         SET display_name = $1, role = $2, caisse_code = $3
-         WHERE username = $4`,
-        [acc.displayName, acc.role, acc.caisseCode, acc.username]
-      );
-    }
+  if (existingAdmin.rows.length === 0) {
+    const hash = await bcrypt.hash(DEFAULT_ADMIN.password, 10);
+    await pool.query(
+      `INSERT INTO caisse_accounts (id, username, password_hash, display_name, role, caisse_code, is_blocked)
+       VALUES ($1, $2, $3, $4, $5, $6, FALSE)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        DEFAULT_ADMIN.id,
+        DEFAULT_ADMIN.username,
+        hash,
+        DEFAULT_ADMIN.displayName,
+        DEFAULT_ADMIN.role,
+        DEFAULT_ADMIN.caisseCode,
+      ]
+    );
   }
 
   accountsInitialized = true;

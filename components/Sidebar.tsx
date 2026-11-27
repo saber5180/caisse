@@ -7,17 +7,14 @@ import { IconCoins, IconLogout } from './Icons';
 
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex min-w-0 items-center gap-3">
-      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-400 via-indigo-600 to-violet-700 text-white shadow-[0_8px_24px_-6px_rgba(99,102,241,0.7)] ring-1 ring-white/20">
-        <IconCoins className="h-5 w-5" />
-        <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-ink-900" />
+    <div className="flex min-w-0 items-center gap-2.5">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white">
+        <IconCoins className="h-4 w-4" />
       </div>
       {!compact && (
         <div className="min-w-0">
-          <p className="truncate font-display text-[15px] font-extrabold tracking-tight text-white">
-            Caisse<span className="text-gradient-brand">Pro</span>
-          </p>
-          <p className="truncate text-[11px] font-medium text-slate-400">Trésorerie &amp; Flotte</p>
+          <p className="truncate text-sm font-bold tracking-tight text-white">CaissePro</p>
+          <p className="truncate text-[11px] text-slate-400">CRNU · CRSF · CRTN</p>
         </div>
       )}
     </div>
@@ -59,58 +56,56 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[17rem] flex-col border-r border-white/[0.06] bg-obsidian-mesh text-white lg:flex">
-      <div className="flex h-16 items-center px-5">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[15.5rem] flex-col border-r border-slate-800 bg-slate-900 text-white lg:flex">
+      <div className="flex h-14 items-center border-b border-slate-800 px-4">
         <BrandMark />
       </div>
 
       <NavLinks />
 
-      <div className="space-y-3 p-3">
-        {/* Jauge d'encaissement */}
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.04] p-3.5">
+      <div className="space-y-2.5 border-t border-slate-800 p-3">
+        <div className="rounded-lg bg-slate-800/80 p-3">
           <div className="flex items-center justify-between text-[11px]">
-            <span className="font-semibold uppercase tracking-wider text-slate-400">Encaissement</span>
-            <span className="font-mono text-sm font-bold text-emerald-400">{settledRate}%</span>
+            <span className="font-medium text-slate-400">Encaissement</span>
+            <span className="font-mono font-bold text-emerald-400">{settledRate}%</span>
           </div>
-          <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-700">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-indigo-400 via-sky-400 to-emerald-400 transition-all duration-700"
+              className="h-full rounded-full bg-emerald-500 transition-all duration-500"
               style={{ width: `${settledRate}%` }}
             />
           </div>
-          <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
             <span>
-              Flotte <strong className="font-mono text-white">{drivers.length}</strong>
+              Flotte : <strong className="font-mono text-white">{drivers.length}</strong>
             </span>
-            <span className={`font-semibold ${nonPayes > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+            <span className={nonPayes > 0 ? 'font-semibold text-rose-400' : 'text-emerald-400'}>
               {nonPayes} impayé{nonPayes > 1 ? 's' : ''}
             </span>
           </div>
         </div>
 
-        {/* Compte actif */}
         {currentUser && (
-          <div className="flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.04] p-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-extrabold text-white ring-1 ring-white/20">
+          <div className="flex items-center gap-2.5 rounded-lg bg-slate-800/80 p-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-sky-600 text-xs font-bold text-white">
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold text-white">{currentUser.displayName}</p>
+              <p className="truncate text-xs font-semibold text-white">{currentUser.displayName}</p>
               <p className="flex items-center gap-1.5 truncate text-[10.5px] text-slate-400">
                 <span
                   className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                    isSyncing ? 'animate-pulse bg-amber-400' : 'bg-emerald-400'
+                    isSyncing ? 'animate-pulse bg-sky-400' : 'bg-emerald-400'
                   }`}
                 />
-                {isSyncing ? 'Synchronisation…' : lastSyncTime ? `Sync ${lastSyncTime}` : 'Connecté'}
+                {isSyncing ? 'Sync…' : lastSyncTime ? `Sync ${lastSyncTime}` : 'En ligne'}
               </p>
             </div>
             <button
               type="button"
               onClick={handleLogout}
               title="Se déconnecter"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-500/15 hover:text-rose-300"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-700 hover:text-rose-400"
             >
               <IconLogout className="h-4 w-4" />
             </button>

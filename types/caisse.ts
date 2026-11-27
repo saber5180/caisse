@@ -23,8 +23,18 @@ export interface Driver {
   jourPaye?: boolean;
   /** Caisse qui a encaissé le dernier règlement : CRNU, CRSF ou CRTN. */
   caissePaye?: string;
+  /** Opérateur (pseudo / nom) qui a encaissé. */
+  payePar?: string;
   /** Heure du dernier encaissement. Le compteur Payé repart à 0 après 12:30. */
   payeLe?: string;
+}
+
+export interface FleetPayment {
+  tr: string;
+  caisseCode: string;
+  operatorUsername: string;
+  operatorName: string;
+  date: string;
 }
 
 export interface ProgramEntry {
@@ -36,6 +46,7 @@ export interface ProgramEntry {
   j1?: boolean;
   /** Caisse qui a encaissé cette tournée : CRNU, CRSF ou CRTN. */
   caisseCode?: string;
+  paidBy?: string;
 }
 
 export interface CashDeskRow {
@@ -60,6 +71,7 @@ export interface CashTransaction {
   status: string;
   caisseCode?: string; // 'CRNU' | 'CRSF' | 'CRTN' | 'ADMIN'
   caisseName?: string;
+  operatorUsername?: string;
   accountId?: string;
   rows?: CashDeskRow[];
   rawData?: any;

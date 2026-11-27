@@ -254,7 +254,7 @@ function CaissePayePill({ code }: { code?: string }) {
   const label = paidAtNormalCaisse(code);
   const tone = caissePillTone(label);
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11px] font-black tracking-[0.14em] ring-1 ${tone.chip}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 font-mono text-[11px] font-black tracking-[0.14em] ring-1 ${tone.chip}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
       {label || 'PAYÉ'}
     </span>
@@ -270,12 +270,12 @@ function dayListStatut(driver: Driver, isStandby: boolean, overdue: boolean) {
 
 function DayStatutBadge({ label }: { label: string }) {
   const cls = label.startsWith('PAYÉ')
-    ? 'badge-solid-emerald'
+    ? 'badge-emerald'
     : label === 'EN COURS'
-    ? 'badge bg-sky-50 text-sky-800 ring-1 ring-sky-200'
+    ? 'badge bg-sky-50 text-sky-800 border border-sky-200'
     : label === 'NON PAYÉ'
-    ? 'badge-solid-rose'
-    : 'badge-solid-amber';
+    ? 'badge-rose'
+    : 'badge-slate';
   return <span className={`${cls} shrink-0`}>{label}</span>;
 }
 
@@ -602,13 +602,13 @@ export default function ProgrammePage() {
   return (
     <>
       <PageHeader
-        title="Programme de Chauffeur & Suivi des Retards (12:30)"
-        subtitle="Import Excel du programme du jour, création automatique des programmes & nouveaux chauffeurs, et historique des caisses non payées"
-        badge={`${drivers.length} Chauffeurs · ${activeProgrammeDrivers.length} Tournées actives`}
+        title="Programme du Jour & Bascule 12:30"
+        subtitle="Importation Excel des tournées, suivi de la journée en cours et historique des caisses non payées par jour"
+        badge={`${drivers.length} Chauffeurs · ${activeProgrammeDrivers.length} En tournée`}
         icon={<IconCalendar className="h-5 w-5" />}
         accent="sky"
         actions={
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
             {canRectify && (
               <button
                 type="button"
@@ -618,9 +618,9 @@ export default function ProgrammePage() {
                   setAddQuery('');
                   setAddOpen(true);
                 }}
-                className="font-semibold text-indigo-800 underline decoration-indigo-300 underline-offset-4 hover:decoration-indigo-800"
+                className="btn-ghost !py-2 !text-xs font-semibold"
               >
-                Ajouter un chauffeur
+                + Ajouter un chauffeur
               </button>
             )}
             {canManageProgramme && (
@@ -638,17 +638,17 @@ export default function ProgrammePage() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
+                  className="btn-primary !py-2 !text-xs font-bold"
                 >
                   Importer Excel
                 </button>
                 <button
                   type="button"
                   onClick={handleBascule}
-                  className="font-semibold text-amber-800 underline decoration-amber-300 underline-offset-4 hover:decoration-amber-800"
+                  className="btn-dark !py-2 !text-xs font-bold"
                   title="Bascule manuelle vers la nouvelle journée"
                 >
-                  Bascule
+                  Bascule 12:30
                 </button>
               </>
             )}
@@ -656,15 +656,15 @@ export default function ProgrammePage() {
         }
       />
 
-      {/* Bandeau d'Import Excel & Règle de Calcul du Retard après 12:30 Demain */}
-      <div className="mb-6 border-y border-slate-200 py-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      {/* Bandeau Règle 12:30 & Messages d'import */}
+      <div className="card mb-5 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-              Feuille du jour · échéance demain 12:30
+            <p className="text-[11px] font-bold uppercase tracking-wider text-sky-700">
+              Règle d&apos;échéance · Demain 12:30
             </p>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">
-              Colonnes lues dans Excel : nom, programme, code TR. La journée ne passe en non payé qu&apos;après 12:30 le lendemain.
+            <p className="mt-0.5 max-w-2xl text-xs text-slate-600">
+              Colonnes lues dans Excel : Nom, Programme, Code TR. Une tournée du jour passe en non payé uniquement après 12:30 le lendemain.
             </p>
           </div>
           {canManageProgramme && (
@@ -675,7 +675,7 @@ export default function ProgrammePage() {
                 setWipePassword('');
                 setWipeOpen(true);
               }}
-              className="self-start text-xs font-medium text-rose-700 underline decoration-rose-200 underline-offset-4 hover:decoration-rose-700 lg:self-end"
+              className="btn-ghost self-start !h-8 !text-xs font-semibold text-rose-600 hover:!border-rose-200 hover:!bg-rose-50 lg:self-center"
             >
               Vider chauffeurs et historiques
             </button>
@@ -684,17 +684,17 @@ export default function ProgrammePage() {
 
         {importMsg && (
           <div
-            className={`relative z-10 mt-4 flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-xs font-bold ${
+            className={`mt-3 flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-xs font-semibold ${
               importMsg.type === 'success'
-                ? 'border-emerald-400/40 bg-emerald-950/90 text-emerald-200'
-                : 'border-rose-400/50 bg-rose-950/90 text-rose-200'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border-rose-200 bg-rose-50 text-rose-800'
             }`}
           >
             <span>{importMsg.text}</span>
             <button
               type="button"
               onClick={() => setImportMsg(null)}
-              className="ml-2 text-slate-300 hover:text-white"
+              className="ml-2 text-current opacity-70 hover:opacity-100"
             >
               <IconClose className="h-4 w-4" />
             </button>
@@ -702,30 +702,30 @@ export default function ProgrammePage() {
         )}
 
         {importErrors.length > 0 && (
-          <div className="relative z-10 mt-4 rounded-2xl border-2 border-rose-400 bg-rose-950/95 p-4 text-rose-100 shadow-lg">
-            <div className="flex items-center justify-between gap-2 mb-2.5">
+          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-rose-900">
+            <div className="flex items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
-                <IconAlert className="h-5 w-5 text-rose-400 shrink-0" />
-                <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-200">
-                  Erreurs détectées lors de la vérification du fichier Excel ({importErrors.length} ligne{importErrors.length > 1 ? 's' : ''} bloquée{importErrors.length > 1 ? 's' : ''})
+                <IconAlert className="h-4 w-4 text-rose-600 shrink-0" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-rose-800">
+                  Lignes bloquées à la vérification ({importErrors.length})
                 </h4>
               </div>
               <button
                 type="button"
                 onClick={() => setImportErrors([])}
-                className="text-xs font-bold text-rose-300 hover:text-white"
+                className="text-xs font-bold text-rose-700 hover:underline"
               >
                 Fermer
               </button>
             </div>
-            <ul className="space-y-1.5 text-xs font-semibold">
+            <ul className="space-y-1.5 text-xs">
               {importErrors.map((err, idx) => (
                 <li
                   key={idx}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/10 border border-rose-400/30 px-3 py-2 text-white"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white border border-rose-200 px-3 py-2 text-slate-800"
                 >
                   <span>{err.message}</span>
-                  <span className="badge-solid-rose font-mono text-[10px] shrink-0">
+                  <span className="badge-rose font-mono text-[10px] shrink-0">
                     {err.type === 'DUPLICATE_TR_IN_FILE'
                       ? `TR ${err.tr} EN DOUBLE`
                       : `CONFLIT NOM TR ${err.tr}`}
@@ -738,20 +738,24 @@ export default function ProgrammePage() {
       </div>
 
       {/* KPI Résumé du Programme du Jour */}
-      <div className="mb-8 grid grid-cols-2 gap-x-6 gap-y-4 border-b border-slate-200 pb-6 sm:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <button
           type="button"
           onClick={() => {
             setOpenList('day');
             setFilterCircuit('');
           }}
-          className="text-left"
+          className={`card card-hover p-3.5 sm:p-4 text-left ${
+            filterCircuit === '' && openList === 'day'
+              ? 'ring-2 ring-sky-600 border-sky-300 bg-sky-50/20'
+              : ''
+          }`}
         >
-          <p className="font-mono text-3xl font-medium tracking-tight text-slate-900 underline decoration-slate-300 underline-offset-4">
-            {dayDrivers.length}
-          </p>
-          <p className={`mt-1 text-xs underline underline-offset-4 ${filterCircuit === '' && openList === 'day' ? 'font-semibold text-slate-900 decoration-slate-900' : 'text-slate-500 decoration-slate-300'}`}>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
             Programme du jour
+          </p>
+          <p className="mt-1.5 num text-2xl font-extrabold text-slate-900">
+            {dayDrivers.length}
           </p>
         </button>
         <button
@@ -760,13 +764,17 @@ export default function ProgrammePage() {
             setOpenList('day');
             setFilterCircuit('__ACTIVE__');
           }}
-          className="text-left"
+          className={`card card-hover p-3.5 sm:p-4 text-left ${
+            filterCircuit === '__ACTIVE__' && openList === 'day'
+              ? 'ring-2 ring-sky-600 border-sky-300 bg-sky-50/20'
+              : ''
+          }`}
         >
-          <p className="font-mono text-3xl font-medium tracking-tight text-sky-800 underline decoration-sky-200 underline-offset-4">
-            {activeProgrammeDrivers.length}
-          </p>
-          <p className={`mt-1 text-xs underline underline-offset-4 ${filterCircuit === '__ACTIVE__' && openList === 'day' ? 'font-semibold text-sky-900 decoration-sky-700' : 'text-slate-500 decoration-slate-300'}`}>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-sky-700">
             En tournée
+          </p>
+          <p className="mt-1.5 num text-2xl font-extrabold text-sky-700">
+            {activeProgrammeDrivers.length}
           </p>
         </button>
         <button
@@ -775,13 +783,15 @@ export default function ProgrammePage() {
             setOpenList('standby');
             setFilterCircuit('');
           }}
-          className="text-left"
+          className={`card card-hover p-3.5 sm:p-4 text-left ${
+            openList === 'standby' ? 'ring-2 ring-slate-600 border-slate-300 bg-slate-50' : ''
+          }`}
         >
-          <p className="font-mono text-3xl font-medium tracking-tight text-amber-800 underline decoration-amber-300 underline-offset-4">
-            {standbyDrivers.length}
-          </p>
-          <p className={`mt-1 text-xs underline underline-offset-4 ${openList === 'standby' ? 'font-semibold text-amber-900 decoration-amber-700' : 'text-slate-500 decoration-slate-300'}`}>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
             Stand-by
+          </p>
+          <p className="mt-1.5 num text-2xl font-extrabold text-slate-800">
+            {standbyDrivers.length}
           </p>
         </button>
         <button
@@ -790,13 +800,13 @@ export default function ProgrammePage() {
             setHistoryFilter('UNPAID');
             document.getElementById('programme-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
-          className="text-left"
+          className="card card-hover p-3.5 sm:p-4 text-left"
         >
-          <p className="font-mono text-3xl font-medium tracking-tight text-rose-800 underline decoration-rose-200 underline-offset-4">
-            {totalUnpaidHistoryCount}
+          <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700">
+            Historique impayées
           </p>
-          <p className="mt-1 text-xs text-slate-500 underline decoration-slate-300 underline-offset-4">
-            Impayées, historique seul
+          <p className="mt-1.5 num text-2xl font-extrabold text-rose-600">
+            {totalUnpaidHistoryCount}
           </p>
         </button>
       </div>
@@ -864,8 +874,8 @@ export default function ProgrammePage() {
           />
         ) : (
           <>
-            {/* Responsive Cards View for Mobile & Tablet / Compact Screens (xl:hidden) */}
-            <div className="grid grid-cols-1 gap-3 p-3.5 sm:p-4 md:grid-cols-2 max-h-[600px] overflow-y-auto xl:hidden bg-slate-50/40">
+            {/* Liste compacte & responsive Mobile / Tablette / Laptop < 1280px (xl:hidden) */}
+            <div className="divide-y divide-slate-100 xl:hidden">
               {shownDrivers.map((d) => {
                 const prog = (d.programmeJour || d.circuitActuel || 'STAND-BY').trim() || 'STAND-BY';
                 const isStandby = prog.toUpperCase() === 'STAND-BY';
@@ -876,99 +886,85 @@ export default function ProgrammePage() {
                 return (
                   <div
                     key={d.id}
-                    className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm hover:border-indigo-300 transition-all flex flex-col justify-between gap-3"
+                    className="p-3.5 sm:px-5 hover:bg-slate-50/70 transition-colors space-y-2.5"
                   >
-                    <div>
-                      <div className="flex items-start justify-between gap-2 mb-2.5">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="shrink-0 rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-black text-white">
-                            TR {d.tr}
-                          </span>
-                          <p className="truncate text-sm font-extrabold text-slate-900" title={d.nom}>
-                            {d.nom}
-                          </p>
-                        </div>
-                        <DayStatutBadge label={dayStatut} />
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="shrink-0 rounded bg-slate-900 px-2 py-0.5 font-mono text-[11px] font-bold text-white">
+                          TR {d.tr}
+                        </span>
+                        <p className="truncate text-sm font-bold text-slate-900" title={d.nom}>
+                          {d.nom}
+                        </p>
                       </div>
-
-                      <div className="space-y-2 rounded-xl bg-slate-50/90 border border-slate-100 p-2.5">
-                        <div>
-                          <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">
-                            Programme de Chauffeur (Jour)
-                          </label>
-                          <select
-                            value={prog}
-                            onChange={(e) => assignCircuit(d.id, e.target.value)}
-                            className={`select !min-h-9 !w-full !py-1 !pl-3 !pr-8 !text-xs font-extrabold ${
-                              isStandby
-                                ? 'border-amber-200 bg-amber-50/70 text-amber-900'
-                                : 'border-sky-300 bg-sky-50/80 text-sky-950'
-                            }`}
-                          >
-                            <option value="STAND-BY">STAND-BY</option>
-                            {allCircuits
-                              .filter((c) => c !== 'STAND-BY')
-                              .map((c) => (
-                                <option key={c} value={c}>
-                                  {c}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-
-                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-                          <div>
-                            {isStandby ? (
-                              <span className="text-xs font-medium text-slate-400">Stand-by aujourd&apos;hui</span>
-                            ) : isJourPaye(d) ? (
-                              <CaissePayePill code={d.caissePaye} />
-                            ) : retardInfo.isOverdue ? (
-                              <span className="text-xs font-extrabold text-rose-600">
-                                ⚠️ Retard : {retardInfo.text}
-                              </span>
-                            ) : (
-                              <span className="text-xs font-bold text-sky-700">
-                                🕒 {retardInfo.text}
-                              </span>
-                            )}
-                          </div>
-
-                          <div>
-                            {historyUnpaid > 0 ? (
-                              <span className="badge-solid-rose font-bold text-[10px]">
-                                {historyUnpaid} non payée{historyUnpaid > 1 ? 's' : ''}
-                              </span>
-                            ) : (
-                              <span className="badge-emerald font-bold text-[10px]">0 impayé</span>
-                            )}
-                          </div>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <DayStatutBadge label={dayStatut} />
+                        <Link
+                          href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
+                          className="btn-primary !h-7 !px-2.5 !text-xs font-bold"
+                        >
+                          Guichet
+                        </Link>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end border-t border-slate-100 pt-2">
-                      <Link
-                        href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                        className="text-xs font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <select
+                        value={prog}
+                        onChange={(e) => assignCircuit(d.id, e.target.value)}
+                        className={`select !h-9 !min-h-9 !w-full sm:!w-64 !py-1 !pl-3 !pr-8 !text-xs font-bold ${
+                          isStandby
+                            ? 'border-slate-200 bg-slate-50 text-slate-700'
+                            : 'border-sky-300 bg-sky-50/70 text-sky-900'
+                        }`}
                       >
-                        Guichet
-                      </Link>
+                        <option value="STAND-BY">STAND-BY</option>
+                        {allCircuits
+                          .filter((c) => c !== 'STAND-BY')
+                          .map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                      </select>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {isStandby ? (
+                          <span className="text-slate-400">Stand-by</span>
+                        ) : isJourPaye(d) ? (
+                          <CaissePayePill code={d.caissePaye} />
+                        ) : retardInfo.isOverdue ? (
+                          <span className="font-bold text-rose-600">
+                            Retard : {retardInfo.text}
+                          </span>
+                        ) : (
+                          <span className="text-slate-600">{retardInfo.text}</span>
+                        )}
+
+                        {historyUnpaid > 0 ? (
+                          <span className="badge-rose font-bold text-[10px]">
+                            {historyUnpaid} impayée{historyUnpaid > 1 ? 's' : ''}
+                          </span>
+                        ) : (
+                          <span className="badge-emerald font-bold text-[10px]">0 impayé</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Desktop Pro Table View (hidden xl:block) */}
-            <div className="table-wrap hidden max-h-[600px] overflow-y-auto xl:block">
+            {/* Tableau Grand Écran (hidden xl:block) */}
+            <div className="table-wrap hidden xl:block">
               <table className="data-table">
-                <thead className="sticky top-0 z-10 bg-slate-50/95 shadow-[0_1px_0_rgba(226,232,240,1)]">
+                <thead>
                   <tr>
                     <th className="w-24">Code TR</th>
-                    <th className="min-w-[180px]">Nom &amp; Prénom du Chauffeur</th>
-                    <th className="w-60">Programme de Chauffeur (Jour)</th>
-                    <th className="w-56">Échéance 12:30 Demain / Retard</th>
-                    <th className="w-36 !text-center">Caisses Impayées</th>
+                    <th>Chauffeur</th>
+                    <th className="w-60">Programme du jour</th>
+                    <th className="w-52">Échéance 12:30 / Retard</th>
+                    <th className="w-36 !text-center">Historique impayés</th>
                     <th className="w-32">Statut</th>
                     <th className="w-28 !text-right">Action</th>
                   </tr>
@@ -979,28 +975,28 @@ export default function ProgrammePage() {
                     const isStandby = prog.toUpperCase() === 'STAND-BY';
                     const retardInfo = calculateRetardFrom1230(d.programmeDate || d.dateDerniere);
                     const historyUnpaid = historyUnpaidCount(d);
-                const dayStatut = dayListStatut(d, isStandby, retardInfo.isOverdue);
+                    const dayStatut = dayListStatut(d, isStandby, retardInfo.isOverdue);
 
                     return (
-                      <tr key={d.id} className="hover:bg-indigo-50/35 transition-colors">
-                        <td className="!py-3">
-                          <span className="inline-flex rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-extrabold text-white shadow-sm">
+                      <tr key={d.id}>
+                        <td>
+                          <span className="inline-flex rounded bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-white">
                             TR {d.tr}
                           </span>
                         </td>
-                        <td className="!py-3">
-                          <p className="font-extrabold text-slate-900 text-xs sm:text-[13px] truncate max-w-[230px]" title={d.nom}>
+                        <td>
+                          <p className="font-bold text-slate-900 text-xs sm:text-[13px] truncate max-w-[230px]" title={d.nom}>
                             {d.nom}
                           </p>
                         </td>
-                        <td className="!py-3">
+                        <td>
                           <select
                             value={prog}
                             onChange={(e) => assignCircuit(d.id, e.target.value)}
-                            className={`select !min-h-9 !w-full !py-1 !pl-3 !pr-8 !text-xs font-extrabold ${
+                            className={`select !h-9 !min-h-9 !w-full !py-1 !pl-3 !pr-8 !text-xs font-bold ${
                               isStandby
-                                ? 'border-amber-200 bg-amber-50/70 text-amber-900'
-                                : 'border-sky-300 bg-sky-50/80 text-sky-950'
+                                ? 'border-slate-200 bg-slate-50 text-slate-700'
+                                : 'border-sky-300 bg-sky-50/70 text-sky-900'
                             }`}
                           >
                             <option value="STAND-BY">STAND-BY</option>
@@ -1013,41 +1009,41 @@ export default function ProgrammePage() {
                               ))}
                           </select>
                         </td>
-                        <td className="!py-3">
+                        <td>
                           {isStandby ? (
-                            <span className="text-xs font-medium text-slate-400">
+                            <span className="text-xs text-slate-400">
                               Stand-by aujourd&apos;hui
                             </span>
                           ) : isJourPaye(d) ? (
                             <CaissePayePill code={d.caissePaye} />
                           ) : retardInfo.isOverdue ? (
-                            <span className="inline-flex items-center gap-1 rounded-lg bg-rose-100 border border-rose-200 px-2.5 py-1 text-[11px] font-extrabold text-rose-700">
-                              ⚠️ Retard : {retardInfo.text}
+                            <span className="inline-flex items-center rounded bg-rose-50 border border-rose-200 px-2 py-0.5 text-[11px] font-bold text-rose-700">
+                              Retard : {retardInfo.text}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-lg bg-sky-50 border border-sky-200 px-2.5 py-1 text-[11px] font-bold text-sky-800">
-                              🕒 {retardInfo.text}
+                            <span className="inline-flex items-center rounded bg-sky-50 border border-sky-200 px-2 py-0.5 text-[11px] font-semibold text-sky-800">
+                              {retardInfo.text}
                             </span>
                           )}
                         </td>
-                        <td className="!py-3 text-center">
+                        <td className="text-center">
                           {historyUnpaid > 0 ? (
-                            <span className="badge-solid-rose font-bold text-[11px]">
+                            <span className="badge-rose font-bold text-[11px]">
                               {historyUnpaid} non payée{historyUnpaid > 1 ? 's' : ''}
                             </span>
                           ) : (
                             <span className="badge-emerald font-bold text-[11px]">0 impayé</span>
                           )}
                         </td>
-                        <td className="!py-3">
+                        <td>
                           <DayStatutBadge label={dayStatut} />
                         </td>
-                        <td className="!py-3 text-right">
+                        <td className="text-right">
                           <Link
                             href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                            className="text-xs font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
+                            className="btn-primary !h-8 !px-3 !text-xs font-bold"
                           >
-                            Guichet
+                            Guichet →
                           </Link>
                         </td>
                       </tr>
@@ -1061,41 +1057,41 @@ export default function ProgrammePage() {
       </div>
 
       {/* =====================================================================
-          SECTION 2 (BAS) : HISTORIQUE DES ANCIENS PROGRAMMES & CAISSES NON PAYÉES
+          SECTION 2 (BAS) : HISTORIQUE DES ANCIENS PROGRAMMES & CAISSES NON PAYÉES PAR JOUR
       ===================================================================== */}
-      <div id="programme-history" className="mt-10 overflow-hidden scroll-mt-24">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div id="programme-history" className="card mt-6 overflow-hidden scroll-mt-24">
+        <div className="card-header flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="card-title text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <IconAlert className="h-5 w-5 text-rose-600 shrink-0" />
+              <IconAlert className="h-4 w-4 text-rose-600 shrink-0" />
               <span>2. Historique des Programmes &amp; Caisses Non Payées ({historyRows.length})</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Programmes antérieurs non payés et stand-by non payés. Le programme du jour n&apos;apparaît pas dans ce tableau.
+              Regroupé jour par jour (chaque journée reste séparée).
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-            <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 text-xs">
               <button
                 type="button"
                 onClick={() => setHistoryFilter('UNPAID')}
-                className={
+                className={`rounded-md px-3 py-1 font-bold transition ${
                   historyFilter === 'UNPAID'
-                    ? 'font-semibold text-rose-800 underline decoration-rose-300 underline-offset-4'
-                    : 'text-slate-500 hover:text-slate-800'
-                }
+                    ? 'bg-rose-600 text-white'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
                 Impayées
               </button>
               <button
                 type="button"
                 onClick={() => setHistoryFilter('ALL')}
-                className={
+                className={`rounded-md px-3 py-1 font-bold transition ${
                   historyFilter === 'ALL'
-                    ? 'font-semibold text-slate-900 underline decoration-slate-400 underline-offset-4'
-                    : 'text-slate-500 hover:text-slate-800'
-                }
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
                 Tout l&apos;historique
               </button>
@@ -1105,163 +1101,195 @@ export default function ProgrammePage() {
               type="text"
               value={historySearch}
               onChange={(e) => setHistorySearch(e.target.value)}
-              placeholder="Filtrer historique (TR, nom, circuit)..."
-              className="input !min-h-9 !py-1.5 !text-xs sm:w-56 bg-white"
+              placeholder="Filtrer (TR, nom, circuit)..."
+              className="input !h-9 !min-h-9 !py-1.5 !text-xs sm:w-56 bg-white"
             />
           </div>
         </div>
 
         {historyRows.length === 0 ? (
           <div className="py-10 text-center text-xs text-slate-400">
-            Aucune caisse non payée dans l&apos;historique pour ce filtre.
+            Aucune caisse dans l&apos;historique pour ce filtre.
           </div>
         ) : (
           <>
-            {/* Mobile / Tablet Cards for History (lg:hidden) */}
-<div className="max-h-[520px] space-y-4 overflow-y-auto bg-rose-50/10 p-3.5 sm:p-4 lg:hidden">
-{historyGroups.map((g) => (<div key={g.day}><div className="mb-2 flex flex-col gap-1 rounded-xl bg-slate-900 px-3.5 py-2 text-white sm:flex-row sm:items-center sm:justify-between"><span className="text-xs font-extrabold uppercase tracking-wider">{g.label}</span><span className="text-[11px] font-bold text-slate-300">{g.rows.length} ligne(s) · {g.unpaid} non payée(s)</span></div><div className="grid grid-cols-1 gap-3 md:grid-cols-2">{g.rows.map((row) => (
-                <div
-                  key={row.key}
-                  className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-2.5"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="shrink-0 rounded-lg bg-slate-900 px-2 py-0.5 font-mono text-xs font-black text-white">
-                        TR {row.tr}
-                      </span>
-                      <p className="truncate text-xs sm:text-sm font-extrabold text-slate-900">{row.nom}</p>
-                    </div>
-                    {row.paid ? (
-                      <span className="badge-solid-emerald text-[10px]">{row.statusLabel}</span>
-                    ) : (
-                      <span className="badge-solid-rose text-[10px]">{row.statusLabel}</span>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <span className="badge-indigo font-bold text-[11px]">{row.circuit}</span>
-                      {row.isCurrent && (
-                        <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
-                          Jour
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[11px] text-slate-500 font-medium">{formatDate(row.date)}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <span
-                      className={`text-xs font-bold ${
-                        row.paid
-                          ? 'text-emerald-600'
-                          : row.isOverdue
-                          ? 'text-rose-600'
-                          : 'text-sky-700'
-                      }`}
-                    >
-                      {row.retardText}
+            {/* Liste groupée par jour Mobile / Tablette / Laptop < 1280px (xl:hidden) */}
+            <div className="space-y-4 p-3.5 sm:p-4 xl:hidden">
+              {historyGroups.map((g) => (
+                <div key={g.day} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 px-3.5 py-2.5 text-white">
+                    <span className="text-xs font-bold capitalize">{g.label}</span>
+                    <span className="font-mono text-[11px] font-semibold text-slate-300">
+                      {g.rows.length} ligne(s) · {g.unpaid} non payée(s)
                     </span>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {g.rows.map((row) => (
+                      <div key={row.key} className="p-3 sm:px-4 space-y-2 hover:bg-slate-50/70">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="shrink-0 rounded bg-slate-900 px-2 py-0.5 font-mono text-[11px] font-bold text-white">
+                              TR {row.tr}
+                            </span>
+                            <p className="truncate text-xs sm:text-sm font-bold text-slate-900">{row.nom}</p>
+                            <span className="badge-indigo font-semibold text-[11px]">{row.circuit}</span>
+                          </div>
+                          {row.paid ? (
+                            <span className="badge-emerald text-[10px]">{row.statusLabel}</span>
+                          ) : (
+                            <span className="badge-rose text-[10px]">{row.statusLabel}</span>
+                          )}
+                        </div>
 
-                    {!row.paid && (
-                      <div className="flex items-center gap-1.5">
-                        <Link
-                          href={`/caisse?tr=${encodeURIComponent(row.tr)}`}
-                          className="text-[11px] font-semibold text-slate-800 underline decoration-slate-300 underline-offset-4"
-                        >
-                          Encaisser
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => markProgramEntryPaid(row.driverId, row.entryId)}
-                          className="text-[11px] font-semibold text-emerald-800 underline decoration-emerald-300 underline-offset-4"
-                        >
-                          ✓ Payé
-                        </button>
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <span
+                            className={`font-semibold ${
+                              row.paid
+                                ? 'text-emerald-600'
+                                : row.isOverdue
+                                ? 'text-rose-600'
+                                : 'text-slate-600'
+                            }`}
+                          >
+                            {formatDate(row.date)} · {row.retardText}
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            {!row.paid && (
+                              <>
+                                <Link
+                                  href={`/caisse?tr=${encodeURIComponent(row.tr)}`}
+                                  className="rounded-lg bg-sky-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-sky-700"
+                                >
+                                  Encaisser
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => markProgramEntryPaid(row.driverId, row.entryId)}
+                                  className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700"
+                                >
+                                  ✓ Payé
+                                </button>
+                              </>
+                            )}
+                            <button
+                              type="button"
+                              title="Supprimer ce programme"
+                              onClick={() => {
+                                if (confirm('Supprimer ce programme ?')) deleteProgramEntry(row.driverId, row.entryId);
+                              }}
+                              className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100"
+                            >
+                              Supprimer
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                    <button type="button" title="Supprimer ce programme" onClick={() => { if (confirm(`Supprimer ce programme ?`)) deleteProgramEntry(row.driverId, row.entryId); }} className="text-[11px] font-medium text-rose-700 underline decoration-rose-200 underline-offset-4">Supprimer</button>
+                    ))}
                   </div>
                 </div>
-))}</div></div>))}
+              ))}
             </div>
 
-            {/* Desktop Table for History (hidden lg:block) */}
-            <div className="table-wrap hidden max-h-[520px] overflow-y-auto lg:block">
+            {/* Tableau Grand Écran pour l'Historique (hidden xl:block) */}
+            <div className="table-wrap hidden xl:block">
               <table className="data-table">
-                <thead className="sticky top-0 z-10 bg-slate-50/95">
+                <thead>
                   <tr>
                     <th className="w-24">Code TR</th>
                     <th>Chauffeur</th>
                     <th>Programme / Caisse</th>
-                    <th>Date du Programme</th>
+                    <th>Date</th>
                     <th>Retard (Après 12:30 J+1)</th>
                     <th>État</th>
                     <th className="!text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-{historyGroups.map((g) => (<Fragment key={g.day}><tr className="bg-slate-900 text-white"><td colSpan={7} className="!py-2.5 !px-4"><div className="flex items-center justify-between"><span className="text-xs font-extrabold uppercase tracking-wider">📅 {g.label}</span><span className="text-[11px] font-bold text-slate-300">{g.rows.length} ligne(s) · {g.unpaid} non payée(s)</span></div></td></tr>{g.rows.map((row) => (
-                    <tr key={row.key} className="hover:bg-slate-50/80">
-                      <td className="!py-3">
-                        <span className="font-mono text-xs font-black text-white bg-slate-900 px-2.5 py-1 rounded-lg">
-                          TR {row.tr}
-                        </span>
-                      </td>
-                      <td className="!py-3 font-extrabold text-slate-900 text-xs sm:text-[13px]">{row.nom}</td>
-                      <td className="!py-3">
-                        <span className="badge-indigo font-bold text-xs">{row.circuit}</span>
-                        {row.isCurrent && (
-                          <span className="ml-1.5 text-[10px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
-                            Jour
-                          </span>
-                        )}
-                      </td>
-                      <td className="!py-3 text-xs text-slate-600 font-medium">{formatDate(row.date)}</td>
-                      <td className="!py-3">
-                        <span
-                          className={`text-xs font-bold ${
-                            row.paid
-                              ? 'text-emerald-600'
-                              : row.isOverdue
-                              ? 'text-rose-600'
-                              : 'text-sky-700'
-                          }`}
-                        >
-                          {row.retardText}
-                        </span>
-                      </td>
-                      <td className="!py-3">
-                        {row.paid ? (
-                          <span className="badge-solid-emerald text-xs">{row.statusLabel}</span>
-                        ) : (
-                          <span className="badge-solid-rose text-xs">{row.statusLabel}</span>
-                        )}
-                      </td>
-                      <td className="!py-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {!row.paid && (
-                            <>
-                              <Link
-                                href={`/caisse?tr=${encodeURIComponent(row.tr)}`}
-                                className="text-[11px] font-semibold text-slate-800 underline decoration-slate-300 underline-offset-4"
-                              >
-                                Encaisser
-                              </Link>
+                  {historyGroups.map((g) => (
+                    <Fragment key={g.day}>
+                      <tr className="bg-slate-900 text-white">
+                        <td colSpan={7} className="!py-2.5 !px-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold capitalize text-white">{g.label}</span>
+                            <span className="font-mono text-[11px] font-semibold text-slate-300">
+                              {g.rows.length} ligne(s) · {g.unpaid} non payée(s)
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {g.rows.map((row) => (
+                        <tr key={row.key}>
+                          <td>
+                            <span className="font-mono text-xs font-bold text-white bg-slate-900 px-2 py-0.5 rounded">
+                              TR {row.tr}
+                            </span>
+                          </td>
+                          <td className="font-bold text-slate-900 text-xs sm:text-[13px]">{row.nom}</td>
+                          <td>
+                            <span className="badge-indigo font-bold text-xs">{row.circuit}</span>
+                            {row.isCurrent && (
+                              <span className="ml-1.5 text-[10px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
+                                Jour
+                              </span>
+                            )}
+                          </td>
+                          <td className="text-xs text-slate-600 font-medium">{formatDate(row.date)}</td>
+                          <td>
+                            <span
+                              className={`text-xs font-bold ${
+                                row.paid
+                                  ? 'text-emerald-600'
+                                  : row.isOverdue
+                                  ? 'text-rose-600'
+                                  : 'text-slate-600'
+                              }`}
+                            >
+                              {row.retardText}
+                            </span>
+                          </td>
+                          <td>
+                            {row.paid ? (
+                              <span className="badge-emerald text-xs">{row.statusLabel}</span>
+                            ) : (
+                              <span className="badge-rose text-xs">{row.statusLabel}</span>
+                            )}
+                          </td>
+                          <td className="text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {!row.paid && (
+                                <>
+                                  <Link
+                                    href={`/caisse?tr=${encodeURIComponent(row.tr)}`}
+                                    className="rounded-lg bg-sky-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-sky-700"
+                                  >
+                                    Encaisser
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    onClick={() => markProgramEntryPaid(row.driverId, row.entryId)}
+                                    className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700"
+                                  >
+                                    ✓ Payé
+                                  </button>
+                                </>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => markProgramEntryPaid(row.driverId, row.entryId)}
-                                className="text-[11px] font-semibold text-emerald-800 underline decoration-emerald-300 underline-offset-4"
+                                title="Supprimer ce programme"
+                                onClick={() => {
+                                  if (confirm('Supprimer ce programme ?')) deleteProgramEntry(row.driverId, row.entryId);
+                                }}
+                                className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100"
                               >
-                                ✓ Payé
+                                Supprimer
                               </button>
-                            </>
-                          )}
-                          <button type="button" title="Supprimer ce programme" onClick={() => { if (confirm(`Supprimer ce programme ?`)) deleteProgramEntry(row.driverId, row.entryId); }} className="text-[11px] font-medium text-rose-700 underline decoration-rose-200 underline-offset-4">Supprimer</button>
-                        </div>
-                      </td>
-                    </tr>
-))}</Fragment>))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
                 </tbody>
               </table>
             </div>

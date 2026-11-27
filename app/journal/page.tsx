@@ -311,13 +311,13 @@ export default function JournalPage() {
       <PageHeader
         title={
           isSupervisorOrAdmin
-            ? 'Journal des Transactions Avancé (CRNU · CRSF · CRTN)'
+            ? 'Journal des Caisses (CRNU · CRSF · CRTN)'
             : `Journal des Transactions — ${currentUser?.displayName || 'Ma Caisse'}`
         }
         subtitle={
           isSupervisorOrAdmin
-            ? 'Suivi en temps réel du journal du jour, filtrage par recherche et accès complet aux archives de clôture de toutes les caisses'
-            : 'Suivi en temps réel des encaissements du jour, recherche rapide et archives de clôture de votre caisse'
+            ? 'Suivi en direct des encaissements, espèces, versements et archives de clôture'
+            : 'Historique chronologique des encaissements validés et impression des reçus'
         }
         icon={<IconReceipt className="h-5 w-5" />}
         accent="emerald"
@@ -329,23 +329,23 @@ export default function JournalPage() {
                 fetchAccountData();
                 fetchHistory();
               }}
-              className="btn-ghost flex-1 sm:flex-none min-h-11 justify-center text-xs sm:text-sm font-semibold"
+              className="btn-ghost flex-1 sm:flex-none justify-center !py-2 text-xs font-semibold"
             >
               <IconSync className={`h-4 w-4 ${isSyncing || loadingHistory ? 'animate-spin' : ''}`} />
-              Actualiser
+              Rafraîchir
             </button>
             <button
               onClick={() => window.print()}
               disabled={displayedTransactions.length === 0}
-              className="btn-ghost flex-1 sm:flex-none min-h-11 justify-center text-xs sm:text-sm font-semibold"
+              className="btn-ghost flex-1 sm:flex-none justify-center !py-2 text-xs font-semibold"
             >
-              <IconPrinter className="h-4 w-4" />
-              Imprimer l&apos;État
+              <IconPrinter className="h-4 w-4 text-sky-600" />
+              Imprimer
             </button>
             <button
               onClick={handleExport}
               disabled={displayedTransactions.length === 0}
-              className="btn-primary flex-1 sm:flex-none min-h-11 justify-center text-xs sm:text-sm font-bold shadow-md"
+              className="btn-primary flex-1 sm:flex-none justify-center !py-2 text-xs font-bold"
             >
               <IconDownload className="h-4 w-4" />
               Exporter (.xlsx)
@@ -354,21 +354,21 @@ export default function JournalPage() {
         }
       />
 
-      {/* Tabs Switcher: Le Journal du Jour vs Les Archives de Clôture (Spécification 6) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 no-print">
+      {/* Onglets Journal du Jour vs Archives */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 no-print">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setActiveTab('ACTIF')}
-            className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
               activeTab === 'ACTIF'
-                ? 'bg-slate-900 text-white shadow-md'
+                ? 'bg-slate-900 text-white shadow-2xs'
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
             }`}
           >
             <IconReceipt className="h-4 w-4" />
-            <span>Le Journal du Jour (En Direct)</span>
-            <span className="ml-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300 font-mono">
+            <span>Journal du jour</span>
+            <span className="ml-0.5 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-300 font-mono">
               {todaySource.length}
             </span>
           </button>
@@ -376,51 +376,51 @@ export default function JournalPage() {
           <button
             type="button"
             onClick={() => setActiveTab('ARCHIVES')}
-            className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
               activeTab === 'ARCHIVES'
-                ? 'bg-slate-900 text-white shadow-md'
+                ? 'bg-slate-900 text-white shadow-2xs'
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
             }`}
           >
             <IconHistory className="h-4 w-4" />
-            <span>Les Archives de Clôture</span>
-            <span className="ml-1 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-700 font-mono">
+            <span>Archives de clôture</span>
+            <span className="ml-0.5 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-700 font-mono">
               {allArchivedTransactions.length}
             </span>
           </button>
         </div>
 
-        {/* Filtre par Caisse (CRNU, CRSF, CRTN) */}
+        {/* Filtre par Caisse */}
         {isSupervisorOrAdmin && (
-          <div className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-1">
+          <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
             {(['ALL', 'CRNU', 'CRSF', 'CRTN'] as const).map((code) => (
               <button
                 key={code}
                 type="button"
                 onClick={() => setCaisseFilter(code)}
-                className={`rounded-xl px-3 py-1.5 text-xs font-extrabold transition-all ${
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all ${
                   caisseFilter === code
-                    ? 'bg-indigo-600 text-white shadow-sm'
+                    ? 'bg-sky-600 text-white'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                {code === 'ALL' ? 'Toutes les Caisses' : code}
+                {code === 'ALL' ? 'Toutes' : code}
               </button>
             ))}
           </div>
         )}
       </div>
 
-      {/* Barre de Recherche Avancée + Sélection d'Archive de Clôture */}
-      <div className="card p-4 mb-5 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 no-print">
+      {/* Recherche + Sélection de clôture */}
+      <div className="card p-3.5 mb-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 no-print">
         <div className="relative flex-1">
           <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher une transaction par nom de chauffeur, code TR, caisse (CRNU/CRSF/CRTN), référence ou heure..."
-            className="input !pl-10 text-xs sm:text-sm font-medium w-full"
+            placeholder="Rechercher par nom de chauffeur, code TR, caisse, référence ou heure..."
+            className="input !h-9 !min-h-9 !pl-10 text-xs font-medium w-full"
           />
         </div>
 
@@ -430,7 +430,7 @@ export default function JournalPage() {
             <select
               value={selectedClosingId}
               onChange={(e) => setSelectedClosingId(e.target.value)}
-              className="select !h-10 text-xs font-semibold max-w-xs sm:max-w-sm"
+              className="select !h-9 !min-h-9 text-xs font-semibold max-w-xs sm:max-w-sm"
             >
               <option value="ALL">
                 Toutes les clôtures ({allArchivedTransactions.length} reçus)
@@ -446,55 +446,55 @@ export default function JournalPage() {
         )}
       </div>
 
-      {/* Résumé Financier Détaillé (Total, MT Espèce, Versement, Écart) */}
-      <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-5">
-        <div className="card p-4 sm:p-5 bg-slate-900 text-white">
-          <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-            Total Encaissé (T. Payer)
+      {/* Résumé Financier (4 cartes) */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 mb-4">
+        <div className="rounded-xl bg-slate-900 p-4 text-white shadow-2xs">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            Total payé
           </p>
-          <p className="num text-lg sm:text-xl font-black text-white mt-1">
+          <p className="num text-xl sm:text-2xl font-extrabold text-white mt-1.5">
             {formatMoney(totalPaye)}{' '}
-            <span className="text-xs text-indigo-300 font-normal">TND</span>
+            <span className="font-mono text-xs text-sky-400 font-semibold">TND</span>
           </p>
         </div>
 
-        <div className="card p-4 sm:p-5 border-emerald-200 bg-emerald-50/40">
-          <p className="text-[10.5px] font-bold uppercase tracking-wider text-emerald-700">
-            Montant Espèces (MT Espèce)
+        <div className="card p-4 border-emerald-200 bg-emerald-50/50">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+            MT Espèces
           </p>
-          <p className="num text-lg sm:text-xl font-black text-emerald-800 mt-1">
+          <p className="num text-xl sm:text-2xl font-extrabold text-emerald-800 mt-1.5">
             {formatMoney(totalMtEspece)}{' '}
-            <span className="text-xs text-emerald-600 font-normal">TND</span>
+            <span className="font-mono text-xs text-emerald-600 font-semibold">TND</span>
           </p>
         </div>
 
-        <div className="card p-4 sm:p-5 border-indigo-200 bg-indigo-50/40">
-          <p className="text-[10.5px] font-bold uppercase tracking-wider text-indigo-700">
-            Total Versements
+        <div className="card p-4 border-sky-200 bg-sky-50/50">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-sky-700">
+            Versements
           </p>
-          <p className="num text-lg sm:text-xl font-black text-indigo-800 mt-1">
+          <p className="num text-xl sm:text-2xl font-extrabold text-sky-900 mt-1.5">
             {formatMoney(totalVersement)}{' '}
-            <span className="text-xs text-indigo-600 font-normal">TND</span>
+            <span className="font-mono text-xs text-sky-600 font-semibold">TND</span>
           </p>
         </div>
 
-        <div className="card p-4 sm:p-5">
-          <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-            {isSuperviseur ? 'Recette Attendue' : 'Recette Attendue / Écart'}
+        <div className="card p-4">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            {isSuperviseur ? 'Recette attendue' : 'Attendu & Écart'}
           </p>
           {isSuperviseur ? (
-            <p className="num mt-1 text-lg font-black text-slate-900 sm:text-xl">
+            <p className="num mt-1.5 text-xl sm:text-2xl font-extrabold text-slate-900">
               {formatMoney(totalRecette)}{' '}
-              <span className="text-xs font-normal text-slate-500">TND</span>
+              <span className="font-mono text-xs font-semibold text-slate-400">TND</span>
             </p>
           ) : (
-            <div className="mt-1 flex items-baseline justify-between gap-2">
-              <span className="num text-sm font-bold text-slate-700">
-                {formatMoney(totalRecette)} TND
+            <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-1">
+              <span className="num text-lg sm:text-xl font-extrabold text-slate-900">
+                {formatMoney(totalRecette)} <span className="font-mono text-[10px] text-slate-400">TND</span>
               </span>
               <span
-                className={`num text-xs font-extrabold ${
-                  totalEcart >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                className={`num text-xs font-bold ${
+                  totalEcart >= 0 ? 'text-emerald-700' : 'text-rose-600'
                 }`}
               >
                 ({totalEcart > 0 ? '+' : ''}
@@ -539,77 +539,47 @@ export default function JournalPage() {
           />
         ) : (
           <>
-            {/* Mobile View */}
-            <div className="divide-y divide-slate-100 md:hidden">
+            {/* Liste compacte & responsive Mobile / Tablette / Laptop < 1280px (xl:hidden) */}
+            <div className="divide-y divide-slate-100 xl:hidden">
               {displayedTransactions.map((t) => {
                 const mtEsp =
                   typeof t.mtEspece === 'number'
                     ? t.mtEspece
                     : Math.round((t.tPayer - (t.versement || 0)) * 1000) / 1000;
+                const code = t.caisseCode || currentUser?.caisseCode || 'CAISSE';
                 return (
                   <div
                     key={`${t.accountId || ''}-${t.id}`}
-                    className="p-4 hover:bg-slate-50/60 transition-colors"
+                    className="p-3.5 sm:px-5 hover:bg-slate-50/70 transition-colors"
                   >
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="rounded bg-slate-900 px-2 py-0.5 font-mono text-[10px] font-black text-white">
-                          {t.caisseCode || 'CAISSE'}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`shrink-0 rounded px-2 py-0.5 font-mono text-[10px] font-bold text-white ${
+                            code === 'CRNU'
+                              ? 'bg-sky-600'
+                              : code === 'CRSF'
+                              ? 'bg-emerald-600'
+                              : code === 'CRTN'
+                              ? 'bg-indigo-600'
+                              : 'bg-slate-800'
+                          }`}
+                        >
+                          {code}
                         </span>
-                        <span className="badge-indigo font-mono text-xs font-bold">
+                        <span className="shrink-0 rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-800 border border-slate-200">
                           TR {t.codeChauffeur}
                         </span>
                         <p className="text-sm font-bold text-slate-900 truncate">
                           {t.nomChauffeur}
                         </p>
                       </div>
-                      <span className="badge-emerald text-[11px]">{t.status}</span>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 text-xs bg-slate-50 rounded-xl p-2.5 my-2">
-                      <div>
-                        <span className="text-slate-400 block text-[10px] uppercase font-semibold">
-                          MT Espèce
-                        </span>
-                        <span className="num font-bold text-emerald-700">
-                          {formatMoney(mtEsp)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px] uppercase font-semibold">
-                          Versement
-                        </span>
-                        <span className="num font-bold text-indigo-700">
-                          {formatMoney(t.versement)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px] uppercase font-semibold">
-                          Total Payé
-                        </span>
-                        <span className="num font-black text-slate-900">
-                          {formatMoney(t.tPayer)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-1 text-xs">
-                      <span className="text-slate-400">{formatDateTime(t.date)}</span>
-                      <div className="flex items-center gap-2">
-                        {!isSuperviseur && (
-                          <span
-                            className={`num font-bold ${
-                              t.resAPayer >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                            }`}
-                          >
-                            Écart: {t.resAPayer > 0 ? '+' : ''}
-                            {formatMoney(t.resAPayer)} TND
-                          </span>
-                        )}
+                      <div className="flex items-center gap-1.5">
+                        <span className="badge-emerald text-[10.5px]">{t.status}</span>
                         <button
                           type="button"
                           onClick={() => openReceipt(t)}
-                          className="btn-icon !h-7 !w-7 text-indigo-600 hover:bg-indigo-50"
+                          className="btn-icon !h-7 !w-7 text-sky-600 hover:bg-sky-50"
                           title="Imprimer Reçu"
                         >
                           <IconPrinter className="h-3.5 w-3.5" />
@@ -618,7 +588,7 @@ export default function JournalPage() {
                           <button
                             type="button"
                             onClick={() => openEdit(t)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-100"
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
                             title="Modifier cette ligne"
                           >
                             <IconEdit className="h-3.5 w-3.5" />
@@ -627,27 +597,56 @@ export default function JournalPage() {
                         )}
                       </div>
                     </div>
+
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs">
+                      <span className="text-slate-500">
+                        {formatDateTime(t.date)}
+                        {t.operatorUsername ? ` · @${t.operatorUsername}` : ''}
+                      </span>
+
+                      <div className="flex flex-wrap items-center gap-3 rounded-lg bg-slate-50 px-2.5 py-1.5 border border-slate-200/70 sm:bg-transparent sm:border-0 sm:p-0">
+                        <span className="text-[11px] text-slate-500">
+                          Espèces : <strong className="num text-emerald-700">{formatMoney(mtEsp)}</strong>
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Vers : <strong className="num text-sky-700">{formatMoney(t.versement)}</strong>
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Total : <strong className="num text-slate-900">{formatMoney(t.tPayer)} TND</strong>
+                        </span>
+                        {!isSuperviseur && (
+                          <span
+                            className={`num text-[11px] font-bold ${
+                              t.resAPayer >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                            }`}
+                          >
+                            Écart {t.resAPayer > 0 ? '+' : ''}
+                            {formatMoney(t.resAPayer)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Desktop Table */}
-            <div className="table-wrap hidden md:block">
+            {/* Tableau Grand Écran (hidden xl:block) */}
+            <div className="table-wrap hidden xl:block">
               <table className="data-table">
                 <thead>
                   <tr>
                     <th className="w-24">Caisse</th>
-                    <th className="w-40">Date & Heure</th>
-                    <th className="w-44">Chauffeur</th>
+                    <th className="w-40">Date &amp; Heure</th>
+                    <th>Chauffeur</th>
                     <th className="w-20">Code TR</th>
-                    <th className="!text-right w-32">MT Espèce</th>
-                    <th className="!text-right w-28">Versement</th>
-                    <th className="!text-right w-32">Total Payé</th>
-                    <th className="!text-right w-32">Recette</th>
-                    {!isSuperviseur && <th className="!text-right w-32">Écart</th>}
-                    <th className="!text-center w-24">Statut</th>
-                    <th className="!text-center w-36 no-print">Reçu</th>
+                    <th className="!text-right">MT Espèce</th>
+                    <th className="!text-right">Versement</th>
+                    <th className="!text-right">Total Payé</th>
+                    <th className="!text-right">Recette</th>
+                    {!isSuperviseur && <th className="!text-right">Écart</th>}
+                    <th className="!text-center">Statut</th>
+                    <th className="!text-center no-print">Reçu</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -660,22 +659,26 @@ export default function JournalPage() {
                     return (
                       <tr
                         key={`${t.accountId || ''}-${t.id}`}
-                        className="hover:bg-slate-50/80 transition-colors"
                       >
                         <td>
                           <span
-                            className={`inline-flex rounded-lg px-2.5 py-0.5 font-mono text-xs font-black text-white ${
+                            className={`inline-flex rounded px-2 py-0.5 font-mono text-xs font-bold text-white ${
                               code === 'CRNU'
-                                ? 'bg-indigo-600'
+                                ? 'bg-sky-600'
                                 : code === 'CRSF'
                                 ? 'bg-emerald-600'
                                 : code === 'CRTN'
-                                ? 'bg-sky-600'
+                                ? 'bg-indigo-600'
                                 : 'bg-slate-800'
                             }`}
                           >
                             {code}
                           </span>
+                          {t.operatorUsername && (
+                            <span className="mt-0.5 block text-[10px] font-semibold text-slate-500">
+                              @{t.operatorUsername}
+                            </span>
+                          )}
                         </td>
                         <td className="text-xs text-slate-500 whitespace-nowrap">
                           {formatDateTime(t.date)}
@@ -689,15 +692,15 @@ export default function JournalPage() {
                           </span>
                         </td>
                         <td>
-                          <span className="num font-bold text-indigo-700">#{t.codeChauffeur}</span>
+                          <span className="num font-bold text-slate-800">#{t.codeChauffeur}</span>
                         </td>
                         <td className="text-right num font-bold text-emerald-700">
                           {formatMoney(mtEsp)} TND
                         </td>
-                        <td className="text-right num font-semibold text-indigo-700">
+                        <td className="text-right num font-semibold text-sky-700">
                           {t.versement > 0 ? `${formatMoney(t.versement)} TND` : '0.000 TND'}
                         </td>
-                        <td className="text-right num font-black text-slate-900">
+                        <td className="text-right num font-extrabold text-slate-900">
                           {formatMoney(t.tPayer)} TND
                         </td>
                         <td className="text-right num text-slate-600">
@@ -719,7 +722,7 @@ export default function JournalPage() {
                             <button
                               type="button"
                               onClick={() => openReceipt(t)}
-                              className="btn-icon !h-8 !w-8 text-indigo-600 hover:bg-indigo-50 inline-flex items-center justify-center"
+                              className="btn-icon !h-8 !w-8 text-sky-600 hover:bg-sky-50 inline-flex items-center justify-center"
                               title="Imprimer Reçu / Facture HD"
                             >
                               <IconPrinter className="h-4 w-4" />
@@ -728,7 +731,7 @@ export default function JournalPage() {
                               <button
                                 type="button"
                                 onClick={() => openEdit(t)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-100"
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
                                 title="Modifier cette ligne"
                               >
                                 <IconEdit className="h-3.5 w-3.5" />

@@ -345,49 +345,49 @@ function CaisseContent() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl pb-24 sm:pb-8">
-      {/* Page Header Pro */}
+    <div className="w-full pb-24 sm:pb-8">
       <PageHeader
         title="Guichet de Caisse"
-        subtitle="Encaissement direct, décompte par coupures et décharge officielle"
+        subtitle="Recherche par code TR, saisie des coupures et validation de l'encaissement"
         icon={<IconCalculator className="h-5 w-5" />}
+        accent="indigo"
         actions={
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <button
               onClick={resetDesk}
-              className="btn-ghost flex-1 sm:flex-none !py-2 text-xs sm:text-sm"
+              className="btn-ghost flex-1 sm:flex-none !py-2 text-xs font-semibold"
               title="Raccourci: R"
             >
-              <IconTrash className="h-4 w-4 text-slate-400" />
-              <span>Nettoyer [R]</span>
+              <IconTrash className="h-4 w-4 text-slate-500" />
+              <span>Vider [R]</span>
             </button>
             <button
               onClick={handleOpenPrintPreview}
-              className="btn-ghost flex-1 sm:flex-none !py-2 text-xs sm:text-sm font-semibold"
+              className="btn-ghost flex-1 sm:flex-none !py-2 text-xs font-semibold"
               title="Raccourci: P"
             >
-              <IconPrinter className="h-4 w-4 text-indigo-600" />
-              <span>Imprimer Reçu [P]</span>
+              <IconPrinter className="h-4 w-4 text-sky-600" />
+              <span>Aperçu reçu [P]</span>
             </button>
             <button
               onClick={handleValidate}
-              className="btn-success w-full sm:w-auto !py-2.5 text-xs sm:text-sm font-bold shadow-md"
+              className="btn-success w-full sm:w-auto !py-2 text-xs font-bold"
               title="Raccourci: V"
             >
               <IconCheck className="h-4 w-4" />
-              <span>Valider la Vente [V]</span>
+              <span>Valider [V]</span>
             </button>
           </div>
         }
       />
 
-      {/* FinTech Terminal Topbar: Scanner + Selected Driver */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {/* Scanner Barcode Box */}
-        <div className="card-pro relative p-4 sm:p-5 md:col-span-1">
+      {/* Barre d'identification : Recherche TR + Chauffeur sélectionné */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        {/* Recherche TR */}
+        <div className="card relative p-4 sm:p-5 lg:col-span-5">
           <label className="label flex items-center justify-between">
-            <span>Scanner / Chercher Chauffeur (TR ou Nom)</span>
-            <span className="badge-slate font-mono text-[10px]">C1</span>
+            <span>Recherche Chauffeur (TR / Nom)</span>
+            <span className="badge-indigo font-mono text-[10px]">SCANNER</span>
           </label>
           <form onSubmit={handleScannerSubmit} className="flex gap-2">
             <div className="relative flex-1">
@@ -424,19 +424,19 @@ function CaisseContent() {
                     setShowDriverDropdown(true);
                     scannerInputRef.current?.focus();
                   }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-sm p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                   title="Vider le champ"
                 >
                   <IconClose className="h-3.5 w-3.5" />
                 </button>
               )}
 
-              {/* Dropdown de suggestion uniquement pendant la saisie d'un code TR ou nom (uniquement caisses NON PAYÉES) */}
+              {/* Dropdown de suggestion */}
               {showDriverDropdown && searchTerm && matchingDrivers.length > 0 && (
-                <div className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-64 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                <div className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
                   <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                    <span>Caisses non payées trouvées ({matchingDrivers.length})</span>
-                    <span>Cliquez pour choisir</span>
+                    <span>Caisses non payées ({matchingDrivers.length})</span>
+                    <span>Choisir</span>
                   </div>
                   {matchingDrivers.slice(0, 12).map((d) => {
                     const unpaidCount = getGuichetCaisses(d, validDrivers).length;
@@ -448,9 +448,9 @@ function CaisseContent() {
                           e.preventDefault();
                           handlePickDriver(d.id);
                         }}
-                        className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-xs transition ${
+                        className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs transition ${
                           selectedDriverId === d.id
-                            ? 'bg-indigo-50 text-indigo-950 font-bold'
+                            ? 'bg-sky-50 text-sky-950 font-bold'
                             : 'hover:bg-slate-50 text-slate-700'
                         }`}
                       >
@@ -460,12 +460,12 @@ function CaisseContent() {
                           </span>
                           <span className="truncate font-semibold text-slate-900">{d.nom}</span>
                         </div>
-                        <span className="ml-2 shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">
+                        <span className="ml-2 shrink-0 rounded bg-rose-50 border border-rose-200 px-2 py-0.5 text-[10px] font-bold text-rose-700">
                           {unpaidCount === 0
                             ? 'Aucune caisse'
                             : unpaidCount > 1
-                            ? `${unpaidCount} à encaisser`
-                            : 'À encaisser'}
+                            ? `${unpaidCount} à régler`
+                            : 'À régler'}
                         </span>
                       </button>
                     );
@@ -473,25 +473,25 @@ function CaisseContent() {
                 </div>
               )}
             </div>
-            <button type="submit" className="btn-primary !px-3 font-bold">
+            <button type="submit" className="btn-primary !px-3.5 font-bold">
               OK
             </button>
           </form>
-          <p className="mt-2 text-[11px] text-slate-400">
-            Scannez au lecteur optique ou tapez le code TR / nom puis Entrée.
+          <p className="mt-2 text-[11px] text-slate-500">
+            Scannez ou saisissez le code TR puis appuyez sur Entrée.
           </p>
         </div>
 
-        {/* Selected Driver Banner */}
-        <div className="card-pro p-4 sm:p-5 md:col-span-2">
+        {/* Chauffeur Sélectionné */}
+        <div className="card p-4 sm:p-5 lg:col-span-7">
           {selectedDriver ? (
             <div className="flex flex-col justify-between h-full sm:flex-row sm:items-center gap-3">
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="badge-indigo font-mono text-xs font-bold">
                     TR {selectedDriver.tr}
                   </span>
-                  <h3 className="text-base font-bold text-slate-900">{selectedDriver.nom}</h3>
+                  <h3 className="text-base font-bold text-slate-900 truncate">{selectedDriver.nom}</h3>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
                   Circuit : <strong className="text-slate-800">{selectedDriver.programmeJour || 'STAND-BY'}</strong> · Statut :{' '}
@@ -501,22 +501,22 @@ function CaisseContent() {
                   {selectedDriver.montantBordereau ? (
                     <>
                       {' '}· Bordereau :{' '}
-                      <strong className="text-indigo-600 num">
+                      <strong className="text-sky-700 num">
                         {formatMoney(selectedDriver.montantBordereau)} TND
                       </strong>
                     </>
                   ) : null}
                 </p>
                 {selectedDriver.reclamation && (
-                  <p className="mt-1 text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-200 inline-block">
+                  <p className="mt-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 inline-block">
                     {selectedDriver.reclamation}
                   </p>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="badge-solid-emerald px-3 py-1 text-xs font-bold shadow-sm">
-                  Chauffeur Pointé
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <span className="badge-emerald px-2.5 py-1 text-xs font-bold">
+                  Chauffeur sélectionné
                 </span>
                 <button
                   type="button"
@@ -524,7 +524,7 @@ function CaisseContent() {
                     selectDriverById(null);
                     scannerInputRef.current?.focus();
                   }}
-                  className="btn-ghost !px-2.5 !py-1.5 text-xs text-slate-500 hover:text-rose-600"
+                  className="btn-ghost !px-2.5 !py-1.5 text-xs text-slate-600 hover:text-rose-600"
                   title="Désélectionner ce chauffeur"
                 >
                   <IconClose className="h-3.5 w-3.5" />
@@ -534,95 +534,88 @@ function CaisseContent() {
             </div>
           ) : (
             <div className="flex items-center justify-center h-full text-slate-400 text-xs sm:text-sm py-4">
-              Scannez ou tapez un code chauffeur (TR) pour afficher sa caisse et travailler dessus.
+              Scannez ou tapez un code chauffeur (TR) pour charger ses caisses en attente.
             </div>
           )}
         </div>
       </div>
 
-      {/* Caisses NON PAYÉES UNIQUEMENT du Chauffeur Sélectionné (ne jamais afficher les caisses PAYÉES) */}
+      {/* Liste des caisses non payées du chauffeur sélectionné */}
       {selectedDriver && (
-        <div className="mt-4 card-pro p-4 sm:p-5">
+        <div className="mt-4 card p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse" />
-              <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800">
-                Caisses Non Payées du Code TR #{selectedDriver.tr} — {selectedDriver.nom} ({selectedTrUnpaidCaisses.length})
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-rose-500" />
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                Caisses à encaisser — TR #{selectedDriver.tr} · {selectedDriver.nom} ({selectedTrUnpaidCaisses.length})
               </h3>
             </div>
-            <span className="text-[11px] font-medium text-slate-500">
-              Seules les caisses <strong>NON PAYÉES</strong> sont affichées · Cliquez sur une caisse pour travailler dessus
+            <span className="text-[11px] text-slate-500">
+              Cliquez sur une tournée pour l&apos;encaisser
             </span>
           </div>
 
           {heldTodayCircuit && (
-            <p className="mt-2 text-xs font-semibold text-amber-800">
-              Le circuit du jour ({heldTodayCircuit}) n&apos;est pas dans ce paiement. Il reste en attente jusqu&apos;à la prochaine Bascule.
+            <p className="mt-2 rounded-lg border border-sky-200 bg-sky-50/70 px-3 py-1.5 text-xs font-medium text-sky-800">
+              Le circuit du jour (<strong>{heldTodayCircuit}</strong>) reste en attente jusqu&apos;à la prochaine bascule 12:30.
             </p>
           )}
 
           {selectedTrUnpaidCaisses.length === 0 ? (
-            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
-              Aucune caisse à encaisser
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
+              Aucune caisse en attente pour ce chauffeur.
             </div>
           ) : (
-            <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
               {selectedTrUnpaidCaisses.map((u, idx) => {
                 const isSelectedEntry =
                   selectedDriverId === u.driverId && activeUnpaidEntryId === u.id;
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={`${u.driverId}-${u.id}-${idx}`}
                     onClick={() => handlePickDriver(u.driverId, true, u.id)}
-                    className={`cursor-pointer rounded-2xl border p-3.5 transition-all ${
+                    className={`flex flex-col justify-between rounded-xl border p-3 text-left transition-all ${
                       isSelectedEntry
-                        ? 'border-indigo-600 bg-indigo-50/90 ring-2 ring-indigo-500/20 shadow-sm'
-                        : 'border-rose-200 bg-rose-50/50 hover:border-rose-400 hover:bg-rose-50'
+                        ? 'border-sky-600 bg-sky-50/80 ring-2 ring-sky-500/15'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2 w-full">
+                      <div className="flex items-center gap-2 min-w-0">
                         <span
-                          className={`font-mono text-xs font-black px-2 py-0.5 rounded-lg ${
+                          className={`font-mono text-[11px] font-bold px-2 py-0.5 rounded shrink-0 ${
                             isSelectedEntry
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-rose-600 text-white'
+                              ? 'bg-sky-600 text-white'
+                              : 'bg-slate-800 text-white'
                           }`}
                         >
                           TR {u.tr}
                         </span>
-                        <span className="text-xs font-extrabold text-slate-900 truncate">
+                        <span className="text-xs font-bold text-slate-900 truncate">
                           {u.circuit}
                         </span>
                       </div>
-                      <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
-                        {u.retardText}
-                      </span>
-                    </div>
-
-                    <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
-                      <span>
-                        Date : <strong className="text-slate-900">{u.date ? formatDate(u.date) : 'Aujourd’hui'}</strong>
-                      </span>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${
+                        className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded border ${
                           u.isOverdue
-                            ? 'bg-rose-200/80 text-rose-900'
-                            : 'bg-amber-100 text-amber-900'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-slate-100 text-slate-700 border-slate-200'
                         }`}
                       >
                         {u.retardText}
                       </span>
                     </div>
 
-                    <div className="mt-2.5 flex items-center justify-between border-t border-slate-200/70 pt-2">
-                      <span className="text-[11px] font-semibold text-indigo-700">
-                        {isSelectedEntry
-                          ? '✓ Caisse sélectionnée pour encaissement'
-                          : 'Cliquez pour régler cette caisse'}
+                    <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px] w-full">
+                      <span className="text-slate-500">
+                        Date : <strong className="text-slate-800">{u.date ? formatDate(u.date) : 'Aujourd’hui'}</strong>
+                      </span>
+                      <span className={`font-semibold ${isSelectedEntry ? 'text-sky-700' : 'text-slate-500'}`}>
+                        {isSelectedEntry ? '✓ Sélectionnée' : 'Sélectionner →'}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -630,35 +623,37 @@ function CaisseContent() {
         </div>
       )}
 
-      {/* Main Terminal Grid */}
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Terminal Financial Monitor Card (Order 1 on mobile, Order 2 on desktop) */}
-        <div className="space-y-4 lg:col-span-1 lg:order-2">
-          <div className={`rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-6 text-white shadow-xl transition-all duration-300 ${balanceGlowClass}`}>
+      {/* Grille Principale : Coupures (8 col) + Synthèse d'encaissement (4 col) */}
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-12 items-start">
+        {/* Synthèse Financière */}
+        <div className="space-y-4 xl:col-span-4 xl:order-2 xl:sticky xl:top-20">
+          <div className={`rounded-2xl border border-slate-800 bg-slate-900 p-5 text-white shadow-sm transition-all ${balanceGlowClass}`}>
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                Situation Financière
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                Situation d&apos;encaissement
               </span>
-              <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase ${balancePillBg}`}>
+              <span className={`rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold uppercase ${balancePillBg}`}>
                 {balanceStatusText}
               </span>
             </div>
 
-            <div className="mt-5 space-y-4">
-              {/* T. PAYER */}
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                <span className="text-xs text-slate-300 font-medium">T. PAYER (Encaissé)</span>
-                <span className="num text-2xl font-black tracking-tight text-white">
-                  {formatMoney(tPayer)} <span className="text-xs font-normal text-slate-400">TND</span>
+            <div className="mt-4 space-y-4">
+              {/* Total reçu */}
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <span className="text-xs text-slate-400 font-medium">Total reçu (Espèces + Vers.)</span>
+                <span className="num text-2xl font-extrabold tracking-tight text-white">
+                  {formatMoney(tPayer)} <span className="text-xs font-normal text-sky-400">TND</span>
                 </span>
               </div>
 
-              {/* RECETTE */}
-              <div className="border-b border-slate-800/80 pb-3">
+              {/* Bordereau attendu */}
+              <div className="border-b border-slate-800 pb-3">
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs text-slate-300 font-medium">RECETTE (Attendu)</label>
-                  <span className="num text-base font-bold text-indigo-300">
-                    {formatMoney(deskRecette)} <span className="text-xs text-slate-400 font-normal">TND</span>
+                  <label htmlFor="desk-recette" className="text-xs text-slate-300 font-medium">
+                    Montant bordereau (Recette)
+                  </label>
+                  <span className="num text-sm font-bold text-sky-400">
+                    {formatMoney(deskRecette)} <span className="text-[11px] text-slate-400 font-normal">TND</span>
                   </span>
                 </div>
                 <input
@@ -672,76 +667,75 @@ function CaisseContent() {
                   onFocus={(e) => e.target.select()}
                   onClick={(e) => (e.target as HTMLInputElement).select()}
                   placeholder="0.000 TND"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm font-bold text-white placeholder-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2.5 font-mono text-base font-bold text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
                 />
               </div>
 
-              {/* RES. A PAYER */}
+              {/* Écart / Reste */}
               <div className="flex items-center justify-between pt-1">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                  RES. A PAYER
+                  Écart / Reste
                 </span>
-                <span className={`num text-2xl sm:text-3xl font-black tracking-tight ${
-                  resAPayer > 0 ? 'text-emerald-400' : resAPayer < 0 ? 'text-rose-400' : 'text-slate-200'
+                <span className={`num text-2xl font-extrabold tracking-tight ${
+                  resAPayer > 0 ? 'text-emerald-400' : resAPayer < 0 ? 'text-rose-400' : 'text-white'
                 }`}>
                   {resAPayer > 0 ? '+' : ''}{formatMoney(resAPayer)} <span className="text-xs font-normal text-slate-400">TND</span>
                 </span>
               </div>
             </div>
 
-            {/* Direct Action Buttons inside terminal card */}
-            <div className="mt-6 space-y-2">
+            <div className="mt-5 space-y-2">
               <button
                 id="btn-valider-vente"
                 onClick={handleValidate}
-                className="btn w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/20 !py-3"
+                className="btn-success w-full !py-3 !text-sm font-bold"
               >
-                <IconCheck className="h-5 w-5" />
-                Valider la Vente [Touche V]
+                <IconCheck className="h-4 w-4" />
+                Valider l&apos;encaissement [V]
               </button>
               <button
                 onClick={handleOpenPrintPreview}
-                className="btn w-full bg-white/10 hover:bg-white/20 text-white font-semibold text-xs !py-2.5"
+                className="btn w-full border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-xs !py-2.5"
               >
-                <IconPrinter className="h-4 w-4" />
-                Aperçu Reçu / Facture [Touche P]
+                <IconPrinter className="h-4 w-4 text-sky-400" />
+                Aperçu reçu / Facture A4 [P]
               </button>
             </div>
           </div>
 
-          {/* Quick Hotkey Box (Desktop) */}
-          <div className="card-pro p-4 hidden lg:block text-xs text-slate-500">
+          {/* Raccourcis Clavier */}
+          <div className="card p-4 hidden xl:block text-xs text-slate-500">
             <p className="font-bold uppercase tracking-wider text-slate-400 text-[10px] mb-2">
-              Raccourcis Clavier Rapides
+              Raccourcis clavier
             </p>
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
-                <span>Valider et Archiver</span>
-                <kbd className="bg-slate-100 rounded px-1.5 py-0.5 font-mono text-slate-700 border">V</kbd>
+                <span>Valider et archiver</span>
+                <kbd className="bg-slate-100 rounded px-1.5 py-0.5 font-mono text-slate-700 border border-slate-200">V</kbd>
               </div>
               <div className="flex justify-between items-center">
-                <span>Imprimer Reçu</span>
-                <kbd className="bg-slate-100 rounded px-1.5 py-0.5 font-mono text-slate-700 border">P</kbd>
+                <span>Imprimer le reçu</span>
+                <kbd className="bg-slate-100 rounded px-1.5 py-0.5 font-mono text-slate-700 border border-slate-200">P</kbd>
               </div>
               <div className="flex justify-between items-center">
                 <span>Remettre à zéro</span>
-                <kbd className="bg-slate-100 rounded px-1.5 py-0.5 font-mono text-slate-700 border">R</kbd>
+                <kbd className="bg-slate-100 rounded px-1.5 py-0.5 font-mono text-slate-700 border border-slate-200">R</kbd>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Coupures Table & Mobile Cards */}
-        <div className="card-pro overflow-hidden lg:col-span-2 lg:order-1">
-          <div className="card-header bg-slate-50/80">
+        {/* Tableau des Coupures */}
+        <div className="card overflow-hidden xl:col-span-8 xl:order-1">
+          <div className="card-header">
             <div>
-              <h2 className="card-title text-sm">Entrées & Sorties par Coupure</h2>
-              <p className="text-[11px] text-slate-400">Saisissez les montants reçus et rendus</p>
+              <h2 className="card-title">Décompte des espèces</h2>
+              <p className="text-[11px] text-slate-500">Navigation par Entrée, Tabulation ou flèches Haut / Bas</p>
             </div>
-            <span className="badge-indigo font-mono text-xs">Tableau dynamique</span>
+            <span className="badge-slate font-mono text-[10.5px]">ENTRÉE / SORTIE</span>
           </div>
 
-          {/* Mobile Denomination Cards View (sm:hidden) */}
+          {/* Vue Mobile Compacte (sm:hidden) */}
           <div className="divide-y divide-slate-100 sm:hidden">
             {deskRows.map((row, idx) => {
               const netLigne = row.entree * row.denomination - row.sortie * row.denomination;
@@ -749,21 +743,21 @@ function CaisseContent() {
               const stepVal = isOneTnd ? '0.1' : '1';
 
               return (
-                <div key={idx} className="p-3.5 hover:bg-slate-50/60 transition-colors">
+                <div key={idx} className="p-3 hover:bg-slate-50/60">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-xs font-bold text-slate-900 border border-slate-200">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-900 border border-slate-200">
                       <span>{row.denomination} TND</span>
                       {row.denomination === 5 && idx === 3 && (
-                        <span className="rounded-md bg-indigo-600 px-1.5 py-0.5 font-mono text-[10px] font-black text-white">
-                          B · Billet
+                        <span className="rounded bg-sky-600 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
+                          Billet
                         </span>
                       )}
                       {row.denomination === 5 && idx === 4 && (
-                        <span className="rounded-md bg-amber-500 px-1.5 py-0.5 font-mono text-[10px] font-black text-white">
-                          P · Pièce
+                        <span className="rounded bg-slate-700 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
+                          Pièce
                         </span>
                       )}
-                      {isOneTnd && <span className="text-[10px] text-indigo-600 font-normal ml-1">(pas 0.1)</span>}
+                      {isOneTnd && <span className="text-[10px] text-sky-700 font-normal">(pas 0.1)</span>}
                     </span>
                     <span className={`num text-xs font-bold ${netLigne >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
                       Net : {formatMoney(netLigne)} TND
@@ -771,7 +765,7 @@ function CaisseContent() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-2">
+                    <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/40 p-2">
                       <label className="text-[10px] font-bold uppercase text-emerald-800 block mb-1">
                         + Entrée (Reçu)
                       </label>
@@ -790,10 +784,10 @@ function CaisseContent() {
                         onFocus={(e) => e.target.select()}
                         onClick={(e) => (e.target as HTMLInputElement).select()}
                         placeholder="0"
-                        className="w-full rounded-lg border border-emerald-300 bg-white py-1.5 text-center text-sm font-bold text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                        className="w-full rounded-md border border-emerald-300 bg-white py-1.5 text-center text-sm font-bold text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
-                    <div className="rounded-xl border border-rose-200/80 bg-rose-50/40 p-2">
+                    <div className="rounded-lg border border-rose-200/80 bg-rose-50/40 p-2">
                       <label className="text-[10px] font-bold uppercase text-rose-800 block mb-1">
                         - Sortie (Rendu)
                       </label>
@@ -889,18 +883,18 @@ function CaisseContent() {
                           </span>
                           {row.denomination === 5 && idx === 3 && (
                             <span
-                              className="inline-flex items-center rounded-md bg-indigo-600 px-1.5 py-0.5 font-mono text-[10px] font-black text-white shadow-sm"
+                              className="inline-flex items-center rounded bg-sky-600 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white"
                               title="5 TND Billet (versé automatiquement en Billetterie)"
                             >
-                              B · Billet
+                              Billet
                             </span>
                           )}
                           {row.denomination === 5 && idx === 4 && (
                             <span
-                              className="inline-flex items-center rounded-md bg-amber-500 px-1.5 py-0.5 font-mono text-[10px] font-black text-white shadow-sm"
+                              className="inline-flex items-center rounded bg-slate-700 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white"
                               title="5 TND Pièce (comptage manuel en Billetterie)"
                             >
-                              P · Pièce
+                              Pièce
                             </span>
                           )}
                           {isOneTnd && (

@@ -6,6 +6,7 @@ import {
   CashTransaction,
   CoinBreakdownItem,
   CaisseLiveSummary,
+  FleetPayment,
 } from '@/types/caisse';
 import { INITIAL_DRIVERS } from '@/data/initialDrivers';
 import { DEFAULT_PROGRAMME_EXCEL_ROWS } from '@/data/programmeJourDefault';
@@ -80,6 +81,7 @@ interface CaisseStore {
   // Multi-Caisse Real-Time Summary (CRNU, CRSF, CRTN)
   caissesSummary: CaisseLiveSummary[];
   allTransactions: CashTransaction[];
+  fleetPaidToday: FleetPayment[];
 
   // Drivers
   drivers: Driver[];
@@ -190,6 +192,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     drivers: [] as Driver[],
     caissesSummary: [] as CaisseLiveSummary[],
     allTransactions: [] as CashTransaction[],
+    fleetPaidToday: [] as FleetPayment[],
     selectedDriverId: null,
     searchQuery: '',
     statusFilter: 'ALL' as const,
@@ -227,6 +230,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
     lastSyncTime: null,
     caissesSummary: [],
     allTransactions: [],
+    fleetPaidToday: [],
 
     resetStoreForAccount: () => {
       hasPendingSync = false;
@@ -242,7 +246,11 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         const res = await fetch('/api/superviseur/control', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accountId, action }),
+          body: JSON.stringify(
+          ['CRNU', 'CRSF', 'CRTN'].includes(accountId)
+            ? { caisseCode: accountId, action }
+            : { accountId, action }
+        ),
         });
         const json = await res.json();
         if (!res.ok) {
@@ -298,6 +306,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
               drivers,
               transactions,
               allTransactions,
+              fleetPaidToday,
               caissesSummary,
               billetterie,
               deskState,
@@ -323,6 +332,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
                 : Array.isArray(transactions)
                 ? transactions
                 : [],
+              fleetPaidToday: Array.isArray(fleetPaidToday) ? fleetPaidToday : [],
               caissesSummary: Array.isArray(caissesSummary) ? caissesSummary : [],
               lastSyncTime: new Date().toLocaleTimeString('fr-FR'),
               cycleBordereaux: Number(cycleBordereaux) || 0,
@@ -606,6 +616,9 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
 
       const currentUser = get().currentUser;
       const mtEspece = Math.round((tPayer - deskVersement) * 1000) / 1000;
+      const paidAt = normalizeCaisseCode(currentUser?.caisseCode || currentUser?.username);
+      const payerName = (currentUser?.displayName || currentUser?.username || '').trim();
+      const payerUser = currentUser?.username || '';
 
       const newTransaction: CashTransaction = {
         id: generateId('TRX'),
@@ -620,6 +633,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         status: resAPayer >= 0 ? 'PAYE' : 'NON PAYE',
         caisseCode: currentUser?.caisseCode || currentUser?.username?.toUpperCase() || 'CAISSE',
         caisseName: currentUser?.displayName || 'Caisse',
+        operatorUsername: payerUser,
         accountId: currentUser?.id,
         rawData: {
           rows: deskRows,
@@ -627,6 +641,8 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           versementBanque: deskVersementBanque,
           versementCoffre: deskVersementCoffre,
           recette: deskRecette,
+          operatorUsername: payerUser,
+          operatorDisplayName: payerName,
         },
       };
 
@@ -650,31 +666,34 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             !prog || prog.toUpperCase() === 'STAND-BY' || prog.toUpperCase() === 'STANDBY';
           let jourPaye = Boolean(d.jourPaye);
           let caissePaye = d.caissePaye || '';
+          let payePar = d.payePar || '';
           let payeLe = d.payeLe;
-          const paidAt = normalizeCaisseCode(
-            currentUser?.caisseCode || currentUser?.username
-          );
 
           if (entryIdToPay !== 'CURRENT' && entryIdToPay !== 'STANDBY-UNPAID') {
             nextHist = nextHist.map((e) =>
-              e.id === entryIdToPay ? { ...e, paid: true, caisseCode: paidAt || e.caisseCode } : e
+              e.id === entryIdToPay
+                ? { ...e, paid: true, caisseCode: paidAt || e.caisseCode, paidBy: payerName || e.paidBy }
+                : e
             );
             caissePaye = paidAt || caissePaye;
+            payePar = payerName || payePar;
             payeLe = nowIso;
           } else if (!isStandby) {
             jourPaye = true;
             caissePaye = paidAt || caissePaye;
+            payePar = payerName || payePar;
             payeLe = nowIso;
           } else if (nextHist.some((e) => !e.paid)) {
             let markedOne = false;
             nextHist = nextHist.map((e) => {
               if (!markedOne && !e.paid) {
                 markedOne = true;
-                return { ...e, paid: true, caisseCode: paidAt || e.caisseCode };
+                return { ...e, paid: true, caisseCode: paidAt || e.caisseCode, paidBy: payerName || e.paidBy };
               }
               return e;
             });
             caissePaye = paidAt || caissePaye;
+            payePar = payerName || payePar;
             payeLe = nowIso;
           }
 
@@ -689,6 +708,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             programmeHistorique: nextHist,
             jourPaye,
             caissePaye,
+            payePar,
             payeLe,
             statut: nextStatut,
             dateDerniere: nowIso,
@@ -730,8 +750,22 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
       // Add theoretical receipt into Comptage Billetterie's recetteTheorique
       const updatedRecetteTheorique = Math.max(0, Math.round(((recettePhysiqueTheorique || 0) + deskRecette) * 1000) / 1000);
 
+      const paidTr = cleanScannerTr(driver.tr).toUpperCase();
       set((state) => ({
         transactions: [newTransaction, ...state.transactions],
+        fleetPaidToday:
+          resAPayer >= 0
+            ? [
+                {
+                  tr: paidTr,
+                  caisseCode: paidAt || currentUser?.caisseCode || '',
+                  operatorUsername: payerUser,
+                  operatorName: payerName,
+                  date: newTransaction.date,
+                },
+                ...state.fleetPaidToday.filter((p) => cleanScannerTr(p.tr).toUpperCase() !== paidTr),
+              ]
+            : state.fleetPaidToday,
         drivers: updatedDrivers,
         billetterieItems: updatedBilletterieItems,
         ver: updatedVer,
@@ -994,6 +1028,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             statut: 'NON PAYE',
             jourPaye: false,
             caissePaye: '',
+            payePar: '',
             programmeDate: liveDate || nowIso,
             dateDerniere: nowIso,
             caissesDues: unpaid + 1,
@@ -1075,6 +1110,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
               paid: wasPaid,
               j1: !wasPaid,
               caisseCode: wasPaid ? d.caissePaye || '' : '',
+              paidBy: wasPaid ? d.payePar || '' : '',
             });
           } else if (d.statut === 'NON PAYE' && history.filter((h) => !h.paid).length === 0) {
             history.unshift({
@@ -1096,6 +1132,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             programmeDate: undefined,
             jourPaye: false,
             caissePaye: '',
+            payePar: '',
             payeLe: undefined,
             programmeHistorique: history.slice(0, 60),
             statut: nextStatut,
@@ -1141,6 +1178,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
         drivers: [],
         transactions: [],
         allTransactions: [],
+        fleetPaidToday: [],
         selectedDriverId: null,
         deskTrInput: '',
         feedbackMessage: {
@@ -1210,22 +1248,28 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
           const isCurrentStandby = !prog || prog === 'STAND-BY' || prog === 'STANDBY';
           let jourPaye = Boolean(d.jourPaye);
           let caissePaye = d.caissePaye || '';
+          let payePar = d.payePar || '';
           let payeLe = d.payeLe;
           let nextHist = [...(d.programmeHistorique || [])];
           const paidAt = normalizeCaisseCode(
             state.currentUser?.caisseCode || state.currentUser?.username
           );
+          const payerName = (state.currentUser?.displayName || state.currentUser?.username || '').trim();
           const nowIso = new Date().toISOString();
 
           if (entryId === 'CURRENT') {
             jourPaye = true;
             caissePaye = paidAt || caissePaye;
+            payePar = payerName || payePar;
             payeLe = nowIso;
           } else if (entryId !== 'STANDBY-UNPAID' && entryId !== 'PREV-UNPAID') {
             nextHist = nextHist.map((e) =>
-              e.id === entryId ? { ...e, paid: true, caisseCode: paidAt || e.caisseCode } : e
+              e.id === entryId
+                ? { ...e, paid: true, caisseCode: paidAt || e.caisseCode, paidBy: payerName || e.paidBy }
+                : e
             );
             caissePaye = paidAt || caissePaye;
+            payePar = payerName || payePar;
             payeLe = nowIso;
           }
 
@@ -1239,6 +1283,7 @@ export const useCaisseStore = create<CaisseStore>()((set, get) => {
             programmeHistorique: nextHist,
             jourPaye,
             caissePaye,
+            payePar,
             payeLe,
             statut: nextStatut,
             caissesDues,

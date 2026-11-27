@@ -9,17 +9,15 @@ interface EmptyStateProps {
 
 export default function EmptyState({ icon, title, description, children }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-      <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50 text-indigo-600 shadow-sm">
+    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500">
         {icon}
       </div>
-      <h3 className="mt-4 text-base font-extrabold tracking-tight text-slate-900">{title}</h3>
+      <h3 className="mt-3 text-sm font-bold text-slate-900">{title}</h3>
       {description && (
-        <p className="mt-1.5 max-w-md text-xs leading-relaxed text-slate-500 sm:text-sm">
-          {description}
-        </p>
+        <p className="mt-1 max-w-md text-xs leading-relaxed text-slate-500">{description}</p>
       )}
-      {children && <div className="mt-5">{children}</div>}
+      {children && <div className="mt-4">{children}</div>}
     </div>
   );
 }

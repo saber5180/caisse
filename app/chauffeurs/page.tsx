@@ -101,15 +101,15 @@ function StatusBadgeSelect({
     ? 'border-rose-300/90 bg-rose-50 text-rose-700 hover:bg-rose-100/80 focus:ring-rose-500/25'
     : isPaye
     ? 'border-emerald-300/90 bg-emerald-50 text-emerald-700 hover:bg-emerald-100/80 focus:ring-emerald-500/25'
-    : 'border-amber-300/90 bg-amber-50 text-amber-800 hover:bg-amber-100/80 focus:ring-amber-500/25';
+    : 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200/70 focus:ring-slate-400/25';
 
   const dotColor = isPending
     ? 'bg-sky-500'
     : isNonPaye
-    ? 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.6)]'
+    ? 'bg-rose-500'
     : isPaye
-    ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]'
-    : 'bg-amber-500';
+    ? 'bg-emerald-500'
+    : 'bg-slate-500';
 
   return (
     <div className={`relative inline-flex items-center ${compact ? 'w-full max-w-full' : ''}`}>
@@ -343,11 +343,11 @@ export default function ChauffeursPage() {
   return (
     <>
       <PageHeader
-        title="Flotte & Mouvement des Chauffeurs"
-        subtitle="Pilotage des statuts d'encaissement, attribution des circuits et surveillance des retards"
+        title="Mouvement des Chauffeurs"
+        subtitle="Liste des chauffeurs, affectation des circuits et suivi des caisses en attente"
         badge={`${drivers.length} Chauffeur${drivers.length > 1 ? 's' : ''}`}
         icon={<IconTruck className="h-5 w-5" />}
-        accent="rose"
+        accent="indigo"
         actions={
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {drivers.length > 0 && (
@@ -358,178 +358,149 @@ export default function ChauffeursPage() {
                     resetAllDriversStatus('NON PAYE');
                   }
                 }}
-                className="btn-ghost flex-1 sm:flex-none !py-2 !text-xs text-rose-600 hover:!border-rose-200 hover:!bg-rose-50"
+                className="btn-ghost flex-1 sm:flex-none !py-2 !text-xs font-semibold"
               >
-                <IconSync className="h-3.5 w-3.5" />
-                Reset Non Payé
+                <IconSync className="h-3.5 w-3.5 text-rose-600" />
+                Tout non payé
               </button>
             )}
             <Link
               href="/excel"
-              className="btn-ghost flex-1 sm:flex-none !py-2 !text-xs"
+              className="btn-ghost flex-1 sm:flex-none !py-2 !text-xs font-semibold"
             >
-              <IconSheet className="h-4 w-4 text-slate-500" />
-              Import Excel
+              <IconSheet className="h-4 w-4 text-sky-600" />
+              Import / Export
             </Link>
             <button
               type="button"
               onClick={openCreateModal}
-              className="btn-primary w-full sm:w-auto !py-2.5 !text-xs sm:!text-sm"
+              className="btn-primary w-full sm:w-auto !py-2 !text-xs font-bold"
             >
               <IconPlus className="h-4 w-4" />
-              Nouveau Chauffeur
+              Nouveau chauffeur
             </button>
           </div>
         }
       />
 
-      {/* Interactive KPI Filter Strip */}
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Cartes de filtre rapide par statut */}
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <button
           type="button"
           onClick={() => setFilterStatus('ALL')}
-          className={`card p-4 text-left transition-all ${
+          className={`card card-hover p-3.5 sm:p-4 text-left transition-all ${
             filterStatus === 'ALL'
-              ? 'ring-2 ring-indigo-600 border-indigo-300 bg-indigo-50/25'
-              : 'hover:border-slate-300'
+              ? 'ring-2 ring-sky-600 border-sky-300 bg-sky-50/20'
+              : ''
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-              Total Flotte
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Total chauffeurs
             </span>
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-              <IconTruck className="h-4 w-4" />
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-white">
+              <IconTruck className="h-3.5 w-3.5" />
             </span>
           </div>
-          <p className="mt-2 font-mono text-2xl font-extrabold text-slate-900">{drivers.length}</p>
-          <p className="mt-1 text-[11px] font-medium text-slate-400">Tous les chauffeurs actifs</p>
+          <p className="mt-2 num text-2xl font-extrabold text-slate-900">{drivers.length}</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">Effectif complet</p>
         </button>
 
         <button
           type="button"
           onClick={() => setFilterStatus('NON PAYE')}
-          className={`card p-4 text-left transition-all ${
+          className={`card card-hover p-3.5 sm:p-4 text-left transition-all ${
             filterStatus === 'NON PAYE'
               ? 'ring-2 ring-rose-600 border-rose-300 bg-rose-50/30'
-              : 'hover:border-rose-200'
+              : ''
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-600">
-              Non Payés
+            <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700">
+              Non payés
             </span>
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
-              <IconAlert className="h-4 w-4" />
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-50 text-rose-600 border border-rose-200">
+              <IconAlert className="h-3.5 w-3.5" />
             </span>
           </div>
-          <p className="mt-2 font-mono text-2xl font-extrabold text-rose-600">{countNonPaye}</p>
-          <p className="mt-1 text-[11px] font-medium text-slate-400">Caisses en attente</p>
+          <p className="mt-2 num text-2xl font-extrabold text-rose-700">{countNonPaye}</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">Caisses à régler</p>
         </button>
 
         <button
           type="button"
           onClick={() => setFilterStatus('PAYE')}
-          className={`card p-4 text-left transition-all ${
+          className={`card card-hover p-3.5 sm:p-4 text-left transition-all ${
             filterStatus === 'PAYE'
               ? 'ring-2 ring-emerald-600 border-emerald-300 bg-emerald-50/30'
-              : 'hover:border-emerald-200'
+              : ''
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
               Payés
             </span>
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-              <IconCheck className="h-4 w-4" />
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200">
+              <IconCheck className="h-3.5 w-3.5" />
             </span>
           </div>
-          <p className="mt-2 font-mono text-2xl font-extrabold text-emerald-700">{countPaye}</p>
-          <p className="mt-1 text-[11px] font-medium text-slate-400">Tournées clôturées</p>
+          <p className="mt-2 num text-2xl font-extrabold text-emerald-700">{countPaye}</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">Tournées encaissées</p>
         </button>
 
         <button
           type="button"
           onClick={() => setFilterStatus('PAS DE CAISSE')}
-          className={`card p-4 text-left transition-all ${
+          className={`card card-hover p-3.5 sm:p-4 text-left transition-all ${
             filterStatus === 'PAS DE CAISSE'
-              ? 'ring-2 ring-amber-500 border-amber-300 bg-amber-50/30'
-              : 'hover:border-amber-200'
+              ? 'ring-2 ring-slate-600 border-slate-300 bg-slate-50'
+              : ''
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-700">
-              Sans Caisse
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+              Sans caisse
             </span>
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-              <IconCoins className="h-4 w-4" />
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
+              <IconCoins className="h-3.5 w-3.5" />
             </span>
           </div>
-          <p className="mt-2 font-mono text-2xl font-extrabold text-amber-700">
+          <p className="mt-2 num text-2xl font-extrabold text-slate-800">
             {countPasDeCaisse}
           </p>
-          <p className="mt-1 text-[11px] font-medium text-slate-400">Repos / Stand-by</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">Stand-by ou repos</p>
         </button>
       </div>
 
-      {/* Filter & Search Command Bar */}
-      <div className="card mb-5 p-3.5 sm:p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          {/* Segmented Status Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-100/90 p-1">
-            <button
-              type="button"
-              onClick={() => setFilterStatus('ALL')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                filterStatus === 'ALL'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Tous ({drivers.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterStatus('NON PAYE')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                filterStatus === 'NON PAYE'
-                  ? 'bg-rose-600 text-white shadow-sm'
-                  : 'text-rose-700 hover:bg-rose-50'
-              }`}
-            >
-              Non Payés ({countNonPaye})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterStatus('PAYE')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                filterStatus === 'PAYE'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-emerald-700 hover:bg-emerald-50'
-              }`}
-            >
-              Payés ({countPaye})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterStatus('PAS DE CAISSE')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                filterStatus === 'PAS DE CAISSE'
-                  ? 'bg-amber-500 text-white shadow-sm'
-                  : 'text-amber-800 hover:bg-amber-50'
-              }`}
-            >
-              Sans Caisse ({countPasDeCaisse})
-            </button>
+      {/* Barre de recherche & filtre par circuit */}
+      <div className="card mb-4 p-3 sm:p-3.5">
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1">
+            <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher par nom, code TR ou circuit..."
+              className="input !h-9 !min-h-9 !py-1.5 !pl-9 !pr-8 !text-xs font-medium"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+              >
+                <IconClose className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Right Controls: Circuit Filter + Search */}
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+          <div className="flex flex-wrap items-center gap-2">
             {activeCircuits.length > 0 && (
               <select
                 value={filterCircuit}
                 onChange={(e) => setFilterCircuit(e.target.value)}
-                className="select !min-h-10 !w-full sm:!w-44 !py-1.5 !text-xs font-semibold"
+                className="select !h-9 !min-h-9 !w-full sm:!w-48 !py-1 !text-xs font-semibold"
               >
                 <option value="ALL">Tous les circuits</option>
                 {activeCircuits.map((c) => (
@@ -540,25 +511,19 @@ export default function ChauffeursPage() {
               </select>
             )}
 
-            <div className="relative w-full sm:w-72">
-              <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Rechercher nom, code TR, circuit..."
-                className="input !min-h-10 !py-1.5 !pl-9 !pr-8 !text-xs font-medium"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                >
-                  <IconClose className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
+            {(filterStatus !== 'ALL' || filterCircuit !== 'ALL' || search) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setFilterStatus('ALL');
+                  setFilterCircuit('ALL');
+                }}
+                className="btn-ghost !h-9 !px-2.5 !text-xs"
+              >
+                Réinitialiser
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -640,74 +605,68 @@ export default function ChauffeursPage() {
           </EmptyState>
         ) : (
           <>
-            {/* Mobile Card View (md:hidden) */}
-            <div className="divide-y divide-slate-100 md:hidden">
+            {/* Liste compacte & responsive Mobile / Tablette / Laptop < 1280px (xl:hidden) */}
+            <div className="divide-y divide-slate-100 xl:hidden">
               {filtered.map((d) => {
                 const pending = driverDayPending(d);
                 const isNonPaye = d.statut === 'NON PAYE' && !pending;
                 const circuit = d.programmeJour || d.circuitActuel || 'STAND-BY';
+                const tours = tourRows(d);
 
                 return (
                   <div
                     key={d.id}
-                    className={`p-4 transition-colors ${
-                      isNonPaye ? 'bg-rose-50/35' : 'hover:bg-slate-50/70'
+                    className={`p-3.5 sm:px-5 transition-colors ${
+                      isNonPaye ? 'bg-rose-50/30' : 'hover:bg-slate-50/70'
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2.5">
-                      <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
+                      <div className="flex min-w-0 items-center gap-2.5">
                         <div
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-extrabold ${
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
                             isNonPaye
-                              ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-200'
-                              : 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200/80'
+                              ? 'bg-rose-100 text-rose-700'
+                              : 'bg-sky-50 text-sky-700 border border-sky-200/80'
                           }`}
                         >
                           {getInitials(d.nom)}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-extrabold text-slate-900">{d.nom}</p>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                            <span className="rounded-md bg-slate-900 px-2 py-0.5 font-mono text-[11px] font-bold text-white">
+                          <div className="flex items-center gap-2">
+                            <span className="shrink-0 rounded bg-slate-900 px-2 py-0.5 font-mono text-[11px] font-bold text-white">
                               TR {d.tr}
                             </span>
-                            <span className="badge-slate text-[10.5px]">{circuit}</span>
+                            <p className="truncate text-sm font-bold text-slate-900">{d.nom}</p>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                            <span className="font-semibold text-slate-700">{circuit}</span>
+                            <span>· MAJ {formatDate(d.dateDerniere)}</span>
+                            {d.reclamation && (
+                              <span className={isNonPaye ? 'font-bold text-rose-600' : 'text-slate-500'}>
+                                · {d.reclamation}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
 
-                      <StatusBadgeSelect
-                        compact
-                        pending={pending}
-                        value={d.statut}
-                        onChange={(val) => updateDriverStatus(d.id, val)}
-                      />
-                    </div>
-
-                    {d.reclamation && (
-                      <div
-                        className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold ${
-                          isNonPaye
-                            ? 'border-rose-200 bg-rose-50/90 text-rose-700'
-                            : 'border-slate-200/80 bg-slate-50 text-slate-600'
-                        }`}
-                      >
-                        {isNonPaye && <IconAlert className="h-3.5 w-3.5 shrink-0 text-rose-500" />}
-                        <span className="truncate">{d.reclamation}</span>
-                      </div>
-                    )}
-
-                    {openHistoryId === d.id && <TourList driver={d} />}
-
-                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-400">
-                      <span>MAJ : {formatDate(d.dateDerniere)}</span>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <StatusBadgeSelect
+                          compact
+                          pending={pending}
+                          value={d.statut}
+                          onChange={(val) => updateDriverStatus(d.id, val)}
+                        />
                         <button
                           type="button"
                           onClick={() => setOpenHistoryId(openHistoryId === d.id ? null : d.id)}
-                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700"
+                          className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${
+                            openHistoryId === d.id
+                              ? 'border-slate-900 bg-slate-900 text-white'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
                         >
-                          Tournées
+                          Tournées ({tours.length})
                         </button>
                         <button
                           type="button"
@@ -731,31 +690,32 @@ export default function ChauffeursPage() {
                         </button>
                         <Link
                           href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                          className="btn-primary !px-3 !py-1.5 !text-xs"
+                          className="btn-primary !h-8 !px-3 !text-xs font-bold"
                         >
-                          <IconCalculator className="h-3.5 w-3.5" />
-                          Encaisser
+                          Caisse
                         </Link>
                       </div>
                     </div>
+
+                    {openHistoryId === d.id && <TourList driver={d} />}
                   </div>
                 );
               })}
             </div>
 
-            {/* Desktop Enterprise Table View (hidden md:block) */}
-            <div className="hidden overflow-x-hidden md:block">
-              <table className="data-table w-full table-fixed [&_td]:overflow-hidden [&_th]:overflow-hidden">
+            {/* Tableau Grand Écran (hidden xl:block) */}
+            <div className="table-wrap hidden xl:block">
+              <table className="data-table w-full">
                 <thead>
                   <tr>
-                    <th className="w-[8%] !whitespace-normal !px-2 !py-2">TR</th>
-                    <th className="w-[18%] !whitespace-normal !px-2 !py-2">Chauffeur</th>
-                    <th className="w-[12%] !whitespace-normal !px-2 !py-2">Circuit</th>
-                    <th className="w-[8%] !whitespace-normal !px-2 !py-2">Hist.</th>
-                    <th className="w-[14%] !whitespace-normal !px-2 !py-2">Statut</th>
-                    <th className="w-[9%] !whitespace-normal !px-2 !py-2 !text-center">Caisses</th>
-                    <th className="w-[18%] !whitespace-normal !px-2 !py-2">Suivi</th>
-                    <th className="w-[13%] !whitespace-normal !px-2 !py-2 !text-right">Actions</th>
+                    <th className="w-20">TR</th>
+                    <th>Chauffeur</th>
+                    <th>Circuit</th>
+                    <th className="!text-center">Tournées</th>
+                    <th>Statut</th>
+                    <th className="!text-center">Caisses</th>
+                    <th>Suivi</th>
+                    <th className="!text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -764,34 +724,33 @@ export default function ChauffeursPage() {
                     const dueCount = dueCaisseCount(d);
                     const isNonPaye = d.statut === 'NON PAYE' && !pending;
                     const circuit = d.programmeJour || d.circuitActuel || 'STAND-BY';
-
                     const tours = tourRows(d);
                     return (
                       <Fragment key={d.id}>
                       <tr className={isNonPaye ? 'row-alert' : ''}>
-                        <td className="!px-2 !py-2">
-                          <span className="inline-flex items-center rounded-lg bg-slate-900 px-2 py-1 font-mono text-[11px] font-extrabold text-white shadow-sm">
+                        <td className="whitespace-nowrap">
+                          <span className="inline-flex items-center rounded bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-white">
                             {d.tr}
                           </span>
                         </td>
-                        <td className="!px-2 !py-2">
-                          <p className="truncate text-[13px] font-bold text-slate-900" title={d.nom}>
+                        <td>
+                          <p className="max-w-[15rem] truncate text-[13px] font-bold text-slate-900" title={d.nom}>
                             {d.nom}
                           </p>
-                          <p className="truncate text-[11px] text-slate-400">
+                          <p className="text-[11px] text-slate-400">
                             MAJ {formatDate(d.dateDerniere)}
                           </p>
                         </td>
-                        <td className="!px-2 !py-2">
-                          <span className="block truncate text-xs font-semibold text-slate-800" title={circuit}>
+                        <td>
+                          <span className="inline-block max-w-[11rem] truncate text-xs font-semibold text-slate-800" title={circuit}>
                             {circuit}
                           </span>
                         </td>
-                        <td className="!px-2 !py-2">
+                        <td className="text-center">
                           <button
                             type="button"
                             onClick={() => setOpenHistoryId(openHistoryId === d.id ? null : d.id)}
-                            className={`w-full truncate rounded-lg px-2 py-1 text-[11px] font-bold ${
+                            className={`inline-flex items-center rounded-lg px-2.5 py-1 text-[11px] font-bold ${
                               openHistoryId === d.id
                                 ? 'bg-slate-900 text-white'
                                 : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
@@ -800,7 +759,7 @@ export default function ChauffeursPage() {
                             {tours.length}
                           </button>
                         </td>
-                        <td className="!px-2 !py-2">
+                        <td>
                           <StatusBadgeSelect
                             compact
                             pending={pending}
@@ -808,12 +767,12 @@ export default function ChauffeursPage() {
                             onChange={(val) => updateDriverStatus(d.id, val)}
                           />
                         </td>
-                        <td className="!px-2 !py-2 text-center">
+                        <td className="text-center">
                           {pending ? (
                             <span className="text-[11px] font-bold text-sky-700">En cours</span>
                           ) : dueCount > 0 ? (
-                            <span className="badge-solid-rose font-extrabold">
-                              {dueCount} Caisse
+                            <span className="badge-rose font-bold">
+                              {dueCount} due{dueCount > 1 ? 's' : ''}
                             </span>
                           ) : (
                             <span className="badge-emerald">
@@ -822,24 +781,24 @@ export default function ChauffeursPage() {
                             </span>
                           )}
                         </td>
-                        <td className="!px-2 !py-2">
+                        <td>
                           <div
                             title={d.reclamation}
-                            className={`flex min-w-0 items-center gap-2 text-xs ${
+                            className={`flex max-w-[14rem] items-center gap-1.5 text-xs ${
                               isNonPaye ? 'font-bold text-rose-700' : 'font-medium text-slate-600'
                             }`}
                           >
                             {isNonPaye && (
-                              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-rose-500" />
+                              <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" />
                             )}
-                            <span className="truncate">{d.reclamation}</span>
+                            <span className="truncate">{d.reclamation || '—'}</span>
                           </div>
                         </td>
-                        <td className="!px-2 !py-2 text-right">
+                        <td className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             <Link
                               href={`/caisse?tr=${encodeURIComponent(d.tr)}`}
-                              className="btn-primary !px-2 !py-1.5 !text-[11px]"
+                              className="btn-primary !h-8 !px-2.5 !text-xs font-bold"
                               title="Encaisser"
                             >
                               Caisse
@@ -888,29 +847,28 @@ export default function ChauffeursPage() {
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
           <div
-            className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
             onClick={() => setModalOpen(false)}
           />
-          <div className="relative flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:rounded-3xl">
-            {/* Dark Executive Modal Header */}
-            <div className="flex items-center justify-between bg-obsidian-mesh px-6 py-5 text-white">
+          <div className="relative flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-xl sm:rounded-2xl">
+            <div className="flex items-center justify-between bg-slate-900 px-5 py-4 text-white">
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/25 text-indigo-300 ring-1 ring-indigo-400/30">
-                  <IconTruck className="h-5 w-5" />
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-600 text-white">
+                  <IconTruck className="h-4 w-4" />
                 </span>
                 <div>
-                  <h3 className="text-base font-extrabold text-white">
-                    {editingDriver ? 'Modifier la Fiche Chauffeur' : 'Nouveau Chauffeur'}
+                  <h3 className="text-sm font-bold text-white">
+                    {editingDriver ? 'Modifier le chauffeur' : 'Nouveau chauffeur'}
                   </h3>
-                  <p className="text-xs text-slate-400">
-                    Synchronisation instantanée avec la base PostgreSQL du compte
+                  <p className="text-[11px] text-slate-400">
+                    Synchronisation automatique avec votre compte
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
               >
                 <IconClose className="h-4 w-4" />
               </button>
@@ -1004,7 +962,7 @@ export default function ChauffeursPage() {
                         val: 'PAS DE CAISSE',
                         label: 'SANS CAISSE',
                         active:
-                          'border-amber-500 bg-amber-50 text-amber-800 ring-2 ring-amber-500/20',
+                          'border-slate-500 bg-slate-100 text-slate-800 ring-2 ring-slate-500/20',
                       },
                     ] as const
                   ).map((opt) => (

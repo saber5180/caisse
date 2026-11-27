@@ -163,7 +163,7 @@ export default function BilletteriePage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl pb-16 sm:pb-6">
+    <div className="w-full pb-16 sm:pb-8">
       {/* ===================== PRINTABLE A4 OFFICIAL DOCUMENT ===================== */}
       <div className="printable-document hidden print:block text-slate-900 bg-white">
         {/* Header */}
@@ -316,75 +316,89 @@ export default function BilletteriePage() {
 
         <PageHeader
           title="Comptage Billetterie"
-          subtitle="Dénombrement physique des pièces, billets, versements et rapprochement avec la recette"
+          subtitle="Saisie des billets et pièces en caisse, versements et clôture de journée"
           icon={<IconCoins className="h-5 w-5" />}
-          accent="amber"
+          accent="indigo"
           actions={
-            <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto">
+            <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:flex-wrap">
               <Link
                 href="/billetterie/historique"
-                className="btn-ghost !py-2 text-xs sm:text-sm font-semibold justify-center"
+                className="btn-ghost !py-2 text-xs font-semibold justify-center"
                 title="Consulter les bilans des jours passés"
               >
-                <IconHistory className="h-4 w-4 text-indigo-600 shrink-0" />
+                <IconHistory className="h-4 w-4 text-slate-500 shrink-0" />
                 <span>Historique</span>
               </Link>
               <button
                 onClick={handleReset}
-                className="btn-ghost !py-2 text-xs sm:text-sm justify-center"
+                className="btn-ghost !py-2 text-xs font-semibold justify-center"
                 title="Remettre à zéro"
               >
-                <IconTrash className="h-4 w-4 text-slate-400 shrink-0" />
-                <span>RàZ</span>
+                <IconTrash className="h-4 w-4 text-slate-500 shrink-0" />
+                <span>Vider</span>
               </button>
               <button
                 onClick={handlePrint}
-                className="btn-ghost !py-2 text-xs sm:text-sm font-bold justify-center"
-                title="Imprimer l'état haute définition"
+                className="btn-ghost !py-2 text-xs font-semibold justify-center"
+                title="Imprimer le procès-verbal A4"
               >
-                <IconPrinter className="h-4 w-4 text-slate-700 shrink-0" />
+                <IconPrinter className="h-4 w-4 text-sky-600 shrink-0" />
                 <span>Imprimer PV</span>
               </button>
               <button
                 onClick={() => setShowConfirmModal(true)}
-                className="btn-success col-span-2 sm:col-auto !py-2.5 text-xs sm:text-sm font-bold shadow-md justify-center"
+                className="btn-success col-span-2 sm:col-auto !py-2 text-xs font-bold justify-center"
                 title="Enregistrer et clôturer définitivement cette journée de caisse"
               >
                 <IconCheck className="h-4 w-4 shrink-0" />
-                <span>Clôturer la Journée</span>
+                <span>Clôturer la journée</span>
               </button>
             </div>
           }
         />
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Colonne Synthèse Financière & Rapprochement (Order 1 on mobile, Order 2 on desktop) */}
-          <div className="space-y-4 lg:col-span-1 lg:order-2">
-            <div className="card-pro p-5 sm:p-6 shadow-pro border-amber-200/90 bg-amber-50/20">
-              <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800 border-b border-amber-200/60 pb-3">
-                Rapprochement de Caisse
-              </h3>
-
-              <div className="mt-4 space-y-3.5">
-                {/* Total Coupures Physiques */}
-                <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-2">
-                  <span className="text-slate-600 font-medium">Sous-Total Billets & Pièces</span>
-                  <span className="num font-bold text-slate-900 text-sm">
-                    {formatMoney(totalCoupures)} TND
-                  </span>
-                </div>
-
-                {/* SRF Pièces Calculé */}
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-600 font-medium">SRF (Fonds Monnaie &lt; 5T)</span>
-                  <span className="num font-semibold text-slate-800">
-                    {formatMoney(srfCoinsOnly)} TND
-                  </span>
-                </div>
-
-                {/* SRF- Retenues */}
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12 items-start">
+          {/* Colonne Rapprochement & Clôture */}
+          <div className="xl:col-span-4 xl:order-2 xl:sticky xl:top-20">
+            <div className="card p-4 sm:p-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
-                  <label className="label text-[11px]">SRF - (Retenues / Déductions)</label>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Rapprochement journalier
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Calcul automatique des espèces et écarts
+                  </p>
+                </div>
+                <span className="badge-indigo font-mono text-[10px]">CAISSE</span>
+              </div>
+
+              {/* Résumé rapide Espèces + Monnaie SRF */}
+              <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                    Total coupures
+                  </span>
+                  <span className="mt-1 block num text-sm sm:text-base font-bold text-slate-900">
+                    {formatMoney(totalCoupures)} <span className="text-[10px] font-normal text-slate-500">TND</span>
+                  </span>
+                </div>
+                <div className="rounded-xl border border-sky-200/80 bg-sky-50/60 p-3">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+                    Monnaie SRF (&lt; 5T)
+                  </span>
+                  <span className="mt-1 block num text-sm sm:text-base font-bold text-sky-900">
+                    {formatMoney(srfCoinsOnly)} <span className="text-[10px] font-normal text-sky-700">TND</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Champs de rapprochement : 3 colonnes sur tablette, 1 colonne sur mobile et grand écran */}
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
+                <div>
+                  <label htmlFor="billetterie-srf-moins" className="label">
+                    SRF − (Retenues / Déductions)
+                  </label>
                   <input
                     id="billetterie-srf-moins"
                     type="number"
@@ -395,13 +409,14 @@ export default function BilletteriePage() {
                     onFocus={(e) => e.target.select()}
                     onClick={(e) => (e.target as HTMLInputElement).select()}
                     placeholder="0.000"
-                    className="input num !min-h-9 !py-1 text-sm font-semibold"
+                    className="input num font-bold text-slate-900"
                   />
                 </div>
 
-                {/* VER Versements */}
                 <div>
-                  <label className="label text-[11px]">VER (Versements)</label>
+                  <label htmlFor="billetterie-ver" className="label !text-sky-700">
+                    VER (Versements Banque / Coffre)
+                  </label>
                   <input
                     id="billetterie-ver"
                     type="number"
@@ -412,23 +427,14 @@ export default function BilletteriePage() {
                     onFocus={(e) => e.target.select()}
                     onClick={(e) => (e.target as HTMLInputElement).select()}
                     placeholder="0.000"
-                    className="input num !min-h-9 !py-1 text-sm font-semibold text-emerald-700"
+                    className="input num font-bold text-sky-800 border-sky-200 bg-sky-50/30"
                   />
                 </div>
 
-                {/* TT Total Physique */}
-                <div className="border-t border-slate-200 pt-3 flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    TT (Total Physique)
-                  </span>
-                  <span className="num text-xl font-black text-slate-900">
-                    {formatMoney(tt)} <span className="text-xs text-slate-400 font-normal">TND</span>
-                  </span>
-                </div>
-
-                {/* RECETTE Théorique */}
                 <div>
-                  <label className="label text-[11px]">RECETTE (Ventes Théoriques)</label>
+                  <label htmlFor="billetterie-recette" className="label">
+                    Recette attendue (Théorique)
+                  </label>
                   <input
                     id="billetterie-recette"
                     type="number"
@@ -439,86 +445,110 @@ export default function BilletteriePage() {
                     onFocus={(e) => e.target.select()}
                     onClick={(e) => (e.target as HTMLInputElement).select()}
                     placeholder="0.000"
-                    className="input num !min-h-10 !py-1 text-sm font-bold text-indigo-700"
+                    className="input num font-bold text-slate-900"
                   />
                 </div>
+              </div>
 
-                {/* RESTE (Écart Physique vs Théorique) */}
+              {/* Total Physique + Solde / Écart */}
+              <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="flex items-center justify-between rounded-xl bg-slate-900 px-4 py-3 text-white">
+                  <span className="text-xs font-semibold text-slate-300">
+                    Total physique (TT)
+                  </span>
+                  <span className="num text-lg font-extrabold text-white">
+                    {formatMoney(tt)} <span className="text-[11px] font-normal text-slate-400">TND</span>
+                  </span>
+                </div>
+
                 <div
-                  className={`rounded-2xl p-4 border transition-all ${
+                  className={`rounded-xl border px-4 py-3 transition-colors ${
                     reste >= 0
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                      : 'border-rose-200 bg-rose-50 text-rose-900'
+                      ? 'border-emerald-200 bg-emerald-50/80 text-emerald-900'
+                      : 'border-rose-200 bg-rose-50/80 text-rose-900'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider">
-                      RESTE (Écart)
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wide">
+                      Écart / Reste
                     </span>
-                    <span className="num text-xl sm:text-2xl font-black">
+                    <span className="num text-lg font-extrabold">
                       {reste > 0 ? '+' : ''}{formatMoney(reste)} TND
                     </span>
                   </div>
-                  <p className="mt-1 text-[11px] font-medium opacity-80">
-                    {reste >= 0 ? '✓ Excédent en caisse physique' : '⚠️ Déficit en caisse physique'}
+                  <p className="mt-0.5 text-[11px] font-medium opacity-80">
+                    {reste >= 0 ? 'Caisse équilibrée ou excédentaire' : 'Manquant constaté par rapport à la recette'}
                   </p>
                 </div>
+              </div>
 
-                {/* Quick Save Closing Button */}
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmModal(true)}
-                    className="btn-success w-full !py-3 text-sm font-black shadow-lg"
-                  >
-                    <IconCheck className="h-4 w-4" />
-                    Enregistrer la Clôture du Jour
-                  </button>
-                </div>
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(true)}
+                  className="btn-success w-full !py-3 text-sm font-bold"
+                >
+                  <IconCheck className="h-4 w-4" />
+                  Valider la clôture du jour
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Colonnes: Tableau des Coupures (Feuil3) */}
-          <div className="card-pro overflow-hidden lg:col-span-2 lg:order-1">
-            <div className="card-header bg-slate-50/80">
+          {/* Colonne Coupures & Monnaie */}
+          <div className="card overflow-hidden xl:col-span-8 xl:order-1">
+            <div className="card-header">
               <div>
-                <h2 className="card-title text-sm">Détail des Coupures</h2>
-                <p className="text-[11px] text-slate-400">Pièces & Billets en caisse</p>
+                <h2 className="card-title">Détail des billets et pièces</h2>
+                <p className="text-[11px] text-slate-500">
+                  Navigation rapide avec Tab, Entrée ou les flèches Haut / Bas
+                </p>
               </div>
-              <span className="badge-slate font-mono text-[11px]">11 dénominations</span>
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1 font-mono text-xs font-bold text-sky-800">
+                  {formatMoney(totalCoupures)} TND
+                </span>
+                <span className="badge-slate font-mono text-[10.5px]">11 COUPURES</span>
+              </div>
             </div>
 
-            {/* Mobile Denomination Cards View (sm:hidden) */}
+            {/* Vue Mobile Compacte (sm:hidden) */}
             <div className="divide-y divide-slate-100 sm:hidden">
               {items.map((item, idx) => {
                 const montantLigne = item.nombre * item.valeur;
 
                 return (
-                  <div key={idx} className="p-3.5 hover:bg-slate-50/60 transition-colors">
-                    <div className="flex items-center justify-between mb-1.5">
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 hover:bg-slate-50/70"
+                  >
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span
-                          className={`h-2.5 w-2.5 rounded-full ${
-                            item.isBillet ? 'bg-indigo-500' : 'bg-amber-500'
+                          className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold ${
+                            item.isBillet
+                              ? 'bg-sky-100 text-sky-700'
+                              : 'bg-slate-100 text-slate-600'
                           }`}
-                        />
-                        <span className="font-bold text-slate-900 text-xs">
+                        >
+                          {item.isBillet ? 'B' : 'P'}
+                        </span>
+                        <span className="truncate text-xs font-bold text-slate-900">
                           {item.label}
                         </span>
                       </div>
-                      <span className="num font-bold text-slate-900 text-xs">
-                        {formatMoney(montantLigne)} TND
-                      </span>
+                      <p className="mt-0.5 pl-7 num text-[11px] font-semibold text-slate-500">
+                        Sous-total : <strong className="text-slate-800">{formatMoney(montantLigne)} TND</strong>
+                      </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => setBilletterieCount(idx, Math.max(0, item.nombre - 1))}
-                        className="h-10 w-10 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 shadow-sm active:bg-slate-100 text-base"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-700 active:bg-slate-100"
                       >
-                        -
+                        −
                       </button>
                       <input
                         id={`mobile-billetterie-nombre-${idx}`}
@@ -533,12 +563,12 @@ export default function BilletteriePage() {
                         onFocus={(e) => e.target.select()}
                         onClick={(e) => (e.target as HTMLInputElement).select()}
                         placeholder="0"
-                        className="input num flex-1 !h-10 !text-center text-sm font-bold text-slate-900"
+                        className="input num !h-9 !min-h-9 !w-20 !px-2 !py-1 !text-center text-sm font-bold text-slate-900"
                       />
                       <button
                         type="button"
                         onClick={() => setBilletterieCount(idx, item.nombre + 1)}
-                        className="h-10 w-10 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 shadow-sm active:bg-slate-100 text-base"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-700 active:bg-slate-100"
                       >
                         +
                       </button>
@@ -548,14 +578,14 @@ export default function BilletteriePage() {
               })}
             </div>
 
-            {/* Desktop Table View (hidden sm:block) */}
+            {/* Vue Tablette & Bureau (hidden sm:block) */}
             <div className="table-wrap hidden sm:block">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Coupure / Type</th>
-                    <th className="!text-center">Nombre</th>
-                    <th className="!text-right">Montant (TND)</th>
+                    <th>Coupure</th>
+                    <th className="!text-center">Quantité</th>
+                    <th className="!text-right">Sous-total (TND)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -563,38 +593,60 @@ export default function BilletteriePage() {
                     const montantLigne = item.nombre * item.valeur;
 
                     return (
-                      <tr key={idx}>
+                      <tr key={idx} className={montantLigne > 0 ? 'bg-sky-50/25' : ''}>
                         <td>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5">
                             <span
-                              className={`h-2 w-2 rounded-full ${
-                                item.isBillet ? 'bg-indigo-500' : 'bg-amber-500'
+                              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
+                                item.isBillet
+                                  ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
                               }`}
-                            />
+                            >
+                              {item.isBillet ? 'Billet' : 'Pièce'}
+                            </span>
                             <span className="font-semibold text-slate-900 text-xs sm:text-sm">
                               {item.label}
                             </span>
                           </div>
                         </td>
                         <td className="text-center">
-                          <input
-                            id={`billetterie-nombre-${idx}`}
-                            type="number"
-                            step="0.1"
-                            min={0}
-                            value={item.nombre === 0 ? '' : item.nombre}
-                            onChange={(e) =>
-                              setBilletterieCount(idx, parseFloat(e.target.value) || 0)
-                            }
-                            onKeyDown={(e) => handleNavKeyDown(e, `billetterie-nombre-${idx}`)}
-                            onFocus={(e) => e.target.select()}
-                            onClick={(e) => (e.target as HTMLInputElement).select()}
-                            placeholder="0"
-                            className="input num !w-28 !min-h-9 !py-1 !text-center text-sm font-bold text-slate-900"
-                          />
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              tabIndex={-1}
+                              onClick={() => setBilletterieCount(idx, Math.max(0, item.nombre - 1))}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
+                            >
+                              −
+                            </button>
+                            <input
+                              id={`billetterie-nombre-${idx}`}
+                              type="number"
+                              step="0.1"
+                              min={0}
+                              value={item.nombre === 0 ? '' : item.nombre}
+                              onChange={(e) =>
+                                setBilletterieCount(idx, parseFloat(e.target.value) || 0)
+                              }
+                              onKeyDown={(e) => handleNavKeyDown(e, `billetterie-nombre-${idx}`)}
+                              onFocus={(e) => e.target.select()}
+                              onClick={(e) => (e.target as HTMLInputElement).select()}
+                              placeholder="0"
+                              className="input num !w-24 !h-8 !min-h-8 !py-1 !text-center text-sm font-bold text-slate-900"
+                            />
+                            <button
+                              type="button"
+                              tabIndex={-1}
+                              onClick={() => setBilletterieCount(idx, item.nombre + 1)}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50"
+                            >
+                              +
+                            </button>
+                          </div>
                         </td>
                         <td className="text-right">
-                          <span className="num font-bold text-slate-900">
+                          <span className={`num font-bold ${montantLigne > 0 ? 'text-slate-900' : 'text-slate-400'}`}>
                             {formatMoney(montantLigne)}
                           </span>
                         </td>
@@ -602,6 +654,16 @@ export default function BilletteriePage() {
                     );
                   })}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50/90">
+                    <td colSpan={2} className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-700">
+                      Sous-total billets &amp; pièces comptés
+                    </td>
+                    <td className="px-4 py-3 text-right num text-sm font-extrabold text-slate-900">
+                      {formatMoney(totalCoupures)} TND
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>

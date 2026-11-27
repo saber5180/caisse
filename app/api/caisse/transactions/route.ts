@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ensureDefaultAccountsAndSeed, getSessionUser } from '@/lib/auth';
 import { getPool } from '@/lib/db';
+import { logAudit } from '@/lib/audit';
 
 function round3(n: number): number {
   return Math.round(n * 1000) / 1000;
@@ -16,7 +17,7 @@ export async function PATCH(req: NextRequest) {
 
     const mainPool = getPool();
     const accRes = await mainPool.query(
-      'SELECT id, role, display_name, is_blocked, custom_db_url FROM caisse_accounts WHERE id = $1',
+      'SELECT id, role, display_name, caisse_code, is_blocked, custom_db_url FROM caisse_accounts WHERE id = $1',
       [session.id]
     );
     if (accRes.rows.length === 0) {
@@ -117,6 +118,14 @@ export async function PATCH(req: NextRequest) {
         [deltaVer, deltaRecette, ownerId]
       );
     }
+
+    await logAudit(
+      mainPool,
+      { id: session.id, username: session.username, caisseCode: account.caisse_code },
+      'journal_edit',
+      { id, ownerId, by: session.username, caisse: account.caisse_code },
+      account.caisse_code
+    );
 
     return NextResponse.json({
       success: true,

@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     if (res.rows.length === 0) {
       return NextResponse.json(
-        { error: 'Compte introuvable. Utilisez : superviseur, admin, crnu, crsf ou crtn.' },
+        { error: 'Identifiant ou mot de passe incorrect.' },
         { status: 401 }
       );
     }
@@ -37,10 +37,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (account.is_blocked && account.role === 'cashier') {
+    if (account.is_blocked && account.role !== 'admin') {
       return NextResponse.json(
         {
-          error: `Accès refusé : La ${account.display_name} (${account.caisse_code || account.username.toUpperCase()}) est temporairement bloquée par le Superviseur.`,
+          error: `Accès refusé : le compte ${account.username} est bloqué. Contactez l’administrateur.`,
           blocked: true,
         },
         { status: 403 }

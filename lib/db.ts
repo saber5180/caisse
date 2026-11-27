@@ -80,6 +80,7 @@ export async function initDatabaseSchema(customUrl?: string) {
     ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS programme_date TIMESTAMP WITH TIME ZONE;
     ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS jour_paye BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS caisse_paye VARCHAR(20) DEFAULT '';
+    ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS paye_par VARCHAR(120) DEFAULT '';
     ALTER TABLE caisse_drivers ADD COLUMN IF NOT EXISTS paye_le TIMESTAMP WITH TIME ZONE;
 
     CREATE TABLE IF NOT EXISTS caisse_transactions (
@@ -146,6 +147,16 @@ export async function initDatabaseSchema(customUrl?: string) {
       sous_serie VARCHAR(120) NOT NULL DEFAULT '',
       valeur VARCHAR(40) NOT NULL DEFAULT '',
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS caisse_audit_log (
+      id VARCHAR(64) PRIMARY KEY,
+      actor_id VARCHAR(64),
+      actor_username VARCHAR(100) NOT NULL,
+      caisse_code VARCHAR(20) DEFAULT '',
+      action VARCHAR(80) NOT NULL,
+      details JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `);
 }

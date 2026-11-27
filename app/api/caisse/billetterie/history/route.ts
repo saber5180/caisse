@@ -3,6 +3,7 @@ import { getSessionUser, ensureDefaultAccountsAndSeed } from '@/lib/auth';
 import { getPool } from '@/lib/db';
 import { BilletterieHistoryEntry } from '@/types/caisse';
 import {
+  allCashierRows,
   fetchHistoryFromPool,
   fetchTransactionsFromPool,
   isMainPoolUrl,
@@ -10,6 +11,7 @@ import {
   type CashierAccountRow,
   type CashierCode,
 } from '@/lib/cashierAccounts';
+import { logAudit } from '@/lib/audit';
 
 const CAISSE_CODES_MAP: Record<string, { code: string; name: string }> = {
   'acc-crnu': { code: 'CRNU', name: 'Caisse CRNU' },
@@ -65,13 +67,16 @@ function mapHistoryRow(r: any): BilletterieHistoryEntry {
 
 async function buildOpenDayEntry(
   pool: ReturnType<typeof getPool>,
-  acc: CashierAccountRow,
+  accounts: CashierAccountRow[],
   code: CashierCode
 ): Promise<BilletterieHistoryEntry | null> {
-  const txnRows = await fetchTransactionsFromPool(pool, acc.id);
+  if (accounts.length === 0) return null;
+  const acc = accounts[0];
+  const ids = accounts.map((a) => a.id);
+  const txnRows = await fetchTransactionsFromPool(pool, ids);
   const billRes = await pool.query(
-    'SELECT items, srf_moins, ver, recette_theorique FROM caisse_billetterie WHERE account_id = $1',
-    [acc.id]
+    'SELECT items, srf_moins, ver, recette_theorique FROM caisse_billetterie WHERE account_id = ANY($1::text[]) ORDER BY updated_at DESC LIMIT 1',
+    [ids]
   );
   const bill = billRes.rows[0];
   if (txnRows.length === 0 && !bill) return null;
@@ -116,7 +121,7 @@ async function buildOpenDayEntry(
     id: `LIVE-${code}`,
     accountId: acc.id,
     caisseCode: code,
-    caisseName: acc.display_name || `Caisse ${code}`,
+    caisseName: `Caisse ${code}`,
     dateCloture: latest,
     totalCoupures,
     srfPieces: 0,
@@ -163,7 +168,7 @@ export async function GET() {
         byId.set(row.id, row);
       }
       const cashiers = await loadCashierAccounts(mainPool);
-      for (const acc of Array.from(cashiers.values())) {
+      for (const acc of allCashierRows(cashiers)) {
         if (isMainPoolUrl(acc.custom_db_url)) continue;
         try {
           const extra = await fetchHistoryFromPool(getPool(acc.custom_db_url || undefined), acc.id);
@@ -182,18 +187,17 @@ export async function GET() {
     const history: BilletterieHistoryEntry[] = historyRows.map(mapHistoryRow);
 
     const cashiers = await loadCashierAccounts(mainPool);
-    const openTargets: Array<{ acc: CashierAccountRow; code: CashierCode }> = isSupervisorOrAdmin
+    const openTargets: Array<{ accounts: CashierAccountRow[]; code: CashierCode }> = isSupervisorOrAdmin
       ? (['CRNU', 'CRSF', 'CRTN'] as const)
           .map((code) => {
-            const acc = cashiers.get(code);
-            return acc ? { acc, code } : null;
+            const accounts = cashiers.get(code) || [];
+            return accounts.length ? { accounts, code } : null;
           })
-          .filter((x): x is { acc: CashierAccountRow; code: CashierCode } => Boolean(x))
+          .filter((x): x is { accounts: CashierAccountRow[]; code: CashierCode } => Boolean(x))
       : (() => {
-          const code = String(account.caisse_code || session.username || '').toUpperCase() as CashierCode;
-          const acc =
-            cashiers.get(code) ||
-            ({
+          const code = String(account.caisse_code || '').toUpperCase() as CashierCode;
+          const accounts = cashiers.get(code) || [
+            {
               id: session.id,
               username: session.username,
               display_name: account.display_name,
@@ -202,19 +206,22 @@ export async function GET() {
               force_logout_at: null,
               updated_at: null,
               custom_db_url: account.custom_db_url,
-            } as CashierAccountRow);
-          return [{ acc, code: (['CRNU', 'CRSF', 'CRTN'] as const).includes(code) ? code : 'CRNU' }];
+            } as CashierAccountRow,
+          ];
+          return [{ accounts, code: (['CRNU', 'CRSF', 'CRTN'] as const).includes(code) ? code : 'CRNU' }];
         })();
 
-    for (const { acc, code } of openTargets) {
+    for (const { accounts, code } of openTargets) {
       const pools = [isSupervisorOrAdmin ? mainPool : targetPool];
-      if (!isMainPoolUrl(acc.custom_db_url)) {
-        pools.push(getPool(acc.custom_db_url || undefined));
+      for (const acc of accounts) {
+        if (!isMainPoolUrl(acc.custom_db_url)) {
+          pools.push(getPool(acc.custom_db_url || undefined));
+        }
       }
       let open: BilletterieHistoryEntry | null = null;
       for (const pool of pools) {
         try {
-          const candidate = await buildOpenDayEntry(pool, acc, code);
+          const candidate = await buildOpenDayEntry(pool, accounts, code);
           if (candidate && (!open || (candidate.archivedTransactions?.length || 0) > (open.archivedTransactions?.length || 0))) {
             open = candidate;
           }
@@ -339,9 +346,9 @@ export async function POST(req: NextRequest) {
       recetteTheorique,
       ecartReste,
       JSON.stringify(items),
-      JSON.stringify(activeTransactions),
-      caisseCode,
-      notes,
+        JSON.stringify(activeTransactions),
+        `${account.display_name} (@${session.username}) · ${caisseCode}`,
+        notes,
     ];
     const insertSql = `INSERT INTO caisse_billetterie_history (
         id, account_id, date_cloture, total_coupures, srf_pieces, srf_moins, ver, tt_physique, recette_theorique, ecart_reste, items, archived_transactions, caissier_nom, notes
@@ -385,6 +392,14 @@ export async function POST(req: NextRequest) {
            updated_at = CURRENT_TIMESTAMP
        WHERE account_id = $1`,
       [session.id]
+    );
+
+    await logAudit(
+      mainPool,
+      { id: session.id, username: session.username, caisseCode },
+      'cloture_save',
+      { id, caisse: caisseCode, user: session.username, ttPhysique },
+      caisseCode
     );
 
     return NextResponse.json({
